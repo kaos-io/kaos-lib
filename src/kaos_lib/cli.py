@@ -257,6 +257,8 @@ def cmd_upgrade(args) -> int:
         raise KaosLibError(f"pip install failed (exit {code}); kaos-lib {__version__} is unchanged")
     print("Next: kaos-cli --version")
     return 0
+
+
 def cmd_run(args) -> int:
     from . import lock
     from .mlflow import mlflow
