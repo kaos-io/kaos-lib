@@ -1,4 +1,5 @@
 """DatasetRef parsing, resolve, listing, versions and release numbering."""
+import re
 import pytest
 
 from kaos_lib import datasets
@@ -142,9 +143,19 @@ def test_create_dataset_makes_labelled_repo_with_skeleton_on_main(fake, client):
     assert repo == "dataset-cats"
     assert r["metadata"] == {"kaos.kind": "dataset", "kaos.template": "yolo",
                              "kaos.description": "cat photos"}
-    assert r["ns"] == "gs://bucket/lakefs/dataset-cats"        # <prefix kaos-lake publishes>/<repo>
+    assert re.fullmatch(r"gs://bucket/lakefs/dataset-cats-[0-9a-f]{8}", r["ns"])   # <prefix kaos-lake publishes>/<repo>-<id>
     tree = fake.tree(repo, "main")
     assert {"data.yaml", "README.md", "images/train/.keep", "labels/test/.keep"} <= set(tree)
+
+
+def test_delete_and_recreate_the_same_name_gets_new_storage(fake, client):
+    first = datasets.create_dataset("cats", "yolo", "", client, {"classes": ["cat"]})
+    ns = fake.repos[first]["ns"]
+    fake.delete_repo(first)                                    # lakeFS keeps the storage; its namespace stays used
+    again = datasets.create_dataset("cats", "yolo", "", client, {"classes": ["cat"]})
+    assert again == first and fake.repos[again]["ns"] != ns
+    fake.delete_repo(again)
+    assert datasets.create_dataset("cats", "none", "", client) == first    # an empty dataset takes the same path
 
 
 def test_create_dataset_existing_repo_is_an_error(fake, client):
@@ -176,10 +187,10 @@ def test_storage_prefix_falls_back_to_env_then_errors(fake, client, monkeypatch)
     assert "dataset-cats" not in fake.repos
     monkeypatch.setenv("KUBECORE_STORAGE_NAMESPACE_BASE", "gs://other/lake/")
     datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
-    assert fake.repos["dataset-cats"]["ns"] == "gs://other/lake/dataset-cats"
+    assert re.fullmatch(r"gs://other/lake/dataset-cats-[0-9a-f]{8}", fake.repos["dataset-cats"]["ns"])
 
 
 def test_published_storage_prefix_wins_over_env(fake, client, monkeypatch):
     monkeypatch.setenv("KUBECORE_STORAGE_NAMESPACE_BASE", "gs://other/lake")
     datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
-    assert fake.repos["dataset-cats"]["ns"] == "gs://bucket/lakefs/dataset-cats"
+    assert re.fullmatch(r"gs://bucket/lakefs/dataset-cats-[0-9a-f]{8}", fake.repos["dataset-cats"]["ns"])

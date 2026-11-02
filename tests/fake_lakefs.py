@@ -27,6 +27,7 @@ class FakeLakeFS(BaseAdapter):
         super().__init__()
         self.base = base
         self.repos: dict = {}
+        self.used_ns: set = set()    # storage namespaces ever used: a deleted repo's stays used
         self.calls: list = []        # (method, path-without-query)
         self.auth: list = []         # the Authorization header of every request (None when absent)
         self.kaos: dict = {}         # "/kaos/v1/..." -> (status, JSON body or raw bytes); others: 404 HTML
@@ -37,8 +38,13 @@ class FakeLakeFS(BaseAdapter):
         self._ids = itertools.count(1)
 
     # ---- test helpers
+    def delete_repo(self, name):
+        """As lakeFS: the repository goes, its storage namespace stays used."""
+        del self.repos[name]
+
     def add_repo(self, name, ns="gs://bucket/proj/seed", metadata=None, files=None):
         commit = self._new_commit(name, files or {})
+        self.used_ns.add(ns)
         self.repos[name] = {"ns": ns, "metadata": dict(metadata or {}), "commits": {commit[0]: commit[1]},
                             "branches": {"main": {"commit": commit[0], "staged": {}}},
                             "tags": {}, "pulls": []}
@@ -130,6 +136,8 @@ class FakeLakeFS(BaseAdapter):
             if m == "GET":
                 return 200, {"results": [{"id": n, "storage_namespace": r["ns"]} for n, r in sorted(self.repos.items())],
                              "pagination": {"has_more": False}}
+            if body["storage_namespace"] in self.used_ns:        # lakeFS keeps a deleted repo's storage and refuses it
+                return 400, {"message": "failed to create repository: storage namespace already in use"}
             self.add_repo(body["name"], body["storage_namespace"])
             self.repos[body["name"]]["metadata"] = {}
             return 201, {"id": body["name"]}
