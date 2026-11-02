@@ -1,7 +1,7 @@
 # kaos-lib
 
-The KAOS platform library (formerly `kubecore`): datasets (formats, versions), run outputs, and the `kaos-cli`
-command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11, F-14).
+The KAOS platform library (formerly `kubecore`): datasets (formats, versions), run outputs, MLflow, the run
+context, the data lock and the `kaos-cli` command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11, F-14).
 
 ## Install
 
@@ -23,12 +23,19 @@ pip install "kaos-lib[zitadel]"
 pip install "kaos-lib[zitadel] @ https://github.com/kaos-io/kaos-lib/archive/<sha>.zip"
 ```
 
+MLflow (`kaos_lib.mlflow`, writing and loading data locks, `kaos-cli run --lock`) needs the `mlflow` extra
+(mlflow-skinny 3, PyJWT, cryptography). It also registers the MLflow auth provider `zitadel`:
+
+```bash
+pip install "kaos-lib[mlflow]"
+```
+
 Import it as `kaos_lib`; the command is `kaos-cli`.
 
 ### Formerly kubecore
 
 Up to 0.2 this was the `kubecore` package in `novelcore/hera-pipeline-template` (`packages/kubecore`). For one
-release (0.3.x) the distribution still ships:
+release (0.3.x, and still in 0.4.x) the distribution ships:
 
 - a `kubecore` import shim: `import kubecore` and `from kaos_lib import datasets` keep working (the very
   `kaos_lib` modules) and emit one `DeprecationWarning`. Replace `kubecore` with `kaos_lib` in your imports;
@@ -84,6 +91,95 @@ with outputs.run("myapp", "exp1", "run-7", "checkpoints") as r:    # branch run-
     r.finish({"dataset_ref": "dataset-default@v2", "mlflow_run_id": "..."})  # merge into main, delete branch
 outputs.write_run("myapp", "exp1", "run-7", "./ckpt")      # shortcut: open, save once, finish
 ```
+
+## MLflow
+
+```python
+from kaos_lib.mlflow import mlflow
+client = mlflow()          # MLFLOW_TRACKING_URI, auth from the chain below; returns an MlflowClient
+import mlflow as mlf       # the mlflow module is configured too: mlf.start_run(), mlf.log_metric(...)
+```
+
+`mlflow(tracking_uri=None, token=None)` sets the tracking URI, sets `MLFLOW_TRACKING_AUTH=zitadel` and asks the
+chain once, so a missing credential fails before the step does any work. The bearer is the first of:
+
+1. an explicit token: `mlflow(token=...)`, else `$MLFLOW_TRACKING_TOKEN` (MeluXina jobs get one);
+2. the step's machine key: `ZITADEL_MACHINE_KEY_FILE` + `ZITADEL_DOMAIN` + `ZITADEL_MLFLOW_PROJECT_ID`, minted
+   with the scope `urn:zitadel:iam:org:project:id:<id>:aud` (the organisation's Zitadel project) and minted again
+   two minutes before it expires;
+3. your `kaos-cli login` session (the same browser login as for lakeFS). It carries the organisation project's
+   audience when you logged in inside your app clone; an expired session, or one without that audience, is a
+   one-line error telling you to log in again. Outside a pipeline, set `MLFLOW_TRACKING_URI` yourself.
+
+Project MLflow accepts only tokens audienced to the organisation's Zitadel project (`OIDC_AUDIENCE`).
+
+kaos-lib registers the MLflow request-auth provider `zitadel` (entry point `mlflow.request_auth_provider`), so a
+step whose environment has `MLFLOW_TRACKING_AUTH=zitadel` (the platform injects it) is authenticated with no code
+and no copied plugin file. MLflow asks the provider on every request, and the provider asks the chain, so long
+runs never send an expired token. `kaos_lib.mlflow.token()` returns the current bearer.
+
+## Run context
+
+```python
+from kaos_lib import runtime
+ctx = runtime.context()    # frozen dataclass, read from the environment; missing values are None
+runtime.run_id()           # $KUBECORE_RUN_ID, or None
+```
+
+| field | variables (first non-empty wins) |
+| --- | --- |
+| `run_id` | `KUBECORE_RUN_ID` |
+| `workflow` | `KUBECORE_WORKFLOW_NAME` |
+| `app` | `KUBECORE_APP`, else `<app>` of `outputs_repo` = `outputs-<app>` |
+| `project` | `KUBECORE_PROJECT` |
+| `step` | `KUBECORE_STEP`, `STEP_NAME` |
+| `outputs_repo` | `OUTPUTS_REPO`, `CHECKPOINT_BUCKET` |
+| `lakefs_endpoint` | `LAKEFS_ENDPOINT`, `LAKEFS_URL` |
+| `mlflow_uri` | `MLFLOW_TRACKING_URI` |
+| `dataset_ref` | `KUBECORE_DATASET_REF`, `DATASET`, `DATASET_REPO@DATASET_REF` |
+| `dataset_commit` | `KUBECORE_DATASET_COMMIT`, `DATASET_COMMIT` |
+| `support` | the `kaos_lib.support` verdict for `$KAOS_LIB_SUPPORT` |
+
+Nothing is hardcoded: when the platform changes what it injects, the names above keep working. Today the enhancer
+injects the run id, workflow name, outputs repository and endpoints into every step; `KUBECORE_APP`,
+`KUBECORE_PROJECT` and `KUBECORE_STEP` are not injected yet (on MeluXina the step comes from `STEP_NAME`).
+
+## Data lock
+
+Every `datasets.resolve` (and so every `materialize`) records `(owner, repository, ref) -> commit` in the
+process's lock. Add reads that bypass kaos-lib (an S3-gateway stream) with `lock.record`. At the end of the step,
+write it to the MLflow run:
+
+```python
+from kaos_lib import lock
+lock.record("dataset-default", "v2", commit)        # owner="team-a" for a shared dataset
+lock.write()                                        # the active run, $MLFLOW_RUN_ID, or write(run_id)
+locked = lock.load(run_id)                          # DataLock; .reads, .to_json(), .pinned(repo, ref, owner)
+lock.DataLock.replay(locked)                        # later resolves of those repositories return the locked commits
+```
+
+`write` sets the tags `kaos_lib.data.<repo>.commit` (comma-separated when a run read several commits of one
+repository) and `kaos_lib.data.<repo>.owner` for a shared dataset, and logs `data.lock.json`:
+
+```json
+{"version": 1, "reads": [{"repo": "dataset-default", "owner": null, "ref": "v2", "commit": "c0042..."},
+                         {"repo": "dataset-cats", "owner": "team-a", "ref": "v1", "commit": "a1b2..."}]}
+```
+
+It merges with a `data.lock.json` already on the run, so several steps logging to one run add up. Replay matches
+a resolve on (owner, repository, ref), then on (owner, repository) when the lock holds one commit for it; a commit
+the caller pins (`ref.with_commit`, `commit=`) is used as given.
+
+Replay a run's reads from the command line:
+
+```
+kaos-cli run --lock <mlflow-run-id> -- python -m app.entry --params params.yaml
+```
+
+It loads the lock (MLflow auth from the chain above), prints the pinned reads and runs the command with
+`$KAOS_LIB_LOCK` set to the lock's JSON, which kaos-lib honours in the child exactly like `DataLock.replay`. A
+malformed `$KAOS_LIB_LOCK` is a one-line `LockError` naming what is wrong. Running a pipeline step by name
+(`kaos-cli run <step>`) is not part of this release.
 
 ## Datasets shared with your project
 
@@ -167,6 +263,7 @@ kaos-cli dataset release <repo>
 kaos-cli dataset push <dir> <repo> -m "message" [--no-validate]   # validates, draft branch, pull request
 kaos-cli dataset pull [<owner>/]<repo>@<version> [dest]
 kaos-cli dataset validate <dir>
+kaos-cli run --lock <mlflow-run-id> -- <command> [args...]       # replay the dataset commits that run read
 ```
 
 Every command prints the next step and the lakeFS link (dataset page, pull request, version).
@@ -200,7 +297,10 @@ a deprecated range whose `unsupported_after` has not passed, or that sets none),
 pip install -e ".[test]" && pytest
 ```
 
-A fake lakeFS (`tests/fake_lakefs.py`) runs the real client over an in-memory transport; no network.
+A fake lakeFS (`tests/fake_lakefs.py`) runs the real client over an in-memory transport; a fake Zitadel token
+endpoint (`tests/fake_zitadel.py`) and a fake MlflowClient (`tests/fake_mlflow.py`) stand in for the others; no
+network. With mlflow-skinny installed (the `test` extra) a few tests also drive real MLflow: its auth-provider
+registry, a request to a local HTTP server, and a lock round trip through a file store.
 
 ## File map
 
@@ -210,6 +310,9 @@ A fake lakeFS (`tests/fake_lakefs.py`) runs the real client over an in-memory tr
 | `credentials.py` | the credential chain, session cache, browser login |
 | `oidc.py` | PKCE browser login to Zitadel (ported from `dataset_tools`) |
 | `zitadel.py` | machine-key token (JWT-profile grant), extra `kaos-lib[zitadel]` |
+| `mlflow.py` | `mlflow()`, `token()`, the MLflow auth provider `zitadel`, extra `kaos-lib[mlflow]` |
+| `runtime.py` | `context()`, `run_id()`: the injected run context |
+| `lock.py` | the data lock: record, write, load, replay, `$KAOS_LIB_LOCK` |
 | `peers.py` | the other projects (`/kaos/v1/peers`) and what they share (`/kaos/v1/shared`) |
 | `lakefs.py` | lakeFS REST client |
 | `transfer.py` | mirror plan, upload, download of file trees |
@@ -217,4 +320,4 @@ A fake lakeFS (`tests/fake_lakefs.py`) runs the real client over an in-memory tr
 | `formats/` | format registry; `ultralytics.py` creator + consumer |
 | `outputs.py` | `outputs-<app>` writes |
 | `cli.py` | the `kaos-cli` command (and the deprecated `kubecore` alias) |
-| `../kubecore/` | the deprecated `kubecore` import shim (0.3.x only) |
+| `../kubecore/` | the deprecated `kubecore` import shim (0.3.x and 0.4.x) |
