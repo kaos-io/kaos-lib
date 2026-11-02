@@ -1,5 +1,6 @@
 """Layouts as a mechanism: sources (built-in, installed, project, local), a team's own layout end to end, hooks, CLI."""
 import json
+import re
 import sys
 import textwrap
 
@@ -327,7 +328,7 @@ def test_cli_layout_publish_opens_a_pull_request(capsys, use_fake, fake, samples
     code, out, _ = run(capsys, "layout", "publish", str(samples_dir))
     assert code == 0 and "http://lakefs.test/repositories/layouts/pulls/1" in out
     r = fake.repos["layouts"]
-    assert r["ns"] == "gs://bucket/lakefs/layouts"
+    assert re.fullmatch(r"gs://bucket/lakefs/layouts-[0-9a-f]{8}", r["ns"])
     branch = r["pulls"][0]["source_branch"]
     assert fake.tree("layouts", branch) == {"samples/layout.yaml": SAMPLES.encode()}
     assert fake.tree("layouts", "main") == {}

@@ -12,6 +12,7 @@ import datetime as dt
 import os
 import pathlib
 import re
+import secrets
 import tempfile
 from dataclasses import dataclass, field, replace
 from typing import Optional
@@ -292,12 +293,16 @@ def release(repo: str, client: Optional[LakeFS] = None) -> str:
 
 
 def _storage_namespace(c: LakeFS, repo: str) -> str:
-    """Storage for a new repository: ``<prefix>/<repo>``, the prefix kaos-lake publishes, else the env base."""
+    """Storage for a new repository: ``<prefix>/<repo>-<8 hex>``, the prefix kaos-lake publishes, else the env base.
+
+    New for every creation: lakeFS keeps a deleted repository's storage and refuses to create over it, so a
+    namespace derived from the name alone could be used once, and delete + recreate of a name failed.
+    """
     base = c.storage_namespace_prefix() or os.environ.get(STORAGE_BASE_ENV)
     if not base:
         raise DatasetError(f"cannot choose storage for {repo}: kaos-lake did not publish a storage prefix. "
                            f"Set {STORAGE_BASE_ENV} (e.g. gs://bucket/lakefs).")
-    return f"{base.rstrip('/')}/{repo}"
+    return f"{base.rstrip('/')}/{repo}-{secrets.token_hex(4)}"
 
 
 def ensure_repository(c: LakeFS, repo: str, labels: dict) -> bool:
