@@ -1,63 +1,55 @@
-"""Dataset formats (``ultralytics``, and ``raw`` for any repository): each is a creator (build, validate, publish) plus a consumer (materialize).
+"""The 0.3 ``formats`` API, kept so existing code keeps working: each format is now a layout (``kaos_lib.layouts``).
 
-``get_format("ultralytics")`` returns the pair. ``yolo`` is accepted as an alias
-(kaos-lake is renaming its template ``yolo`` -> ``ultralytics``).
+``get_format(name)`` returns the layout ``name`` as a creator + consumer pair with the 0.3 signatures. New code
+uses ``kaos_lib.layouts.load(name)`` directly.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Optional, Sequence
 
-from ..errors import DatasetError
-
-
-MAX_SHOWN = 30
+from .. import layouts
+from ..layouts import ValidationReport, local  # noqa: F401  (0.3 names)
 
 
-@dataclass
-class ValidationReport:
-    """Every problem found in a local dataset (aggregated, never first-error-only)."""
-    errors: list = field(default_factory=list)
+class _Creator:
+    def __init__(self, layout: layouts.Layout):
+        self.layout, self.name = layout, layout.name
 
-    @property
-    def ok(self) -> bool:
-        return not self.errors
+    def skeleton(self, classes: Optional[Sequence[str]] = None, description: str = "", title: str = "dataset",
+                 **values) -> dict:
+        if classes is not None:
+            values["classes"] = list(classes)
+        return self.layout.skeleton(title, description, values)
 
-    def format(self) -> str:
-        shown = self.errors[:MAX_SHOWN]
-        lines = [f"  - {e}" for e in shown]
-        if len(self.errors) > len(shown):
-            lines.append(f"  ... and {len(self.errors) - len(shown)} more")
-        return "\n".join(lines) if lines else "dataset is valid"
+    def validate(self, local_dir) -> ValidationReport:
+        return self.layout.validate(local_dir)
+
+    def publish(self, *args, **kwargs):
+        return self.layout.publish(*args, **kwargs)
+
+
+class _Consumer:
+    def __init__(self, layout: layouts.Layout):
+        self.layout, self.name = layout, layout.name
+
+    def materialize(self, ref, dest=None, client=None, commit=None, prefix=None):
+        return self.layout.materialize(ref, dest, client, commit, prefix=prefix)
 
 
 @dataclass(frozen=True)
 class Format:
     """A named creator + consumer pair."""
     name: str
-    creator: Any   # skeleton(**opts)->{path: bytes}, validate(dir), publish(dir, repo, message, ...)
-    consumer: Any  # materialize(ref, dest, client) -> Path
-
-
-_REGISTRY: dict = {}
-_ALIASES = {"yolo": "ultralytics"}
-
-
-def register(fmt: Format) -> None:
-    """Add a format to the registry (last registration of a name wins)."""
-    _REGISTRY[fmt.name] = fmt
+    creator: Any
+    consumer: Any
 
 
 def get_format(name: str) -> Format:
-    """The format called ``name`` (aliases resolved); DatasetError listing the known ones otherwise."""
-    key = _ALIASES.get(name, name)
-    if key not in _REGISTRY:
-        raise DatasetError(f"unknown dataset format {name!r}. Known: {', '.join(sorted(_REGISTRY))}.")
-    return _REGISTRY[key]
+    """The layout ``name`` as a 0.3 format; DatasetError listing the known layouts otherwise."""
+    layout = layouts.load(name)
+    return Format(layout.name, _Creator(layout), _Consumer(layout))
 
 
 def format_names() -> list:
-    return sorted(_REGISTRY)
-
-
-from . import raw, ultralytics  # noqa: E402,F401  (register themselves)
+    return [lay.name for lay in layouts.available(warn=False)]

@@ -1,4 +1,4 @@
-"""Shared fixtures: a fake lakeFS, a clean environment, and a sample ultralytics dataset on disk."""
+"""Shared fixtures: a fake lakeFS, a clean environment, and a sample yolo dataset on disk."""
 from __future__ import annotations
 
 import json
@@ -29,7 +29,7 @@ def clean_env(tmp_path, monkeypatch):
 @pytest.fixture
 def fake():
     f = FakeLakeFS()
-    f.add_repo("dataset-default", metadata={"kaos.kind": "dataset", "kaos.template": "ultralytics",
+    f.add_repo("dataset-default", metadata={"kaos.kind": "dataset", "kaos.template": "yolo",
                                             "kaos.default": "true"})
     f.add_repo("outputs-myapp", metadata={"kaos.kind": "outputs", "kaos.app": "myapp"})
     return f
@@ -41,7 +41,7 @@ def client(fake):
 
 
 def write_dataset(root, nc=2, images=("a", "b"), bad_label=None, skip_label=None):
-    """A valid ultralytics dataset in ``root`` (train + val), with optional damage."""
+    """A valid yolo dataset in ``root`` (train + val), with optional damage."""
     names = "\n".join(f"  {i}: c{i}" for i in range(nc))
     root.mkdir(parents=True, exist_ok=True)
     (root / "data.yaml").write_text(

@@ -65,6 +65,7 @@ class LakeFS:
         self.owner = owner
         self.session = session or _session(credential, concurrency * 2)
         self._peer_clients: dict = {}
+        self._templates: Optional[dict] = None
 
     @classmethod
     def connect(cls, url: Optional[str] = None, start: Optional[str] = None) -> "LakeFS":
@@ -187,13 +188,21 @@ class LakeFS:
         except NotFoundError:
             return False
 
+    def dataset_templates(self) -> Optional[dict]:
+        """kaos-lake's ``GET /kaos/v1/dataset-templates`` (layouts and the storage prefix), read once; None if it has none."""
+        if self._templates is None:
+            try:
+                resp = self.session.get(f"{self.base_url}/kaos/v1/dataset-templates", timeout=30,
+                                        allow_redirects=False)
+                body = resp.json() if resp.status_code == 200 else None
+            except (requests.RequestException, ValueError):
+                body = None
+            self._templates = body if isinstance(body, dict) else {}
+        return self._templates or None
+
     def storage_namespace_prefix(self) -> Optional[str]:
         """Where kaos-lake wants new repositories (``GET /kaos/v1/dataset-templates``), or None if it does not say."""
-        try:
-            resp = self.session.get(f"{self.base_url}/kaos/v1/dataset-templates", timeout=30, allow_redirects=False)
-            return (resp.json().get("storage_namespace_prefix") or None) if resp.status_code == 200 else None
-        except (requests.RequestException, ValueError):
-            return None
+        return (self.dataset_templates() or {}).get("storage_namespace_prefix") or None
 
     def tags(self, repo: str) -> list:
         """Every tag: dicts with ``id`` (name) and ``commit_id``."""

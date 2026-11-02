@@ -1,6 +1,6 @@
 """Moving file trees to and from a lakeFS ref: plan a mirror, upload, download.
 
-Used by the format creators/consumers and by ``outputs``. Parallel, no format knowledge.
+Used by the layouts and by ``outputs``. Parallel, no layout knowledge.
 """
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ import concurrent.futures as cf
 import hashlib
 import pathlib
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Callable, Iterable, Optional
 
 from .lakefs import LakeFS
 
-# formats.local.MARKER: a pulled copy's marker never goes back up when the folder is pushed.
+# layouts.local.MARKER: a pulled copy's marker never goes back up when the folder is pushed.
 IGNORED_NAMES = {".DS_Store", "Thumbs.db", ".kubecore-dataset.json"}
 
 
@@ -85,11 +85,13 @@ def upload_tree(client: LakeFS, repo: str, branch: str, root: pathlib.Path, pref
 
 
 def download_prefixes(client: LakeFS, repo: str, commit: str, prefixes: Iterable, dest: pathlib.Path,
-                      strip: str = "") -> int:
+                      strip: str = "", keep: Optional[Callable[[str], bool]] = None) -> int:
     """Download every object under any of ``prefixes`` at ``commit`` into ``dest``; returns the count.
 
-    ``strip`` is removed from the start of each path before it is written below ``dest``.
+    ``strip`` is removed from the start of each path before it is written below ``dest``; ``keep(path)``,
+    when given, chooses which of the listed objects to download. An object under two prefixes is fetched once.
     """
-    paths = [o["path"] for pre in prefixes for o in client.list_objects(repo, commit, pre)]
+    listed = dict.fromkeys(o["path"] for pre in prefixes for o in client.list_objects(repo, commit, pre))
+    paths = [p for p in listed if keep is None or keep(p)]
     _parallel(client, paths, lambda p: client.download_object(repo, commit, p, dest / p[len(strip):]))
     return len(paths)

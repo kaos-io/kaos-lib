@@ -1,4 +1,4 @@
-"""ultralytics consumer: materialize, (repo, commit) cache, staged copy."""
+"""yolo layout as a consumer: materialize, (repo, commit) cache, staged copy."""
 import json
 
 import pytest

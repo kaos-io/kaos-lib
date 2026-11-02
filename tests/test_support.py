@@ -277,7 +277,7 @@ def test_cli_read_warns_when_unsupported(capsys, cli_on_fake):
 
 
 @pytest.mark.parametrize("argv", [
-    ("dataset", "create", "cats", "--classes", "cat"),
+    ("dataset", "create", "cats", "--layout", "yolo", "--classes", "cat"),
     ("dataset", "release", "dataset-default"),
 ])
 def test_cli_write_refused_when_unsupported(capsys, cli_on_fake, argv):
@@ -297,14 +297,14 @@ def test_cli_push_refused_when_unsupported(capsys, cli_on_fake, tmp_path):
 def test_cli_write_allowed_when_deprecated(capsys, cli_on_fake):
     meta = dict(POLICY, deprecated=[{"range": "<0.3", "unsupported_after": "2999-01-01"}])
     cli_on_fake.kaos[support.UI_PATH] = (200, {"kaos_lib_support": meta})
-    code, _, err = run(capsys, "dataset", "create", "cats", "--classes", "cat")
+    code, _, err = run(capsys, "dataset", "create", "cats", "--layout", "yolo", "--classes", "cat")
     assert code == 0 and "dataset-cats" in cli_on_fake.repos and "WARNING: kaos-lib 0.2.0 is deprecated" in err
 
 
 def test_cli_behind_warns_on_write_and_proceeds(capsys, cli_on_fake, monkeypatch):
     monkeypatch.setattr(cli, "__version__", "0.3.0")
     cli_on_fake.kaos[support.UI_PATH] = (200, {"kaos_lib_support": POLICY})
-    code, _, err = run(capsys, "dataset", "create", "cats", "--classes", "cat")
+    code, _, err = run(capsys, "dataset", "create", "cats", "--layout", "yolo", "--classes", "cat")
     assert code == 0 and "WARNING: kaos-lib 0.3.0 is supported; 0.4.0 is available" in err
 
 
@@ -325,7 +325,7 @@ def test_cli_without_platform_metadata_falls_back_to_packaged_and_never_refuses(
     monkeypatch.setattr(support, "packaged", lambda: dict(UNSUPPORTED_FOR_020))   # even a packaged "unsupported"
     if ui is not None:
         cli_on_fake.kaos[support.UI_PATH] = ui
-    code, _, err = run(capsys, "dataset", "create", "cats", "--classes", "cat")
+    code, _, err = run(capsys, "dataset", "create", "cats", "--layout", "yolo", "--classes", "cat")
     assert code == 0 and "dataset-cats" in cli_on_fake.repos
     assert "WARNING: kaos-lib 0.2.0 is unsupported" in err
 
@@ -339,7 +339,7 @@ def test_cli_offline_metadata_fetch_is_quiet_for_the_packaged_release(capsys, cl
 
 def test_cli_malformed_platform_metadata_warns_and_proceeds(capsys, cli_on_fake):
     cli_on_fake.kaos[support.UI_PATH] = (200, {"kaos_lib_support": "{broken"})
-    code, _, err = run(capsys, "dataset", "create", "cats", "--classes", "cat")
+    code, _, err = run(capsys, "dataset", "create", "cats", "--layout", "yolo", "--classes", "cat")
     assert code == 0 and "WARNING: cannot tell whether kaos-lib 0.2.0 is supported" in err
 
 
