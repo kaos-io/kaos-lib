@@ -39,11 +39,13 @@ def _connect(args) -> LakeFS:
 def _support_gate(client: LakeFS, write: bool) -> None:
     """Warn when this kaos-lib is behind/deprecated/unsupported; refuse a write only when the platform says unsupported.
 
-    The platform's metadata comes from the project lakeFS; without it (offline, older kaos-lake) the packaged
-    ``_release.json`` is used and nothing is refused.
+    The platform's metadata comes from the project lakeFS; without it (offline, older kaos-lake) the newest public
+    release.json of this kaos-lib's channel is used, else the packaged ``_release.json``, and nothing is refused.
     """
     live = support.from_lakefs(client)
-    result = support.check(__version__, live if live is not None else support.packaged())
+    fallback = None if live is not None else (
+        channel.public_release(channel.channel_of_version(__version__)) or support.packaged())
+    result = support.check(__version__, live if live is not None else fallback)
     if result["verdict"] == support.CURRENT:
         return
     fix = f" Fix: {result['fix']}" if result["fix"] else ""
@@ -214,7 +216,7 @@ def _platform_support(url: Optional[str] = None):
 
 def version_text() -> str:
     """Two lines: the version and channel, then what the targeted platform recommends."""
-    first = f"kaos-cli {__version__} ({channel.describe(channel.installed())})"
+    first = f"kaos-cli {__version__} ({channel.describe(channel.installed(__version__))})"
     try:
         base, value = _platform_support()
     except KaosLibError as exc:
@@ -233,17 +235,28 @@ class _VersionAction(argparse.Action):
 
 
 def cmd_upgrade(args) -> int:
-    """Install the kaos-lib spec the targeted platform recommends (its lakeFS ``/kaos/v1/ui``)."""
-    base, value = _platform_support(getattr(args, "url", None))
-    rec = channel.recommended(value)
+    """Install the kaos-lib spec the targeted platform recommends (its lakeFS ``/kaos/v1/ui``), else the newest
+    release of this install's channel (the public release.json)."""
+    try:
+        base, value = _platform_support(getattr(args, "url", None))
+        rec, where = channel.recommended(value), f"the platform at {base}"
+    except KaosLibError as exc:
+        rec, where = None, f"no platform ({exc})"
     if not rec:
-        print(f"ERROR: the platform at {base} publishes no recommended kaos-lib yet (/kaos/v1/ui, "
-              "kaos_lib_support.recommended); nothing was installed. Releases: "
-              "https://github.com/kaos-io/kaos-lib/releases", file=sys.stderr)
-        return EXIT_USER_ERROR
+        mine = channel.channel_of_version(__version__)
+        newest = channel.public_release(mine if mine in channel.PREFIX else "stable") or {}
+        rec = channel.recommended(newest)
+        if not rec:
+            print(f"ERROR: {where} publishes no recommended kaos-lib, and no {mine} release is published yet "
+                  f"(index: {channel.INDEXES.get(mine, channel.INDEXES['stable'])}); nothing was installed.",
+                  file=sys.stderr)
+            return EXIT_USER_ERROR
+        print(f"NOTE: {where} publishes no recommended kaos-lib; using the newest {newest.get('channel', mine)} "
+              f"release {newest.get('tag', '')}.", file=sys.stderr)
+        base = newest.get("index_url") or "the public channel"
     req = channel.requirement(rec, channel.has_zitadel_extra())
     print(f"{base} recommends {req}")
-    if channel.is_current(req, channel.installed(), __version__):
+    if channel.is_current(req, channel.installed(__version__), __version__):
         print(f"kaos-lib {__version__} is already that; nothing to do.")
         return 0
     cmd = channel.pip_command(req)

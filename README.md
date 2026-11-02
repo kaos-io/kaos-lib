@@ -5,30 +5,39 @@ command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11
 
 ## Install
 
-Releases are GitHub Releases of `kaos-io/kaos-lib` (built by the platform's Argo CI; not on PyPI). Install the
-wheel of a release, with the extra you need:
+kaos-lib is published by the platform's CI to two **public Python repositories** (Google Artifact Registry), not
+PyPI. Install from the stable index; the dependencies come from PyPI:
 
 ```bash
-pip install "kaos-lib[zitadel] @ https://github.com/kaos-io/kaos-lib/releases/download/v0.3.0/kaos_lib-0.3.0-py3-none-any.whl"
+pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/ \
+    --extra-index-url https://pypi.org/simple/ "kaos-lib[zitadel]==0.3.0"
 ```
 
-or the tagged source:
+Pin the version (`==`): pip takes the highest version it finds across both indexes, and kaos-lib exists only in
+the first. Platform images install one exact file instead, the `recommended` spec of a release (a wheel URL with
+its `#sha256=`), so no index decides anything:
 
 ```bash
-pip install "kaos-lib[zitadel] @ https://github.com/kaos-io/kaos-lib/archive/refs/tags/v0.3.0.zip"
+pip install "kaos-lib[zitadel] @ https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/kaos-lib/kaos_lib-0.3.0-py3-none-any.whl#sha256=<sha256>"
 ```
-
-Each release also carries `release.json` (its support window, see below) and `SHA256SUMS`.
 
 ### Channels
 
-- **prerelease** `vX.Y.Z-rc.N`: a GitHub pre-release cut by the platform CI on every merge to `main`
-  (`X.Y.Z` is the version in `pyproject.toml`, the version the rc will be released as; `N` counts up).
-- **stable** `vX.Y.Z`: made only by the platform's release train, from an rc that passed the dev e2e. It
-  carries that rc's wheel and sdist byte for byte, which is why an rc is built with its final version.
+| channel | repository (pip index) | versions | made by |
+| --- | --- | --- | --- |
+| stable | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` | `X.Y.Z` | the platform's release train only, from an rc that passed the dev e2e |
+| prerelease | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib-rc/simple/` | `X.Y.ZrcN` | every merge to `main` |
 
-`kaos-cli --version` shows the channel the install came from (read from the URL pip installed it from) and what
-the targeted platform recommends; `kaos-cli upgrade` installs that recommendation.
+`X.Y.Z` is the version in `pyproject.toml`: the next release. Versions are immutable in a repository, so every rc
+has its own (`X.Y.ZrcN`); the stable `X.Y.Z` is the rc's commit built again at `X.Y.Z`, and the release train's
+promotion checks that this wheel holds the rc wheel's code byte for byte (only the version strings differ).
+
+Each channel's newest release metadata is public: `https://storage.googleapis.com/kaos-dev-511509-kaos-lib/stable/release.json`
+(`.../rc/release.json` for prereleases), with `<channel>/<tag>/release.json` and `SHA256SUMS` for every release.
+
+`kaos-cli --version` shows the channel (from the version: an rc is a prerelease) and what the targeted platform
+recommends; `kaos-cli upgrade` installs that recommendation, or the newest release of the install's channel when
+the platform publishes none.
 
 Python 3.9+. Dependencies: `requests`, `PyYAML`, `packaging`. Reading datasets other projects share from a
 pipeline step (machine-key tokens) needs the `zitadel` extra (PyJWT, cryptography); without it, drop
@@ -187,8 +196,8 @@ Exit codes: 0 ok, 1 user error (one `ERROR:` line), 2 invalid dataset.
 
 ## Support window
 
-Every release ships `release.json` (in the package as `kaos_lib/_release.json`, and as the asset `release.json`
-of the GitHub release):
+Every release ships `release.json` (in the package as `kaos_lib/_release.json`, and in the public release bucket
+as `<channel>/<tag>/release.json`, plus `tag`, `channel`, `commit`, `recommended` and the files' sha256):
 
 ```json
 {"version": "0.4.0", "supported": ">=0.3", "deprecated": [{"range": "<0.3", "unsupported_after": "YYYY-MM-DD"}],
@@ -203,8 +212,8 @@ a deprecated range whose `unsupported_after` has not passed, or that sets none),
 - Pipeline steps: when the platform sets `$KAOS_LIB_SUPPORT`, importing `kaos_lib` (or the `kubecore` shim) logs
   the verdict on stderr, tags the MLflow run `kaos_lib.support` (the active run, or `$MLFLOW_RUN_ID`), and stops
   the step only when unsupported.
-- `kaos-cli`: reads the policy from the project lakeFS (`/kaos/v1/ui`, key `kaos_lib_support`), else the packaged
-  `_release.json`. Reads warn; `create`, `release` and `push` are refused when the platform says unsupported.
+- `kaos-cli`: reads the policy from the project lakeFS (`/kaos/v1/ui`, key `kaos_lib_support`), else the newest
+  public `release.json` of its channel, else the packaged `_release.json`. Reads warn; `create`, `release` and `push` are refused when the platform says unsupported.
   Offline or without platform metadata nothing is refused.
 
 ## Tests

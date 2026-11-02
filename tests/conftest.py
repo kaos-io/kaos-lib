@@ -20,6 +20,7 @@ def clean_env(tmp_path, monkeypatch):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("KUBECORE_ML_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("KUBECORE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("KAOS_LIB_RELEASES_BASE", "http://127.0.0.1:9")   # no test reaches the public bucket
     monkeypatch.chdir(tmp_path)
     from kaos_lib import config, peers
     config.load_config.cache_clear()
