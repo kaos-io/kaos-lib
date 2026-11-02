@@ -1,18 +1,21 @@
-"""ultralytics creator: skeleton, validate (each error kind), publish through a pull request."""
+"""yolo layout as a creator: skeleton, validate (rules + hook, each error kind), publish through a pull request."""
 import pytest
 import yaml
 
 from conftest import write_dataset
-from kaos_lib import datasets
+from kaos_lib import layouts
 from kaos_lib.errors import DatasetError, ValidationFailed
-from kaos_lib.formats import get_format
-from kaos_lib.formats.ultralytics import validate
 
-creator = get_format("ultralytics").creator
+yolo = layouts.load("yolo")
+validate = yolo.validate
+
+
+def skeleton(classes, description=""):
+    return yolo.skeleton("dataset-pets", description, {"classes": classes})
 
 
 def test_skeleton_is_a_valid_layout():
-    files = creator.skeleton(["cat", "dog"], "pets")
+    files = skeleton(["cat", "dog"], "pets")
     data = yaml.safe_load(files["data.yaml"])
     assert data["nc"] == 2 and data["names"] == {0: "cat", 1: "dog"}
     assert (data["train"], data["val"], data["test"]) == ("images/train", "images/val", "images/test")
@@ -22,26 +25,36 @@ def test_skeleton_is_a_valid_layout():
     assert "pets" in files["README.md"].decode()
 
 
-def test_skeleton_data_yaml_text_matches_kaos_lake_template():
-    text = creator.skeleton(["cat", 'do"g'])["data.yaml"].decode()
+def test_skeleton_data_yaml_text_matches_kaos_lake():
+    text = skeleton(["cat", 'do"g'])["data.yaml"].decode()
     assert text == (
-        "# YOLO dataset (Ultralytics). Paths are relative to the dataset's root.\n"
+        "# YOLO txt dataset. Paths are relative to the dataset's root.\n"
         "path: .\ntrain: images/train\nval: images/val\ntest: images/test\n"
         'nc: 2\nnames:\n  0: "cat"\n  1: "do\\"g"\n')
-    assert set(creator.skeleton(["a"])) == {
+    assert set(skeleton(["a"])) == {
         "README.md", "data.yaml", *(f"{k}/{s}/.keep" for k in ("images", "labels") for s in ("train", "val", "test"))}
 
 
 def test_skeleton_with_11_classes_keeps_numeric_order():
-    files = creator.skeleton([f"c{i}" for i in range(11)])
+    files = skeleton([f"c{i}" for i in range(11)])
     text = files["data.yaml"].decode()
     assert [ln.split(":")[0].strip() for ln in text.splitlines() if ln.startswith("  ")] == [str(i) for i in range(11)]
     assert yaml.safe_load(text)["names"] == {i: f"c{i}" for i in range(11)}
 
 
 def test_skeleton_needs_classes():
-    with pytest.raises(DatasetError, match="at least one class"):
-        creator.skeleton([" ", ""])
+    with pytest.raises(DatasetError, match="Class names needs at least one item"):
+        skeleton([" ", ""])
+
+
+def test_a_skeleton_validates_once_images_and_labels_are_added(tmp_path):
+    root = tmp_path / "d"
+    for path, content in skeleton(["a", "b"]).items():
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_bytes(content)
+    assert "images/**: no file matches (required)" in validate(root).errors
+    write_dataset(root)
+    assert validate(root).ok
 
 
 def test_validate_ok(dataset_dir):
@@ -59,7 +72,7 @@ def _errors(root):
 
 
 def test_validate_missing_data_yaml(tmp_path):
-    assert "data.yaml is missing" in _errors(tmp_path)
+    assert "data.yaml: no file matches (required)" in _errors(tmp_path)
 
 
 def test_validate_nc_mismatch(dataset_dir):
@@ -70,15 +83,15 @@ def test_validate_nc_mismatch(dataset_dir):
 
 def test_validate_image_without_label(tmp_path):
     root = write_dataset(tmp_path / "d", skip_label=("train", "b"))
-    assert "images/train/b.jpg has no label file labels/train/b.txt" in _errors(root)
+    assert "images/train/b.jpg has no labels/train/b.txt" in _errors(root)
 
 
 @pytest.mark.parametrize("line,fragment", [
     ("0 0.5 0.5 0.2", "expected '<class-id> <x> <y> <w> <h>'"),
     ("5 0.5 0.5 0.2 0.2", "class id 5 is outside 0..1"),
     ("0 1.5 0.5 0.2 0.2", "coordinates must be within [0,1]"),
-    ("x 0.5 0.5 0.2 0.2", "class id must be an integer"),
-    ("0 0.5 abc 0.2 0.2", "class id must be an integer and the rest numbers"),
+    ("x 0.5 0.5 0.2 0.2", "an integer class id, then numbers: x 0.5 0.5 0.2 0.2"),
+    ("0 0.5 abc 0.2 0.2", "an integer class id, then numbers: 0 0.5 abc"),
 ])
 def test_validate_label_line_errors(tmp_path, line, fragment):
     root = write_dataset(tmp_path / "d", bad_label=line)
@@ -99,8 +112,13 @@ def test_validate_requires_train_and_val_images(tmp_path):
     assert "images/val/ has no images" in _errors(root)
 
 
+def test_a_line_the_rule_refuses_is_reported_once(tmp_path):
+    root = write_dataset(tmp_path / "d", bad_label="0 nan 0.5 0.2 0.2")
+    assert sum("labels/train/a.txt:1:" in e for e in validate(root).errors) == 1
+
+
 def test_publish_opens_pull_request_and_never_writes_main(fake, client, dataset_dir):
-    result = creator.publish(dataset_dir, "dataset-default", "add images", client=client)
+    result = yolo.publish(dataset_dir, "dataset-default", "add images", client=client)
     assert result.branch.startswith("draft-") and result.pull_id == "1"
     assert result.pull_url == "http://lakefs.test/repositories/dataset-default/pulls/1"
     r = fake.repos["dataset-default"]
@@ -112,39 +130,39 @@ def test_publish_opens_pull_request_and_never_writes_main(fake, client, dataset_
 
 
 def test_publish_creates_missing_repo_with_labels_then_pr(fake, client, dataset_dir):
-    result = creator.publish(dataset_dir, "dataset-new", "first", description="d", client=client)
+    result = yolo.publish(dataset_dir, "dataset-new", "first", description="d", client=client)
     assert result.created and result.pull_id
     assert fake.repos["dataset-new"]["metadata"] == {
-        "kaos.kind": "dataset", "kaos.template": "ultralytics", "kaos.description": "d"}
+        "kaos.kind": "dataset", "kaos.template": "yolo", "kaos.description": "d"}
     assert all(branch != "main" for _, _, branch, _ in fake.writes)
 
 
 def test_publish_invalid_dataset_uploads_nothing(fake, client, tmp_path):
     root = write_dataset(tmp_path / "d", bad_label="0 9 9 9 9")
     with pytest.raises(ValidationFailed) as err:
-        creator.publish(root, "dataset-default", "m", client=client)
+        yolo.publish(root, "dataset-default", "m", client=client)
     assert err.value.errors and fake.writes == []
 
 
 def test_publish_is_idempotent_nothing_to_publish(fake, client, dataset_dir):
-    first = creator.publish(dataset_dir, "dataset-default", "one", client=client)
+    first = yolo.publish(dataset_dir, "dataset-default", "one", client=client)
     # merge the draft into main as a PR merge would
     r = fake.repos["dataset-default"]
     r["branches"]["main"]["commit"] = r["branches"][first.branch]["commit"]
     with pytest.raises(DatasetError, match="nothing to publish"):
-        creator.publish(dataset_dir, "dataset-default", "two", client=client)
+        yolo.publish(dataset_dir, "dataset-default", "two", client=client)
 
 
 def test_publish_mirrors_deletions(fake, client, dataset_dir):
     r = fake.repos["dataset-default"]
     r["commits"]["c-old"] = {"images/train/gone.jpg": b"x"}
     r["branches"]["main"]["commit"] = "c-old"
-    result = creator.publish(dataset_dir, "dataset-default", "m", client=client)
+    result = yolo.publish(dataset_dir, "dataset-default", "m", client=client)
     assert "images/train/gone.jpg" not in fake.tree("dataset-default", result.branch)
 
 
 def test_publish_direct_only_when_asked(fake, client, dataset_dir):
-    result = creator.publish(dataset_dir, "dataset-default", "m", via_pull_request=False, client=client)
+    result = yolo.publish(dataset_dir, "dataset-default", "m", via_pull_request=False, client=client)
     assert result.branch == "main" and result.pull_id is None
     assert "data.yaml" in fake.tree("dataset-default", "main")
 
@@ -202,9 +220,15 @@ def test_validate_pose_label_errors(tmp_path, label, fragment):
     assert fragment in _errors(_pose_dataset(tmp_path / "p", label))
 
 
-@pytest.mark.parametrize("kpt", ["[3]", "[0, 3]", "[3, 4]", "oops", "[3.5, 3]"])
-def test_validate_bad_kpt_shape(tmp_path, kpt):
-    assert "kpt_shape must be [K, D]" in _errors(_pose_dataset(tmp_path / "p", GOOD_POSE_D3, kpt))
+@pytest.mark.parametrize("kpt,fragment", [
+    ("[3]", "data.yaml: kpt_shape: needs at least 2 items"),
+    ("[0, 3]", "data.yaml: kpt_shape[0]: must be at least 1"),
+    ("[3, 4]", "data.yaml: kpt_shape [K, D] needs D 2 or 3 (got 4)"),
+    ("oops", "data.yaml: kpt_shape: must be array"),
+    ("[3.5, 3]", "data.yaml: kpt_shape[0]: must be integer"),
+])
+def test_validate_bad_kpt_shape(tmp_path, kpt, fragment):
+    assert fragment in _errors(_pose_dataset(tmp_path / "p", GOOD_POSE_D3, kpt))
 
 
 def test_validate_segmentation_polygons_ok_and_mixed_with_boxes(tmp_path):
@@ -233,7 +257,7 @@ def test_validate_nc_is_optional_when_names_given(dataset_dir):
 
 def test_validate_names_required(dataset_dir):
     (dataset_dir / "data.yaml").write_text("train: images/train\nval: images/val\nnc: 2\n")
-    assert "names must be a non-empty list" in _errors(dataset_dir)
+    assert "data.yaml: (root): names is required" in _errors(dataset_dir)
 
 
 def test_validate_nc_checked_against_names_only_when_both_present(dataset_dir):
@@ -243,15 +267,15 @@ def test_validate_nc_checked_against_names_only_when_both_present(dataset_dir):
 
 def test_publish_pose_dataset_through_pr(fake, client, tmp_path):
     root = _pose_dataset(tmp_path / "p", GOOD_POSE_D3)
-    assert creator.publish(root, "dataset-default", "pose", client=client).pull_id
+    assert yolo.publish(root, "dataset-default", "pose", client=client).pull_id
 
 
 def test_publish_no_validate_uploads_an_invalid_dataset(fake, client, tmp_path):
     root = write_dataset(tmp_path / "d", bad_label="0 9 9 9 9")
-    assert creator.publish(root, "dataset-default", "m", validate_first=False, client=client).pull_id
+    assert yolo.publish(root, "dataset-default", "m", validate_first=False, client=client).pull_id
 
 
 def test_publish_records_metadata_on_the_commit(fake, client, dataset_dir):
-    result = creator.publish(dataset_dir, "dataset-default", "m", metadata={"source": "labeler", "n": 3}, client=client)
+    result = yolo.publish(dataset_dir, "dataset-default", "m", metadata={"source": "labeler", "n": 3}, client=client)
     log = fake.repos["dataset-default"]["commit_log"]
     assert log[-1][0] == result.branch and log[-1][3] == {"source": "labeler", "n": "3"}

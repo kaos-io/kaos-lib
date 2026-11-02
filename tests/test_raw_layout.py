@@ -1,10 +1,10 @@
-"""raw format: any repository, whole tree or a prefix; label-driven format choice; empty datasets."""
+"""raw layout: any repository, whole tree or a prefix; label-driven layout choice; empty datasets."""
 import pytest
 
 from conftest import write_dataset
 from kaos_lib import cli, datasets
 from kaos_lib.errors import DatasetError
-from kaos_lib.formats import get_format
+from kaos_lib import layouts
 
 FILES = {"a.txt": b"A", "sub/b.txt": b"B", "sub/deep/c.bin": b"C", "other/d.txt": b"D"}
 
@@ -84,15 +84,15 @@ def test_raw_refuses_foreign_nonempty_dest(repo, client, tmp_path):
         datasets.materialize(repo, tmp_path / "mine", client=client)
 
 
-def test_raw_creator_has_no_skeleton_validates_nothing_publishes_as_is(fake, client, tmp_path):
-    raw = get_format("raw").creator
-    assert raw.skeleton() == {}
+def test_raw_skeleton_is_a_readme_validates_nothing_publishes_as_is(fake, client, tmp_path):
+    raw = layouts.load("raw")
+    assert set(raw.skeleton("dataset-x")) == {"README.md"}
     junk = tmp_path / "junk"
     junk.mkdir()
     (junk / "anything.bin").write_bytes(b"\x00")
     assert raw.validate(junk).ok
     result = raw.publish(junk, "my-repo", "first", client=client)
-    assert result.created and fake.repos["my-repo"]["metadata"] == {"kaos.kind": "dataset"}
+    assert result.created and fake.repos["my-repo"]["metadata"] == {"kaos.kind": "dataset", "kaos.template": "raw"}
     assert "anything.bin" in fake.tree("my-repo", result.branch)
 
 
@@ -107,53 +107,53 @@ def test_pulled_copy_pushes_back_without_its_marker(repo, fake, client, tmp_path
     assert set(fake.tree("my-repo", result.branch)) == set(FILES) | {"new.txt"}
 
 
-# ---- label-driven format choice
+# ---- label-driven layout choice
 def labelled(fake, name, template, files):
     fake.add_repo(name, ns=f"gs://b/x/{name}", metadata={"kaos.template": template} if template else {}, files=files)
     return datasets.DatasetRef.parse(f"{name}@latest")
 
 
-def ultralytics_files(tmp_path):
+def yolo_files(tmp_path):
     root = write_dataset(tmp_path / "u")
     return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
 
 
-@pytest.mark.parametrize("label", ["ultralytics", "yolo"])
-def test_label_ultralytics_or_alias_selects_the_ultralytics_consumer(fake, client, tmp_path, label):
-    ref = labelled(fake, "pics", label, ultralytics_files(tmp_path))
-    out = datasets.materialize(ref, client=client)
+def test_label_yolo_selects_the_yolo_layout(fake, client, tmp_path):
+    out = datasets.materialize(labelled(fake, "pics", "yolo", yolo_files(tmp_path)), client=client)
     assert out.name == "data.yaml"
 
 
 def test_no_label_or_unknown_label_selects_raw(fake, client, tmp_path):
     for name, label in (("plain", None), ("odd", "something-else")):
-        out = datasets.materialize(labelled(fake, name, label, FILES), client=client)
-        assert out.is_dir()
+        out = datasets.materialize(labelled(fake, name, label, yolo_files(tmp_path)), client=client)
+        assert out.is_dir() and (out / "data.yaml").is_file()
 
 
-def test_explicit_fmt_name_wins_over_the_label(fake, client, tmp_path):
-    ref = labelled(fake, "pics", "ultralytics", ultralytics_files(tmp_path))
-    out = datasets.materialize(ref, tmp_path / "as-raw", fmt_name="raw", client=client)
+def test_explicit_layout_wins_over_the_label(fake, client, tmp_path):
+    ref = labelled(fake, "pics", "yolo", yolo_files(tmp_path))
+    out = datasets.materialize(ref, tmp_path / "as-raw", layout="raw", client=client)
     assert out.is_dir() and (out / "data.yaml").is_file()
-    with pytest.raises(DatasetError, match="unknown dataset format"):
-        datasets.materialize(ref, fmt_name="coco", client=client)
+    with pytest.raises(DatasetError, match="unknown layout 'coco'"):
+        datasets.materialize(ref, layout="coco", client=client)
 
 
-def test_prefix_is_rejected_by_ultralytics(fake, client, tmp_path):
-    ref = labelled(fake, "pics", "ultralytics", ultralytics_files(tmp_path))
-    with pytest.raises(DatasetError, match="only supported by the raw format"):
+def test_prefix_is_rejected_by_yolo(fake, client, tmp_path):
+    ref = labelled(fake, "pics", "yolo", yolo_files(tmp_path))
+    with pytest.raises(DatasetError, match="prefix= only works with layouts that download the whole tree"):
         datasets.materialize(ref, client=client, prefix="images")
 
 
-def test_format_of(fake, client):
+def test_layout_of(fake, client):
     labelled(fake, "pics", "yolo", {})
     labelled(fake, "plain", None, {})
-    assert datasets.format_of("pics", client) == "ultralytics"
-    assert datasets.format_of("plain", client) == "raw"
-    assert datasets.format_of("does-not-exist", client) == "raw"
+    labelled(fake, "odd", "something-else", {})
+    assert datasets.layout_of("pics", client) == "yolo"
+    assert datasets.layout_of("plain", client) == "raw"
+    assert datasets.layout_of("odd", client) == "raw"
+    assert datasets.layout_of("does-not-exist", client) == "raw"
 
 
-# ---- create --template none
+# ---- create --layout none
 def test_create_empty_dataset_only_kind_label_no_commit(fake, client):
     repo = datasets.create_dataset("mine", "none", "my files", client)
     assert repo == "dataset-mine"
@@ -163,9 +163,9 @@ def test_create_empty_dataset_only_kind_label_no_commit(fake, client):
 
 def test_cli_create_template_none_explains_next_steps(fake, capsys, monkeypatch):
     monkeypatch.setattr(cli, "_connect", lambda args: fake.client())
-    code = cli.main(["dataset", "create", "mine", "--template", "none", "--description", "d"])
+    code = cli.main(["dataset", "create", "mine", "--layout", "none", "--description", "d"])
     out = capsys.readouterr().out
-    assert code == 0 and "empty, no template" in out
+    assert code == 0 and "empty, no layout" in out
     assert "http://lakefs.test/repositories/dataset-mine/objects" in out
     assert "once its first commit lands" in out and "kaos-cli dataset push" in out
     assert fake.repos["dataset-mine"]["metadata"]["kaos.kind"] == "dataset"
@@ -197,10 +197,10 @@ def test_cli_push_without_template_label_validates_nothing(fake, use_fake, capsy
     assert "/repositories/my-repo/pulls/1" in capsys.readouterr().out
 
 
-def test_cli_push_with_ultralytics_label_validates(fake, use_fake, capsys, tmp_path):
-    fake.add_repo("pics", ns="gs://b/x/pics", metadata={"kaos.template": "ultralytics"})
+def test_cli_push_with_yolo_label_validates(fake, use_fake, capsys, tmp_path):
+    fake.add_repo("pics", ns="gs://b/x/pics", metadata={"kaos.template": "yolo"})
     junk = tmp_path / "junk"
     junk.mkdir()
     (junk / "notes.txt").write_text("hi")
     assert cli.main(["dataset", "push", str(junk), "pics", "-m", "files"]) == 2
-    assert "data.yaml is missing" in capsys.readouterr().err
+    assert "data.yaml: no file matches (required)" in capsys.readouterr().err

@@ -6,7 +6,8 @@ import pytest
 from conftest import write_dataset
 from kaos_lib import cli, datasets
 from kaos_lib.errors import DatasetError
-from kaos_lib.formats import get_format, local
+from kaos_lib import layouts
+from kaos_lib.layouts import local
 
 parse = datasets.DatasetRef.parse
 
@@ -98,20 +99,20 @@ class NoNetwork:
 
 @pytest.mark.parametrize("call", [
     lambda: datasets.release("a/dataset-x", NoNetwork()),
-    lambda: datasets.create_dataset("a/cats", "ultralytics", "", NoNetwork(), classes=["cat"]),
+    lambda: datasets.create_dataset("a/cats", "yolo", "", NoNetwork(), {"classes": ["cat"]}),
     lambda: datasets.create_dataset("a/cats", datasets.NO_TEMPLATE, "", NoNetwork()),
     lambda: datasets.publish_tree(".", "a/dataset-x", "m", client=NoNetwork()),
-    lambda: get_format("raw").creator.publish(".", "a/dataset-x", "m", client=NoNetwork()),
+    lambda: layouts.load("raw").publish(".", "a/dataset-x", "m", client=NoNetwork()),
 ])
 def test_library_writes_of_owner_refs_are_refused(call):
     with pytest.raises(DatasetError, match="belongs to project a.*read-only"):
         call()
 
 
-def test_ultralytics_push_of_an_owner_ref_is_refused_before_validation(tmp_path):
+def test_yolo_push_of_an_owner_ref_is_refused_before_validation(tmp_path):
     bad = write_dataset(tmp_path / "bad", bad_label="7 0.5 0.5 0.1 0.1")       # would fail validation
     with pytest.raises(DatasetError, match="cannot push to a/dataset-x: it belongs to project a"):
-        get_format("ultralytics").creator.publish(bad, "a/dataset-x", "m", client=NoNetwork())
+        layouts.load("yolo").publish(bad, "a/dataset-x", "m", client=NoNetwork())
 
 
 @pytest.fixture
@@ -127,7 +128,7 @@ def no_connect(monkeypatch):
     (["dataset", "push", ".", "a/dataset-x", "-m", "x"], "cannot push to a/dataset-x"),
     (["dataset", "push", ".", "a/dataset-x", "-m", "x", "--no-validate"], "cannot push to a/dataset-x"),
     (["dataset", "create", "a/cats", "--classes", "c"], "cannot create a/cats"),
-    (["dataset", "create", "a/cats", "--template", "none"], "cannot create a/cats"),
+    (["dataset", "create", "a/cats", "--layout", "none"], "cannot create a/cats"),
 ])
 def test_cli_writes_of_owner_refs_are_refused_before_connecting(capsys, no_connect, argv, fragment):
     code = cli.main(argv)

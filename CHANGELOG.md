@@ -6,7 +6,8 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 
 ## 0.4.0 (unreleased)
 
-PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13).
+PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,
+user-definable layouts.
 
 ### Added
 - `kaos_lib.mlflow`: `mlflow(tracking_uri=None, token=None)` configures the `mlflow` module and returns an
@@ -25,6 +26,27 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13).
   the run's), `load`, `DataLock.replay`, and `$KAOS_LIB_LOCK`. `LockError` for malformed or missing locks.
 - `kaos-cli run --lock <mlflow-run-id> -- <command>`: runs the command with the lock in `$KAOS_LIB_LOCK`.
 - `zitadel.grant` (the whole token response, with `expires_in`) and `zitadel.env_settings`.
+- `kaos_lib.layouts`: a layout is a `layout.yaml` (spec `layouts/shared/layout.schema.json`) with parameters, a
+  starter skeleton (`{{placeholders}}`), declarative rules (required and allowed patterns, extensions, pairs, line
+  patterns, a manifest schema), what a pull downloads, and an optional Python hook (`validate`, `materialize`).
+  `layouts.load(name|path)`, `layouts.available()`, `Layout.validate/skeleton/parse/materialize/publish`.
+- Sources, in lookup order: built-in (`yolo`, `raw`), installed packages (entry point group `kaos_lib.layouts`),
+  the project's registry in kaos-lake (`GET /kaos/v1/dataset-templates`, from the project's `layouts`
+  repository); a path is read as is.
+- `kaos-cli layout list|show|init|validate|publish`; `dataset create --layout <name|path> --param key=value`;
+  `dataset push` validates with the layout of the repository's label.
+- The schema, the built-in layouts and the test fixtures (`tests/layout_fixtures`) are shared byte for byte with
+  kaos-lake, pinned by `SHA256SUMS`; both implementations pass the same fixtures.
+- Guide: [Make your own dataset layout](docs/make-your-own-layout.md).
+
+### Changed
+- The `yolo` format is the built-in `yolo` layout: a declarative `layout.yaml` plus a small hook
+  (`kaos_lib.layouts.yolo`: class ids, value counts, coordinates, the `data.yaml` path rewrite). Some problems are
+  worded differently (`data.yaml: no file matches (required)`, `images/x.jpg has no labels/x.txt`).
+- `raw` creates a README; `create_dataset`'s default layout is `yolo`, as before.
+- `datasets.materialize(..., layout=...)` and `datasets.layout_of`; `fmt_name=`, `format_of` and
+  `kaos_lib.formats.get_format` keep working.
+- The cache marker records the layout's download patterns: a copy made with other patterns is fetched again.
 
 ### Unchanged
 - The `kubecore` import shim and command still ship in 0.4.0: templates still import `kubecore`. Support:

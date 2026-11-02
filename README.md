@@ -1,6 +1,6 @@
 # kaos-lib
 
-The KAOS platform library (formerly `kubecore`): datasets (formats, versions), run outputs, MLflow, the run
+The KAOS platform library (formerly `kubecore`): datasets (layouts, versions), run outputs, MLflow, the run
 context, the data lock and the `kaos-cli` command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11, F-14).
 
 ## Install
@@ -70,13 +70,33 @@ environment variables.
 
 ## Any repository works
 
-Templates are optional. `DatasetRef.parse` accepts any lakeFS repository (`my-repo@main`) and a ref that is
+Layouts are optional. `DatasetRef.parse` accepts any lakeFS repository (`my-repo@main`) and a ref that is
 `vN` (tag), `latest` (head of the default branch), a branch, a tag or a commit id. `materialize` uses the
-repository's `kaos.template` label (`ultralytics`, alias `yolo`) and otherwise the `raw` format: the whole
-tree (or `prefix=`) at the pinned commit, cached by (repo, commit, prefix), returned as a folder. `raw` has
-no skeleton, validates nothing and publishes as is. `kaos-cli dataset create <name> --template none` makes an
-empty `dataset-<name>` (only `kaos.kind=dataset`); kaos-lake lists it as a dataset once its first commit lands.
-The pipeline dropdown lists only `dataset-*` repositories.
+layout the repository's `kaos.template` label names, and otherwise `raw`: the whole tree (or `prefix=`) at the
+pinned commit, cached by (repo, commit, prefix), returned as a folder. `raw` checks nothing and publishes as is.
+`kaos-cli dataset create <name> --layout none` makes an empty `dataset-<name>` (only `kaos.kind=dataset`);
+kaos-lake lists it as a dataset once its first commit lands. The pipeline dropdown lists only `dataset-*`
+repositories.
+
+## Layouts
+
+A layout says what a dataset holds: a declarative `layout.yaml` with its parameters, the starter files `create`
+writes, the rules `validate` and `push` check, what a pull downloads, and optionally a small Python hook for
+checks no rule can say. Two are built in: `yolo` (images with one YOLO txt label file per image, and a
+`data.yaml`) and `raw` (any files). Your team can make its own and share it with the project, or publish it as
+a package: **[Make your own dataset layout](docs/make-your-own-layout.md)**.
+
+```
+kaos-cli layout list                              # built-in, installed and your project's layouts
+kaos-cli layout show yolo                         # its spec
+kaos-cli layout init ./my-layout [--from yolo]    # a starter layout.yaml to edit
+kaos-cli layout validate <dir> --layout <name|path>
+kaos-cli layout publish ./my-layout               # a pull request into the project's `layouts` repository
+```
+
+Names are looked up built-in first, then installed packages (entry point group `kaos_lib.layouts`), then the
+project's registry (kaos-lake, `GET /kaos/v1/dataset-templates`); anything with a `/` or ending in `.yaml` is
+read as a path. kaos-lake checks a layout's declarative rules only and never runs its hook; kaos-lib runs both.
 
 ## Data model
 
@@ -98,13 +118,13 @@ from kaos_lib import datasets, outputs
 ref = datasets.DatasetRef.parse("dataset-default@v2")      # any repository: "my-repo@main", "@latest", "@<tag>", "@<commit>"
 ref = ref.with_commit(commit)                              # optional: pin the commit dataset-loading resolved
 commit = datasets.resolve(ref)                             # pinned commit returned as is, else tag/main head
-data_yaml = datasets.materialize(ref, dest=None)           # ultralytics: Path to data.yaml; raw: the folder (prefix= for one folder)
+data_yaml = datasets.materialize(ref, dest=None)           # yolo: Path to data.yaml; raw: the folder (prefix= for one folder)
 datasets.list_datasets(); datasets.versions("dataset-x"); datasets.release("dataset-x")   # -> "vN"
 
-from kaos_lib.formats import get_format                   # "ultralytics" (alias "yolo"); detect, segment, pose
-fmt = get_format("ultralytics")
-fmt.creator.skeleton(classes=["cat", "dog"]); fmt.creator.validate(dir); fmt.creator.publish(dir, repo, "msg")
-fmt.consumer.materialize(ref, dest, commit=None)
+from kaos_lib import layouts                               # yolo: detect, segment, pose
+yolo = layouts.load("yolo")                                # a name, a path, or layouts.available() for all
+yolo.skeleton("dataset-pets", values={"classes": ["cat", "dog"]}); yolo.validate(dir); yolo.publish(dir, repo, "msg")
+yolo.materialize(ref, dest, commit=None)
 
 with outputs.run("myapp", "exp1", "run-7", "checkpoints") as r:    # branch run-run-7-checkpoints, reused on retry
     resume = r.latest("weights/")                          # local path of what the branch already holds, or None
@@ -242,20 +262,23 @@ An exception inside `with outputs.run(...)` neither merges nor deletes the branc
 Leaving the block normally without calling `finish` finishes with no extra metadata. An empty commit or an
 empty merge is a success and returns the existing commit.
 
-Datasets are validated for detection (`cls x y w h`), segmentation (`cls x1 y1 x2 y2 ...`, even count >= 6) and
+`yolo` datasets are validated for detection (`cls x y w h`), segmentation (`cls x1 y1 x2 y2 ...`, even count >= 6) and
 pose (`kpt_shape: [K, D]`, K*D values per line, visibility 0/1/2 when D=3). `nc` is optional when `names` is given.
 
 ### Rights each call needs
 
 | call | needs |
 | --- | --- |
-| `resolve`, `materialize`, `consumer.materialize`, `versions`, `list_datasets`, `DatasetRef` | read on `dataset-*` (an app key can) |
+| `resolve`, `materialize`, `Layout.materialize`, `versions`, `list_datasets`, `DatasetRef` | read on `dataset-*` (an app key can) |
 | the same on `<owner>/dataset-*`, `peers.shared` | a bearer token the owner accepts (machine-key token or login session) |
 | `outputs.run(...)` / `write_run` (`open`, `save`, `latest`, `finish`) | write on that app's `outputs-<app>` (an app key can) |
 | `release` | tag creation on the dataset: people or admins, not an app key |
-| `create_dataset`, `creator.publish` / `publish_tree` (repository, draft branch, pull request) | people or admins, not an app key |
+| `create_dataset`, `Layout.publish` / `publish_tree` (repository, draft branch, pull request) | people or admins, not an app key |
+| `kaos-cli layout publish` (the project's `layouts` repository) | people who may create datasets, not an app key |
+| `layouts.load` of a project layout | any signed-in caller (an app key can) |
 
-`materialize` downloads only `data.yaml`, `images/`, `labels/` at the pinned commit, rewrites `path:`, and
+`materialize` downloads what the layout's `materialize.include` names (`yolo`: `data.yaml`, `images/`,
+`labels/`) at the pinned commit, lets the layout's hook finish the copy (`yolo` rewrites `path:`), and
 caches by (repo, commit) (`$KUBECORE_CACHE_DIR`, default `~/.cache/kubecore/datasets`); a second call is
 free. If `$KUBECORE_STAGED_DIR` holds that commit (MeluXina staging), it is used in place and nothing is
 downloaded.
@@ -279,15 +302,18 @@ The lakeFS URL comes from `--url`, `LAKEFS_ENDPOINT`/`LAKEFS_URL`, or `.kubecore
 kaos-cli --version                       # version, channel (prerelease vX.Y.Z-rc.N / stable vX.Y.Z), platform's recommendation
 kaos-cli upgrade [--dry-run]             # pip-install the kaos-lib the targeted platform recommends
 kaos-cli login
-kaos-cli dataset create <name> --classes a,b,c [--description ...]
+kaos-cli dataset create <name> [--layout <name|path>] [--classes a,b,c] [--param key=value] [--description ...]
 kaos-cli dataset list [--shared]
 kaos-cli dataset versions <repo>
 kaos-cli dataset release <repo>
-kaos-cli dataset push <dir> <repo> -m "message" [--no-validate]   # validates, draft branch, pull request
-kaos-cli dataset pull [<owner>/]<repo>@<version> [dest]
-kaos-cli dataset validate <dir>
+kaos-cli dataset push <dir> <repo> -m "message" [--no-validate]   # validates with the label's layout, then a pull request
+kaos-cli dataset pull [<owner>/]<repo>@<version> [dest] [--layout ...]
+kaos-cli dataset validate <dir> [--layout <name|path>]
+kaos-cli layout list | show <name> | init <dir> | validate <dir> --layout <name|path> | publish <dir>
 kaos-cli run --lock <mlflow-run-id> -- <command> [args...]       # replay the dataset commits that run read
 ```
+
+`dataset create` and `dataset validate` default to the `yolo` layout; `--layout none` creates an empty repository.
 
 Every command prints the next step and the lakeFS link (dataset page, pull request, version).
 Exit codes: 0 ok, 1 user error (one `ERROR:` line), 2 invalid dataset.
@@ -340,7 +366,8 @@ registry, a request to a local HTTP server, and a lock round trip through a file
 | `lakefs.py` | lakeFS REST client |
 | `transfer.py` | mirror plan, upload, download of file trees |
 | `datasets.py` | refs (`[<owner>/]<repo>@<ref>`), resolve, list, versions, release, create, publish via PR, materialize |
-| `formats/` | format registry; `ultralytics.py` creator + consumer |
+| `layouts/` | layouts: sources, spec and schema subset (`spec.py`), skeletons (`render.py`), rules (`rules.py`), the yolo hook (`yolo.py`), the cache (`local.py`), the files shared with kaos-lake (`shared/`) |
+| `formats/` | the 0.3 `get_format` API over layouts |
 | `outputs.py` | `outputs-<app>` writes |
 | `support.py` | the support window: `release.json` checks for steps and the CLI |
 | `channel.py` | release channel of the install (PEP 610), the platform's recommended spec (`upgrade`) |

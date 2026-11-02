@@ -6,6 +6,7 @@
     kaos-cli upgrade                   install the kaos-lib the targeted platform recommends
     kaos-cli --version                 version, release channel and the platform's recommendation
     kaos-cli run --lock <mlflow-run-id> -- <command>   run a command reading exactly the commits that run read
+    kaos-cli layout list|show|init|validate|publish   dataset layouts (built-in, installed, the project's)
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
 traceback. Every successful command prints the next useful step and a link.
@@ -13,7 +14,9 @@ traceback. Every successful command prints the next useful step and a link.
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
+import pathlib
 import subprocess
 import sys
 import types
@@ -21,21 +24,35 @@ from typing import Optional
 
 import requests
 
-from . import __version__, channel, credentials, datasets, peers, support
+from . import __version__, channel, credentials, datasets, layouts, peers, support
 from .config import resolve_endpoint
-from .errors import AuthError, KaosLibError, UnsupportedVersion, ValidationFailed
-from .formats import format_names, get_format
+from .errors import AuthError, DatasetError, KaosLibError, UnsupportedVersion, ValidationFailed
 from .lakefs import LakeFS
 
 EXIT_USER_ERROR, EXIT_INVALID_DATASET = 1, 2
-WRITE_COMMANDS = {"create", "release", "push"}   # change data in lakeFS: refused when kaos-lib is unsupported
+WRITE_COMMANDS = {"create", "release", "push", "publish"}   # change data in lakeFS: refused when unsupported
 
 
 def _connect(args) -> LakeFS:
     """Build the lakeFS client from --url / env / app config and the credential chain, then check support."""
     client = LakeFS.connect(getattr(args, "url", None))
-    _support_gate(client, getattr(args, "dataset_command", None) in WRITE_COMMANDS)
+    command = getattr(args, "dataset_command", None) or getattr(args, "layout_command", None)
+    _support_gate(client, command in WRITE_COMMANDS)
     return client
+
+
+def _url_client(args) -> Optional[LakeFS]:
+    """A client for ``--url`` when given; otherwise None, and ``layouts.load`` connects only if it must."""
+    return _connect(args) if getattr(args, "url", None) else None
+
+
+def _maybe_connect(args) -> Optional[LakeFS]:
+    """The project's lakeFS when one is configured and signed in to, else None (local layouts still work)."""
+    try:
+        return _connect(args)
+    except (KaosLibError, requests.exceptions.ConnectionError) as exc:
+        print(f"NOTE: the project's layouts were not looked up ({exc}).", file=sys.stderr)
+        return None
 
 
 def _support_gate(client: LakeFS, write: bool) -> None:
@@ -61,8 +78,25 @@ def _repo_url(c: LakeFS, repo: str, tail: str = "objects") -> str:
 
 
 def _print_errors(errors: list) -> None:
-    from .formats import ValidationReport
-    print(ValidationReport(errors).format(), file=sys.stderr)
+    print(layouts.ValidationReport(errors).format(), file=sys.stderr)
+
+
+def _values(args, layout: layouts.Layout) -> dict:
+    """Parameter values from ``--param key=value`` (list items comma-separated) and ``--classes``."""
+    pairs = list(getattr(args, "param", None) or [])
+    if getattr(args, "classes", None):
+        pairs.append(f"classes={args.classes}")
+    params = {p["key"]: p for p in layout.parameters}
+    values: dict = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        key = key.strip()
+        if not sep or key not in params:
+            known = ", ".join(params) or "none"
+            raise DatasetError(f"layout {layout.name} has no parameter {key!r} (its parameters: {known}); "
+                               "write --param <key>=<value>.")
+        values[key] = [x.strip() for x in value.split(",")] if params[key]["type"] == "list" else value
+    return values
 
 
 # ------------------------------------------------------------------ commands
@@ -81,20 +115,20 @@ def _repo(c: LakeFS, name: str) -> str:
 def cmd_create(args) -> int:
     datasets.refuse_shared(args.name, "create")
     c = _connect(args)
-    classes = [x.strip() for x in (args.classes or "").split(",") if x.strip()]
-    repo = datasets.create_dataset(args.name, args.template, args.description or "", c,
-                                   classes=classes, title=args.name)
-    if args.template == datasets.NO_TEMPLATE:
-        print(f"Created {repo}: empty, no template (labelled kaos.kind=dataset).")
+    if args.layout == datasets.NO_TEMPLATE:
+        repo = datasets.create_dataset(args.name, datasets.NO_TEMPLATE, args.description or "", c)
+        print(f"Created {repo}: empty, no layout (labelled kaos.kind=dataset).")
         print(f"  Open it:  {_repo_url(c, repo)}")
         print("kaos-lake lists it as a dataset once its first commit lands. Next: push your files")
         print(f"  kaos-cli dataset push ./my-files {repo} -m \"first files\"")
         return 0
-    print(f"Created {repo} ({get_format(args.template).name}).")
+    layout = layouts.load(args.layout, c)
+    repo = datasets.create_dataset(args.name, layout, args.description or "", c, _values(args, layout))
+    print(f"Created {repo} (layout {layout.name}).")
     print(f"  Open it:  {_repo_url(c, repo)}")
-    print("Next: get a local copy, add your images and labels, then push (opens a pull request):")
+    print("Next: get a local copy, add your files, then push (opens a pull request):")
     print(f"  kaos-cli dataset pull {repo}@latest ./{repo}")
-    print(f"  kaos-cli dataset push ./{repo} {repo} -m \"add images\"")
+    print(f"  kaos-cli dataset push ./{repo} {repo} -m \"add data\"")
     return 0
 
 
@@ -126,7 +160,8 @@ def cmd_list(args) -> int:
         return cmd_list_shared(args)
     rows = datasets.list_datasets(_connect(args))
     if not rows:
-        print("No datasets yet. Create one with: kaos-cli dataset create <name> --classes a,b,c")
+        print("No datasets yet. Create one with: kaos-cli dataset create <name> [--layout <layout>] "
+              "(see kaos-cli layout list)")
         return 0
     width = max(len(r.repo) for r in rows)
     for r in rows:
@@ -169,11 +204,11 @@ def cmd_push(args) -> int:
     datasets.refuse_shared(args.repo, "push to")
     c = _connect(args)
     repo = _repo(c, args.repo)
-    fmt_name = args.format or datasets.format_of(repo, c)   # no template label: raw, validates nothing
+    layout = layouts.load(args.layout or datasets.layout_of(repo, c), c)   # no known label: raw, checks nothing
     if args.no_validate:
-        print("WARNING: --no-validate: the dataset was not validated; training may fail on bad labels.",
+        print("WARNING: --no-validate: the dataset was not validated; reading it may fail on bad files.",
               file=sys.stderr)
-    result = get_format(fmt_name).creator.publish(
+    result = layout.publish(
         args.dir, repo, args.message, description=args.description or "",
         validate_first=not args.no_validate, client=c)
     if result.created:
@@ -187,22 +222,24 @@ def cmd_push(args) -> int:
 def cmd_pull(args) -> int:
     c = _connect(args)
     ref = datasets.DatasetRef.parse(args.ref)
-    path = datasets.materialize(ref, args.dest, args.format, c, prefix=args.prefix)
+    path = datasets.materialize(ref, args.dest, args.layout, c, prefix=args.prefix)
     print(f"Ready: {path}")
     if path.is_dir():
         print(f"Next: your files are in {path}; read them from there in your code.")
     else:
-        print(f"Next: train with it, e.g.  YOLO('yolo11n.pt').train(data='{path}')")
+        print(f"Next: hand {path} to your code (it is the layout's entry file).")
     return 0
 
 
 def cmd_validate(args) -> int:
-    report = get_format(args.format).creator.validate(args.dir)
+    layout = layouts.load(args.layout, _url_client(args))
+    report = layout.validate(args.dir)
+    hook = f", and its hook {layout.spec['hook']}" if layout.spec.get("hook") else ""
     if report.ok:
-        print(f"{args.dir} is a valid {args.format} dataset.")
+        print(f"{args.dir} is a valid {layout.name} dataset (the layout's rules{hook}).")
         print("Next: kaos-cli dataset push <dir> <dataset-repo> -m \"message\"")
         return 0
-    print(f"{args.dir} has {len(report.errors)} problem(s):", file=sys.stderr)
+    print(f"{args.dir} has {len(report.errors)} problem(s) for layout {layout.name}:", file=sys.stderr)
     print(report.format(), file=sys.stderr)
     return EXIT_INVALID_DATASET
 
@@ -288,6 +325,116 @@ def cmd_run(args) -> int:
         raise KaosLibError(f"cannot run {command[0]!r}: {exc.strerror or exc}.") from None
 
 
+def cmd_layout_list(args) -> int:
+    rows = layouts.available(_maybe_connect(args))
+    width = max(len(r.name) for r in rows)
+    for r in rows:
+        hook = "  (hook)" if r.spec.get("hook") else ""
+        print(f"{r.name:<{width}}  {r.source:<9}  {r.title}{hook}")
+    print("Next: kaos-cli layout show <name>, or make your own: kaos-cli layout init ./my-layout")
+    return 0
+
+
+def cmd_layout_show(args) -> int:
+    import yaml
+    layout = layouts.load(args.name, _url_client(args))
+    print(f"# {layout.name}: {layout.source} ({layout.origin})")
+    print(yaml.safe_dump(layout.spec, sort_keys=False, allow_unicode=True, width=100), end="")
+    return 0
+
+
+STARTER = """# A dataset layout (kaos-lib layouts, spec version 1). Check it with
+#   kaos-cli layout validate <a dataset folder> --layout {dir}
+# and share it with your project with  kaos-cli layout publish {dir}
+layout: 1
+name: {name}
+title: {title}
+description: What datasets in this layout hold.
+version: "1"
+parameters:
+  - key: classes
+    label: Class names
+    type: list
+    required: true
+    help: One per line.
+skeleton:
+  folders: [data]
+  files:
+    classes.txt: |
+      {{{{#each classes}}}}
+      {{{{@item}}}}
+      {{{{/each}}}}
+    README.md: |
+      # {{{{name}}}}
+
+      {{{{#if description}}}}
+      {{{{description}}}}
+
+      {{{{/if}}}}
+      Files go in `data/`, one `<id>.json` per sample; `classes.txt` lists the {{{{classes|count}}}} classes.
+rules:
+  required: [classes.txt, "data/*.json"]
+  allowed: [README.md, classes.txt, "data/*.json"]
+  lines:
+    - files: classes.txt
+      pattern: '[A-Za-z0-9_ -]+'
+      message: one class name per line
+materialize:
+  include: [classes.txt, "data/**"]
+"""
+
+
+def cmd_layout_init(args) -> int:
+    import yaml
+    target = pathlib.Path(args.dir)
+    out = target / "layout.yaml"
+    if out.exists():
+        raise DatasetError(f"{out} already exists; edit it, or pick another folder.")
+    name = args.name or target.resolve().name.lower()
+    shown = args.dir if "/" in args.dir else f"./{args.dir}"   # a name without / would be looked up, not read
+    if args.from_layout:
+        spec = dict(layouts.load(args.from_layout, _url_client(args)).spec)
+        spec["name"] = name
+        text = yaml.safe_dump(spec, sort_keys=False, allow_unicode=True, width=100)
+    else:
+        text = STARTER.format(name=name, title=name.replace("-", " ").capitalize(), dir=shown)
+    layouts.spec.parse(text, str(out))   # refuse to write a layout that would not load
+    target.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    print(f"Wrote {out}. Edit it, then check a dataset folder with it:")
+    print(f"  kaos-cli layout validate <folder> --layout {shown}")
+    print(f"Share it with your project:  kaos-cli layout publish {shown}")
+    return 0
+
+
+def cmd_layout_publish(args) -> int:
+    path = pathlib.Path(args.path)
+    spec = layouts.spec.read(path)
+    name = spec["name"]
+    if name in layouts.builtin_names():
+        raise DatasetError(f"{name} is a built-in layout; give yours another name.")
+    c = _connect(args)
+    repo = layouts.LAYOUTS_REPOSITORY
+    datasets.ensure_repository(c, repo, {})
+    branch = "layout-" + name + "-" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S")
+    c.create_branch(repo, branch, datasets.MAIN)
+    c.upload_object(repo, branch, f"{name}/layout.yaml", path / "layout.yaml" if path.is_dir() else path)
+    message = args.message or f"Layout {name}"
+    head = c.branch_commit(repo, branch)
+    if c.commit(repo, branch, message, tolerate_empty=True) == head:
+        c.delete_branch(repo, branch)
+        print(f"{name} is already the project's version; nothing to publish.")
+        return 0
+    pull = c.create_pull(repo, branch, datasets.MAIN, message)
+    if spec.get("hook"):
+        print(f"NOTE: kaos-lake never runs hooks: {spec['hook']} runs only where its package is installed.",
+              file=sys.stderr)
+    print(f"Opened a pull request adding {name}/layout.yaml to the project's {repo} repository.")
+    print(f"  Review and merge it:  {c.base_url}/repositories/{repo}/pulls/{pull}")
+    print(f"Once merged, the New dataset page and  kaos-cli dataset create <name> --layout {name}  offer it.")
+    return 0
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="kaos-cli", description="KAOS platform tools: datasets and run outputs.")
@@ -306,14 +453,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="print the pip command instead of running it")
     ds = sub.add_parser("dataset", help="create, version, push and pull datasets")
     dsub = ds.add_subparsers(dest="dataset_command", required=True)
-    fmts = format_names()
+    layout_help = "a layout name (kaos-cli layout list) or a path to a layout.yaml or its folder"
 
-    sp = add(dsub, "create", cmd_create, "create a new dataset repository with a starter layout")
+    sp = add(dsub, "create", cmd_create, "create a new dataset repository from a layout")
     sp.add_argument("name", help="dataset name (the repository becomes dataset-<name>)")
-    sp.add_argument("--classes", help="comma-separated class names, e.g. cat,dog (ultralytics template)")
+    sp.add_argument("--layout", "--template", dest="layout", default="yolo",
+                    help=f"{layout_help}; none for an empty repository (default yolo)")
+    sp.add_argument("--param", action="append", metavar="KEY=VALUE",
+                    help="a layout parameter; list items comma-separated (repeat for more)")
+    sp.add_argument("--classes", help="shortcut for --param classes=a,b,c (the yolo layout)")
     sp.add_argument("--description", help="what the dataset is for")
-    sp.add_argument("--template", default="ultralytics", choices=fmts + ["yolo", datasets.NO_TEMPLATE],
-                    help=f"starter layout ({', '.join(fmts)}), or none for an empty repository (default ultralytics)")
     add(dsub, "list", cmd_list, "list the datasets you can read").add_argument(
         "--shared", action="store_true", help="list the datasets other projects share with yours (read-only)")
     add(dsub, "versions", cmd_versions, "list a dataset's versions").add_argument("repo")
@@ -323,23 +472,40 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("repo", help="dataset repository (created if missing)")
     sp.add_argument("-m", "--message", required=True, help="what changed (pull request title)")
     sp.add_argument("--description", help="description label when the repository is created")
-    sp.add_argument("--no-validate", action="store_true", help="skip the format check (prints a warning)")
-    sp.add_argument("--format", choices=fmts + ["yolo"],
-                    help="format to validate with (default: the repository's template label; none means raw)")
-    sp = add(dsub, "pull", cmd_pull, "download a dataset version for training")
+    sp.add_argument("--no-validate", action="store_true", help="skip the layout's checks (prints a warning)")
+    sp.add_argument("--layout", "--format", dest="layout",
+                    help=f"{layout_help} (default: the repository's kaos.template label, else raw)")
+    sp = add(dsub, "pull", cmd_pull, "download a dataset version")
     sp.add_argument("ref", help="<repository>@<ref>, e.g. dataset-default@v2, my-repo@main "
                                 "or <project>/dataset-x@v1 (shared with your project)")
     sp.add_argument("dest", nargs="?", help="folder to download into (default: a per-commit cache)")
-    sp.add_argument("--format", choices=fmts + ["yolo"], help="default: the repository's template label, else raw")
-    sp.add_argument("--prefix", help="download only this folder of the repository (raw format)")
-    sp = add(dsub, "validate", cmd_validate, "check a local folder against the dataset format", url=False)
+    sp.add_argument("--layout", "--format", dest="layout",
+                    help=f"{layout_help} (default: the repository's label, else raw)")
+    sp.add_argument("--prefix", help="download only this folder of the repository (layouts that download all)")
+    sp = add(dsub, "validate", cmd_validate, "check a local folder against a layout (same as layout validate)")
     sp.add_argument("dir")
-    sp.add_argument("--format", default="ultralytics", choices=fmts + ["yolo"])
+    sp.add_argument("--layout", "--format", dest="layout", default="yolo", help=f"{layout_help} (default yolo)")
 
     sp = add(sub, "run", cmd_run, "run a command with the dataset commits an earlier MLflow run read", url=False)
     sp.add_argument("--lock", required=True, metavar="MLFLOW_RUN_ID",
                     help="the MLflow run whose data.lock.json to replay (exported to the command as $KAOS_LIB_LOCK)")
     sp.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- command", help="the command to run, after --")
+
+    ly = sub.add_parser("layout", help="dataset layouts: list, show, make your own, check a folder, publish")
+    lsub = ly.add_subparsers(dest="layout_command", required=True)
+    add(lsub, "list", cmd_layout_list, "the layouts you can use: built-in, installed, the project's")
+    add(lsub, "show", cmd_layout_show, "print a layout's spec").add_argument("name", help=layout_help)
+    sp = add(lsub, "init", cmd_layout_init, "write a starter layout.yaml to make your own layout")
+    sp.add_argument("dir", help="folder for the new layout.yaml")
+    sp.add_argument("--name", help="the layout's name (default: the folder's name)")
+    sp.add_argument("--from", dest="from_layout", help="start from a copy of this layout")
+    sp = add(lsub, "validate", cmd_validate, "check a local dataset folder against a layout")
+    sp.add_argument("dir")
+    sp.add_argument("--layout", required=True, help=layout_help)
+    sp = add(lsub, "publish", cmd_layout_publish, "share a layout with your project (a pull request into "
+                                                  f"its {layouts.LAYOUTS_REPOSITORY} repository)")
+    sp.add_argument("path", help="a layout.yaml or its folder")
+    sp.add_argument("-m", "--message", help="pull request title")
     return p
 
 

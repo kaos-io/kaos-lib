@@ -17,7 +17,8 @@ def run(capsys, *argv):
 
 
 def test_create_prints_lakefs_url_and_push_hint(capsys, fake):
-    code, out, _ = run(capsys, "dataset", "create", "cats", "--classes", "cat,dog", "--description", "pets")
+    code, out, _ = run(capsys, "dataset", "create", "cats", "--layout", "yolo", "--classes", "cat,dog",
+                        "--description", "pets")
     assert code == 0
     assert "http://lakefs.test/repositories/dataset-cats/objects" in out
     assert "kaos-cli dataset push" in out and "kaos-cli dataset pull dataset-cats@latest" in out
@@ -70,19 +71,21 @@ def test_pull_prints_data_yaml_path(capsys, fake, dataset_dir, tmp_path):
 
 
 def test_validate_ok_and_failing(capsys, dataset_dir, tmp_path):
-    code, out, _ = run(capsys, "dataset", "validate", str(dataset_dir))
+    code, out, _ = run(capsys, "dataset", "validate", str(dataset_dir), "--layout", "yolo")
     assert code == 0 and "valid" in out
-    code, _, err = run(capsys, "dataset", "validate", str(tmp_path / "missing"))
+    code, _, err = run(capsys, "dataset", "validate", str(tmp_path / "missing"), "--layout", "yolo")
     assert code == 2 and "not a directory" in err
 
 
 @pytest.mark.parametrize("argv,fragment", [
     (["dataset", "pull", "dataset-default"], "not a dataset reference"),
     (["dataset", "pull", "dataset-default@v9"], "no version v9"),
-    (["dataset", "create", "x", "--classes", "a"], "invalid dataset name"),
-    (["dataset", "create", "cats"], "at least one class name"),
+    (["dataset", "create", "x", "--layout", "yolo", "--classes", "a"], "invalid dataset name"),
+    (["dataset", "create", "cats", "--layout", "yolo"], "Class names needs at least one item"),
+    (["dataset", "create", "cats", "--layout", "raw", "--classes", "a"], "layout raw has no parameter 'classes'"),
+    (["dataset", "create", "cats", "--layout", "coco"], "unknown layout 'coco'"),
     (["dataset", "pull", "my_repo@main"], "not a valid lakeFS repository name"),
-    (["dataset", "create", "default", "--classes", "a"], "already exists"),
+    (["dataset", "create", "default", "--layout", "yolo", "--classes", "a"], "already exists"),
     (["dataset", "release", "dataset-ghost"], "does not exist"),
     (["dataset", "versions", "BAD"], "invalid dataset name"),
 ])

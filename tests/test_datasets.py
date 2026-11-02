@@ -3,7 +3,7 @@ import pytest
 
 from kaos_lib import datasets
 from kaos_lib.errors import DatasetError
-from kaos_lib.formats import get_format
+from kaos_lib import layouts
 
 
 @pytest.mark.parametrize("text,repo,version", [
@@ -108,7 +108,7 @@ def test_resolve_unknown_repo(client):
 def test_list_datasets_only_dataset_repos_with_labels(fake, client):
     rows = datasets.list_datasets(client)
     assert [r.repo for r in rows] == ["dataset-default"]
-    assert rows[0].default and rows[0].template == "ultralytics"
+    assert rows[0].default and rows[0].template == "yolo"
 
 
 def test_versions_sorted_numerically(fake, client):
@@ -137,10 +137,10 @@ def test_release_refuses_when_head_already_released(fake, client):
 
 
 def test_create_dataset_makes_labelled_repo_with_skeleton_on_main(fake, client):
-    repo = datasets.create_dataset("cats", "yolo", "cat photos", client, classes=["cat", "dog"])
+    repo = datasets.create_dataset("cats", "yolo", "cat photos", client, {"classes": ["cat", "dog"]})
     r = fake.repos[repo]
     assert repo == "dataset-cats"
-    assert r["metadata"] == {"kaos.kind": "dataset", "kaos.template": "ultralytics",
+    assert r["metadata"] == {"kaos.kind": "dataset", "kaos.template": "yolo",
                              "kaos.description": "cat photos"}
     assert r["ns"] == "gs://bucket/lakefs/dataset-cats"        # <prefix kaos-lake publishes>/<repo>
     tree = fake.tree(repo, "main")
@@ -149,37 +149,37 @@ def test_create_dataset_makes_labelled_repo_with_skeleton_on_main(fake, client):
 
 def test_create_dataset_existing_repo_is_an_error(fake, client):
     with pytest.raises(DatasetError, match="already exists"):
-        datasets.create_dataset("default", "ultralytics", "", client, classes=["a"])
+        datasets.create_dataset("default", "yolo", "", client, {"classes": ["a"]})
 
 
-def test_get_format_alias_and_unknown():
-    assert get_format("yolo") is get_format("ultralytics")
-    with pytest.raises(DatasetError, match="unknown dataset format"):
-        get_format("coco")
+def test_unknown_layout_names_the_known_ones(client):
+    assert layouts.load("yolo") is layouts.load("yolo")
+    with pytest.raises(DatasetError, match="unknown layout 'coco'. Known: raw, yolo"):
+        layouts.load("coco", client)
 
 
 def test_create_dataset_follows_the_kaos_lake_ui_flow(fake, client):
     """repo -> starter files committed to main (commit metadata kaos.template) -> labels."""
-    datasets.create_dataset("cats", "ultralytics", "d", client, classes=["cat"])
+    datasets.create_dataset("cats", "yolo", "d", client, {"classes": ["cat"]})
     seq = [(m, p.rsplit("/", 1)[-1]) for m, p in fake.calls if m == "POST" and "dataset-cats" in p or
            (m, p) == ("POST", "/repositories")]
     kinds = [p for _, p in seq]
     assert kinds.index("repositories") < kinds.index("commits") < kinds.index("metadata")
     branch, _, _, meta = fake.repos["dataset-cats"]["commit_log"][0]
-    assert branch == "main" and meta == {"kaos.template": "ultralytics"}
+    assert branch == "main" and meta == {"kaos.template": "yolo"}
 
 
 def test_storage_prefix_falls_back_to_env_then_errors(fake, client, monkeypatch):
     fake.storage_prefix = None
     with pytest.raises(DatasetError, match="KUBECORE_STORAGE_NAMESPACE_BASE"):
-        datasets.create_dataset("cats", "ultralytics", "", client, classes=["a"])
+        datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
     assert "dataset-cats" not in fake.repos
     monkeypatch.setenv("KUBECORE_STORAGE_NAMESPACE_BASE", "gs://other/lake/")
-    datasets.create_dataset("cats", "ultralytics", "", client, classes=["a"])
+    datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
     assert fake.repos["dataset-cats"]["ns"] == "gs://other/lake/dataset-cats"
 
 
 def test_published_storage_prefix_wins_over_env(fake, client, monkeypatch):
     monkeypatch.setenv("KUBECORE_STORAGE_NAMESPACE_BASE", "gs://other/lake")
-    datasets.create_dataset("cats", "ultralytics", "", client, classes=["a"])
+    datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
     assert fake.repos["dataset-cats"]["ns"] == "gs://bucket/lakefs/dataset-cats"
