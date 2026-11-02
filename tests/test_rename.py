@@ -59,14 +59,14 @@ def test_kaos_cli_version(capsys):
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--version"])
     assert exit_.value.code == 0
-    assert capsys.readouterr().out.strip() == f"kaos-cli {kaos_lib.__version__}"
+    assert capsys.readouterr().out.splitlines()[0].startswith(f"kaos-cli {kaos_lib.__version__} (")
 
 
 def test_kubecore_command_alias_notes_the_rename_and_runs_kaos_cli(capsys, tmp_path):
     with pytest.raises(SystemExit):
         cli.kubecore_alias(["--version"])
     out, err = capsys.readouterr()
-    assert out.strip() == f"kaos-cli {kaos_lib.__version__}"
+    assert out.splitlines()[0].startswith(f"kaos-cli {kaos_lib.__version__} (")
     assert "`kubecore` is now `kaos-cli`" in err
     assert cli.kubecore_alias(["dataset", "validate", str(tmp_path)]) == cli.main(["dataset", "validate", str(tmp_path)])
 

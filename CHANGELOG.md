@@ -1,7 +1,8 @@
 # Changelog
 
 All notable changes to kaos-lib. Versions follow PEP 440; each release's support window is in its
-`release.json`.
+`release.json`. Packages: `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` (stable),
+`.../kaos-lib-rc/simple/` (prerelease).
 
 ## 0.4.0 (unreleased)
 
@@ -35,16 +36,22 @@ The package is renamed and moves to its own repository, `kaos-io/kaos-lib` (it w
 `novelcore/hera-pipeline-template`; history carried over).
 
 ### Changed
-- Distribution `kubecore` → `kaos-lib` (`pip install kaos-lib`, extra `kaos-lib[zitadel]`); import `kubecore` →
-  `kaos_lib`; command `kubecore` → `kaos-cli`. Install from git as
-  `kaos-lib @ https://github.com/kaos-io/kaos-lib/archive/<sha>.zip` (no `#subdirectory`).
+- Distribution `kubecore` → `kaos-lib` (extra `kaos-lib[zitadel]`); import `kubecore` → `kaos_lib`; command
+  `kubecore` → `kaos-cli`. Published by the platform's CI to public Python repositories (Artifact Registry), not
+  PyPI: `pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/
+  --extra-index-url https://pypi.org/simple/ "kaos-lib[zitadel]==0.3.0"`.
 - `KubecoreError` → `KaosLibError`.
 - New dependency: `packaging` (PEP 440 support checks).
 
 ### Added
-- `release.json` (packaged as `kaos_lib/_release.json`, attached to each GitHub release) and
+- `release.json` (packaged as `kaos_lib/_release.json`, published per release in the public release bucket) and
   `kaos_lib.support.check`: verdicts current / behind / deprecated / unsupported. Pipeline steps check at import
   when `$KAOS_LIB_SUPPORT` is set; `kaos-cli` warns on reads and refuses writes when unsupported.
+- Release channels: prerelease `X.Y.ZrcN` (repository `kaos-lib-rc`, every merge to `main`) and stable `X.Y.Z`
+  (repository `kaos-lib`, promoted by the platform's release train from a passed rc, checked to hold the rc's
+  code byte for byte). `kaos-cli --version` shows the channel and the targeted platform's recommendation;
+  `kaos-cli upgrade` installs that recommendation (kaos-lib over https only), else the newest release of the
+  install's channel from the public `release.json`.
 - Apache-2.0 license, project URLs, this changelog.
 
 ### Deprecated (removed in the next release)
