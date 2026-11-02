@@ -76,7 +76,7 @@ def resolve(base_url: str) -> Credential:
     cred = from_env() or load_session(base_url)
     if cred is None:
         raise AuthError(
-            "not signed in. Run `kubecore login`, or set LAKEFS_ACCESS_KEY/LAKEFS_SECRET_KEY "
+            "not signed in. Run `kaos-cli login`, or set LAKEFS_ACCESS_KEY/LAKEFS_SECRET_KEY "
             "(or LAKEFS_BEARER_TOKEN) in the environment.")
     return cred
 
@@ -87,7 +87,7 @@ def resolve_peer(own_base_url: str) -> Credential:
     Order (first hit wins):
       1. LAKEFS_BEARER_TOKEN
       2. a Zitadel token minted from ZITADEL_MACHINE_KEY_FILE + ZITADEL_DOMAIN + ZITADEL_MLFLOW_PROJECT_ID
-         (pipeline steps; needs the ``kubecore[zitadel]`` extra)
+         (pipeline steps; needs the ``kaos-lib[zitadel]`` extra)
       3. the cached browser-login session of the own lakeFS at ``own_base_url`` (laptop)
     """
     token = os.environ.get("LAKEFS_BEARER_TOKEN")
@@ -99,7 +99,7 @@ def resolve_peer(own_base_url: str) -> Credential:
     cred = load_session(own_base_url)
     if cred is None:
         raise AuthError(
-            "cannot read another project's datasets: no token. Run `kubecore login`, or set LAKEFS_BEARER_TOKEN "
+            "cannot read another project's datasets: no token. Run `kaos-cli login`, or set LAKEFS_BEARER_TOKEN "
             f"or {zitadel.KEY_FILE_ENV} (with {zitadel.DOMAIN_ENV} and {zitadel.PROJECT_ENV}). "
             "LAKEFS_ACCESS_KEY is never sent to another project.")
     return cred

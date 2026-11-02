@@ -5,7 +5,7 @@ Pipeline steps get ``ZITADEL_MACHINE_KEY_FILE`` (Zitadel's JSON key: ``type``, `
 ``mint_wallet`` does it: an RS256 assertion ``iss = sub = userId``, ``aud = https://<domain>``, header
 ``kid = keyId``, POSTed to ``https://<domain>/oauth/v2/token`` with the project-audience scope.
 
-Needs the optional extra ``kubecore[zitadel]`` (PyJWT + cryptography), imported only when a token is minted.
+Needs the optional extra ``kaos-lib[zitadel]`` (PyJWT + cryptography), imported only when a token is minted.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _jwt():
         import jwt
     except ImportError:
         raise AuthError("minting a Zitadel token needs the zitadel extra: "
-                        "pip install 'kubecore[zitadel]' (PyJWT and cryptography).") from None
+                        "pip install 'kaos-lib[zitadel]' (PyJWT and cryptography).") from None
     return jwt
 
 

@@ -12,8 +12,8 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import requests
 from requests.adapters import BaseAdapter
 
-from kubecore import credentials, lakefs
-from kubecore.lakefs import LakeFS
+from kaos_lib import credentials, lakefs
+from kaos_lib.lakefs import LakeFS
 
 BRANCH_ID = re.compile(r"^\w[-\w]*$")  # lakeFS's branch id rule
 

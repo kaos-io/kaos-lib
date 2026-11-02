@@ -1,8 +1,8 @@
-"""``kubecore dataset list --shared``: own peers, then each peer's /kaos/v1/shared with the caller's token."""
+"""``kaos-cli dataset list --shared``: own peers, then each peer's /kaos/v1/shared with the caller's token."""
 import pytest
 
 from fake_lakefs import FakeLakeFS
-from kubecore import cli
+from kaos_lib import cli
 
 OWN = FakeLakeFS.BASE        # "http://lakefs.test": not in the cluster, so the peers' public URLs are used
 A, C, D, E = "https://lakefs-a.test", "https://lakefs-c.test", "https://lakefs-d.test", "https://lakefs-e.test"
@@ -43,7 +43,7 @@ def test_list_shared_lists_owner_refs_with_versions(capsys, peers_of_b):
     lines = out.splitlines()
     assert lines[0].split() == ["a/dataset-cats", "v3", "cats", "of", "a"]
     assert lines[1].split() == ["a/dataset-zebra", "v2,", "v1", "stripes"]
-    assert "dataset = a/dataset-cats@v3" in out and "kubecore dataset pull a/dataset-cats@v3" in out
+    assert "dataset = a/dataset-cats@v3" in out and "kaos-cli dataset pull a/dataset-cats@v3" in out
     assert "c/" not in out                                           # 401: nothing shared, no noise
     assert "c:" not in err
     assert "NOTE: d: its lakeFS is too old to share datasets" in err
@@ -71,7 +71,7 @@ def test_list_shared_without_versions_hints_latest(capsys, peers_of_b):
     peers_of_b["a"].kaos["/kaos/v1/shared"] = (200, {"owner": "a", "datasets": [dataset("dataset-new")]})
     code, out, _ = run(capsys, "dataset", "list", "--shared")
     assert code == 0 and "a/dataset-new" in out and "no versions" in out
-    assert "kubecore dataset pull a/dataset-new@latest" in out
+    assert "kaos-cli dataset pull a/dataset-new@latest" in out
 
 
 def test_list_shared_skips_non_datasets_and_strips_owner_prefixes(capsys, peers_of_b):

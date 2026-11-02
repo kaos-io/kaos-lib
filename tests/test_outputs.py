@@ -1,8 +1,8 @@
 """outputs: one commit per run on outputs-<app> main."""
 import pytest
 
-from kubecore import outputs
-from kubecore.errors import DatasetError
+from kaos_lib import outputs
+from kaos_lib.errors import DatasetError
 
 
 @pytest.fixture

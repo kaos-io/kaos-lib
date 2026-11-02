@@ -19,7 +19,7 @@ from . import credentials
 from .config import resolve_endpoint
 from .errors import AuthError, LakeFSError, NotFoundError
 
-USER_AGENT = "kubecore/0.2"
+USER_AGENT = "kaos-lib/0.3"
 
 
 def _q(value: str) -> str:
@@ -107,7 +107,7 @@ class LakeFS:
             return AuthError(f"not shared with your project: project {self.owner}'s lakeFS refused it ({what}). "
                              f"Ask {self.owner} to share the dataset with your project.")
         if status in (301, 302, 303, 307, 308, 401):
-            return AuthError(f"lakeFS rejected the credential ({what}). Run `kubecore login` again.")
+            return AuthError(f"lakeFS rejected the credential ({what}). Run `kaos-cli login` again.")
         if status == 403:
             return AuthError(f"you are not allowed to do this ({what}): {detail}")
         if status == 404:

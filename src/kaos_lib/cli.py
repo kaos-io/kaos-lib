@@ -1,8 +1,8 @@
-"""The ``kubecore`` command line.
+"""The ``kaos-cli`` command line (``kubecore`` is a deprecated alias for one release).
 
-    kubecore login
-    kubecore dataset create|list|versions|release|push|pull|validate
-    kubecore dataset list --shared     datasets other projects share with yours (read-only)
+    kaos-cli login
+    kaos-cli dataset create|list|versions|release|push|pull|validate
+    kaos-cli dataset list --shared     datasets other projects share with yours (read-only)
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
 traceback. Every successful command prints the next useful step and a link.
@@ -17,7 +17,7 @@ import requests
 
 from . import __version__, credentials, datasets, peers
 from .config import resolve_endpoint
-from .errors import KubecoreError, ValidationFailed
+from .errors import KaosLibError, ValidationFailed
 from .formats import format_names, get_format
 from .lakefs import LakeFS
 
@@ -42,7 +42,7 @@ def _print_errors(errors: list) -> None:
 def cmd_login(args) -> int:
     url = resolve_endpoint(args.url)
     credentials.browser_login(url)
-    print("Next: kubecore dataset list")
+    print("Next: kaos-cli dataset list")
     return 0
 
 
@@ -61,13 +61,13 @@ def cmd_create(args) -> int:
         print(f"Created {repo}: empty, no template (labelled kaos.kind=dataset).")
         print(f"  Open it:  {_repo_url(c, repo)}")
         print("kaos-lake lists it as a dataset once its first commit lands. Next: push your files")
-        print(f"  kubecore dataset push ./my-files {repo} -m \"first files\"")
+        print(f"  kaos-cli dataset push ./my-files {repo} -m \"first files\"")
         return 0
     print(f"Created {repo} ({get_format(args.template).name}).")
     print(f"  Open it:  {_repo_url(c, repo)}")
     print("Next: get a local copy, add your images and labels, then push (opens a pull request):")
-    print(f"  kubecore dataset pull {repo}@latest ./{repo}")
-    print(f"  kubecore dataset push ./{repo} {repo} -m \"add images\"")
+    print(f"  kaos-cli dataset pull {repo}@latest ./{repo}")
+    print(f"  kaos-cli dataset push ./{repo} {repo} -m \"add images\"")
     return 0
 
 
@@ -88,9 +88,9 @@ def cmd_list_shared(args) -> int:
     pick = next(((n, r) for n, r in zip(names, rows) if r.versions), None)
     if pick:
         print(f"Pick one in the pipeline:  dataset = {pick[0]}@{pick[1].versions[0]}")
-        print(f"Or download it:  kubecore dataset pull {pick[0]}@{pick[1].versions[0]}")
+        print(f"Or download it:  kaos-cli dataset pull {pick[0]}@{pick[1].versions[0]}")
     else:
-        print(f"Next: kubecore dataset pull {names[0]}@{datasets.LATEST}")
+        print(f"Next: kaos-cli dataset pull {names[0]}@{datasets.LATEST}")
     return 0
 
 
@@ -99,13 +99,13 @@ def cmd_list(args) -> int:
         return cmd_list_shared(args)
     rows = datasets.list_datasets(_connect(args))
     if not rows:
-        print("No datasets yet. Create one with: kubecore dataset create <name> --classes a,b,c")
+        print("No datasets yet. Create one with: kaos-cli dataset create <name> --classes a,b,c")
         return 0
     width = max(len(r.repo) for r in rows)
     for r in rows:
         flags = "  [default]" if r.default else ""
         print(f"{r.repo:<{width}}  {r.template or '-':<12}  {r.description}{flags}")
-    print(f"Next: kubecore dataset versions {rows[0].repo}")
+    print(f"Next: kaos-cli dataset versions {rows[0].repo}")
     return 0
 
 
@@ -123,7 +123,7 @@ def cmd_versions(args) -> int:
     elif owner:
         print(f"Next: ask project {owner} to release a version, or pick  dataset = {repo}@{datasets.LATEST}")
     else:
-        print(f"Next: kubecore dataset release {repo}")
+        print(f"Next: kaos-cli dataset release {repo}")
     return 0
 
 
@@ -153,7 +153,7 @@ def cmd_push(args) -> int:
         print(f"Created {repo}.")
     print(f"Uploaded to draft branch {result.branch} and opened a pull request into main.")
     print(f"  Review and merge it:  {result.pull_url}")
-    print(f"Next: after merging, run  kubecore dataset release {repo}")
+    print(f"Next: after merging, run  kaos-cli dataset release {repo}")
     return 0
 
 
@@ -173,7 +173,7 @@ def cmd_validate(args) -> int:
     report = get_format(args.format).creator.validate(args.dir)
     if report.ok:
         print(f"{args.dir} is a valid {args.format} dataset.")
-        print("Next: kubecore dataset push <dir> <dataset-repo> -m \"message\"")
+        print("Next: kaos-cli dataset push <dir> <dataset-repo> -m \"message\"")
         return 0
     print(f"{args.dir} has {len(report.errors)} problem(s):", file=sys.stderr)
     print(report.format(), file=sys.stderr)
@@ -182,7 +182,7 @@ def cmd_validate(args) -> int:
 
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="kubecore", description="KAOS platform tools: datasets and run outputs.")
+    p = argparse.ArgumentParser(prog="kaos-cli", description="KAOS platform tools: datasets and run outputs.")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -236,13 +236,20 @@ def main(argv: Optional[list] = None) -> int:
         print("ERROR: the dataset is not valid, nothing was uploaded:", file=sys.stderr)
         _print_errors(exc.errors)
         return EXIT_INVALID_DATASET
-    except KubecoreError as exc:
+    except KaosLibError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_USER_ERROR
     except requests.exceptions.ConnectionError as exc:
         print(f"ERROR: cannot reach lakeFS ({exc.__class__.__name__}). Check --url / "
               ".kubecore/dataset-config.yaml and your network.", file=sys.stderr)
         return EXIT_USER_ERROR
+
+
+def kubecore_alias(argv: Optional[list] = None) -> int:
+    """The ``kubecore`` command: a deprecated alias of ``kaos-cli``, kept for one release."""
+    print("NOTE: `kubecore` is now `kaos-cli`; the `kubecore` command goes away in the next release.",
+          file=sys.stderr)
+    return main(argv)
 
 
 if __name__ == "__main__":

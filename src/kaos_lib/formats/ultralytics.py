@@ -184,7 +184,7 @@ Format: `ultralytics` (the YOLO layout Ultralytics reads).
 - `labels/{{train,val,test}}/`: one `<image-name>.txt` per image, one line per object:
   `<class-id> <x-center> <y-center> <width> <height>`, coordinates relative to the image (0 to 1).
 
-Check a local copy with `kubecore dataset validate <dir>`; send changes with `kubecore dataset push`.
+Check a local copy with `kaos-cli dataset validate <dir>`; send changes with `kaos-cli dataset push`.
 """
 
 

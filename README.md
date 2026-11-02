@@ -1,24 +1,44 @@
-# kubecore
+# kaos-lib
 
-The KAOS platform package: datasets (formats, versions), run outputs, and the `kubecore` CLI, over kaos-lake
-(lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11, F-14).
+The KAOS platform library (formerly `kubecore`): datasets (formats, versions), run outputs, and the `kaos-cli`
+command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11, F-14).
 
 ## Install
 
-PyPI is not available yet, so install from git, pinned to a commit:
+```bash
+pip install kaos-lib                # once it is on PyPI
+```
+
+Until then, install from git, pinned to a commit:
 
 ```bash
-pip install "git+https://github.com/novelcore/hera-pipeline-template@<sha>#subdirectory=packages/kubecore"
+pip install "kaos-lib @ https://github.com/kaos-io/kaos-lib/archive/<sha>.zip"
 ```
 
 Python 3.9+. Dependencies: `requests`, `PyYAML`. Reading datasets other projects share from a pipeline step
 (machine-key tokens) needs the `zitadel` extra (PyJWT, cryptography):
 
 ```bash
-pip install "kubecore[zitadel] @ git+https://github.com/novelcore/hera-pipeline-template@<sha>#subdirectory=packages/kubecore"
+pip install "kaos-lib[zitadel]"
+pip install "kaos-lib[zitadel] @ https://github.com/kaos-io/kaos-lib/archive/<sha>.zip"
 ```
 
-The package and the vendored `kubecore/` engine at the repo root share the import name `kubecore` and must not share a `sys.path`: step images will `pip install` the package from git (pinned to a commit, as above) and will not copy the vendored `kubecore/` into the image; the follow-up conversion removes the vendored copy.
+Import it as `kaos_lib`; the command is `kaos-cli`.
+
+### Formerly kubecore
+
+Up to 0.2 this was the `kubecore` package in `novelcore/hera-pipeline-template` (`packages/kubecore`). For one
+release (0.3.x) the distribution still ships:
+
+- a `kubecore` import shim: `import kubecore` and `from kaos_lib import datasets` keep working (the very
+  `kaos_lib` modules) and emit one `DeprecationWarning`. Replace `kubecore` with `kaos_lib` in your imports;
+  `KubecoreError` is now `KaosLibError` (the old name stays an alias).
+- a `kubecore` command: runs `kaos-cli` after a note on stderr.
+
+Unchanged on purpose (other components and existing installs rely on them): the per-app
+`.kubecore/dataset-config.yaml`, the login session in `~/.config/kubecore-ml/` (`$KUBECORE_ML_HOME`), the
+dataset cache `~/.cache/kubecore/datasets` with its `.kubecore-dataset.json` markers, and the `KUBECORE_*`
+environment variables.
 
 ## Any repository works
 
@@ -26,7 +46,7 @@ Templates are optional. `DatasetRef.parse` accepts any lakeFS repository (`my-re
 `vN` (tag), `latest` (head of the default branch), a branch, a tag or a commit id. `materialize` uses the
 repository's `kaos.template` label (`ultralytics`, alias `yolo`) and otherwise the `raw` format: the whole
 tree (or `prefix=`) at the pinned commit, cached by (repo, commit, prefix), returned as a folder. `raw` has
-no skeleton, validates nothing and publishes as is. `kubecore dataset create <name> --template none` makes an
+no skeleton, validates nothing and publishes as is. `kaos-cli dataset create <name> --template none` makes an
 empty `dataset-<name>` (only `kaos.kind=dataset`); kaos-lake lists it as a dataset once its first commit lands.
 The pipeline dropdown lists only `dataset-*` repositories.
 
@@ -45,7 +65,7 @@ The pipeline dropdown lists only `dataset-*` repositories.
 ## Python API
 
 ```python
-from kubecore import datasets, outputs
+from kaos_lib import datasets, outputs
 
 ref = datasets.DatasetRef.parse("dataset-default@v2")      # any repository: "my-repo@main", "@latest", "@<tag>", "@<commit>"
 ref = ref.with_commit(commit)                              # optional: pin the commit dataset-loading resolved
@@ -53,7 +73,7 @@ commit = datasets.resolve(ref)                             # pinned commit retur
 data_yaml = datasets.materialize(ref, dest=None)           # ultralytics: Path to data.yaml; raw: the folder (prefix= for one folder)
 datasets.list_datasets(); datasets.versions("dataset-x"); datasets.release("dataset-x")   # -> "vN"
 
-from kubecore.formats import get_format                   # "ultralytics" (alias "yolo"); detect, segment, pose
+from kaos_lib.formats import get_format                   # "ultralytics" (alias "yolo"); detect, segment, pose
 fmt = get_format("ultralytics")
 fmt.creator.skeleton(classes=["cat", "dog"]); fmt.creator.validate(dir); fmt.creator.publish(dir, repo, "msg")
 fmt.consumer.materialize(ref, dest, commit=None)
@@ -74,15 +94,15 @@ meaning your own project, and `<your-project>/dataset-x@v1` is the same as `data
 ```python
 ref = datasets.DatasetRef.parse("team-a/dataset-cats@v3")   # ref.owner == "team-a"; also @latest, a branch or a commit
 data_yaml = datasets.materialize(ref)                       # read from team-a's lakeFS, cached apart from your own
-from kubecore import peers
+from kaos_lib import peers
 for answer in peers.shared(client):                         # per peer: answer.datasets (DatasetInfo, owner set), answer.note
     ...
 ```
 
 ```
-kubecore dataset list --shared                # what other projects share with yours, with versions
-kubecore dataset versions team-a/dataset-cats # its versions, read from team-a's lakeFS
-kubecore dataset pull team-a/dataset-cats@v3  # read-only copy
+kaos-cli dataset list --shared                # what other projects share with yours, with versions
+kaos-cli dataset versions team-a/dataset-cats # its versions, read from team-a's lakeFS
+kaos-cli dataset pull team-a/dataset-cats@v3  # read-only copy
 ```
 
 - **Where**: your lakeFS lists the other projects (`GET /kaos/v1/peers`, read once per process).
@@ -91,7 +111,7 @@ kubecore dataset pull team-a/dataset-cats@v3  # read-only copy
 - **Who**: the owner sees a bearer token, never your project's `LAKEFS_ACCESS_KEY`/`LAKEFS_SECRET_KEY`
   (`credentials.resolve_peer`): `LAKEFS_BEARER_TOKEN`, else a short-lived Zitadel token minted from the step's
   machine key (`ZITADEL_MACHINE_KEY_FILE`, `ZITADEL_DOMAIN`, `ZITADEL_MLFLOW_PROJECT_ID`; needs
-  `kubecore[zitadel]`), else your `kubecore login` session. The owner grants read on exactly the datasets it
+  `kaos-lib[zitadel]`), else your `kaos-cli login` session. The owner grants read on exactly the datasets it
   shares with your project.
 - **Cache**: `<cache>/<owner>/<repo>/<commit>` (your own: `<cache>/<repo>/<commit>`); the copy's marker records
   the owner, so your `dataset-x` and the owner's `dataset-x` never mix, even at the same commit id. A staged copy
@@ -127,7 +147,7 @@ downloaded.
 
 1. `LAKEFS_ACCESS_KEY` + `LAKEFS_SECRET_KEY` (an app's key pair), endpoint `LAKEFS_ENDPOINT`
 2. `LAKEFS_BEARER_TOKEN` (MeluXina jobs)
-3. the browser login session of `kubecore login` (a person's Zitadel token), cached in
+3. the browser login session of `kaos-cli login` (a person's Zitadel token), cached in
    `~/.config/kubecore-ml/lakefs-session.json`
 
 Another project's lakeFS gets its own chain (`credentials.resolve_peer`), without step 1; see
@@ -139,14 +159,14 @@ The lakeFS URL comes from `--url`, `LAKEFS_ENDPOINT`/`LAKEFS_URL`, or `.kubecore
 ## CLI
 
 ```
-kubecore login
-kubecore dataset create <name> --classes a,b,c [--description ...]
-kubecore dataset list [--shared]
-kubecore dataset versions <repo>
-kubecore dataset release <repo>
-kubecore dataset push <dir> <repo> -m "message" [--no-validate]   # validates, draft branch, pull request
-kubecore dataset pull [<owner>/]<repo>@<version> [dest]
-kubecore dataset validate <dir>
+kaos-cli login
+kaos-cli dataset create <name> --classes a,b,c [--description ...]
+kaos-cli dataset list [--shared]
+kaos-cli dataset versions <repo>
+kaos-cli dataset release <repo>
+kaos-cli dataset push <dir> <repo> -m "message" [--no-validate]   # validates, draft branch, pull request
+kaos-cli dataset pull [<owner>/]<repo>@<version> [dest]
+kaos-cli dataset validate <dir>
 ```
 
 Every command prints the next step and the lakeFS link (dataset page, pull request, version).
@@ -155,7 +175,7 @@ Exit codes: 0 ok, 1 user error (one `ERROR:` line), 2 invalid dataset.
 ## Tests
 
 ```bash
-cd packages/kubecore && pip install -e ".[test]" && pytest
+pip install -e ".[test]" && pytest
 ```
 
 A fake lakeFS (`tests/fake_lakefs.py`) runs the real client over an in-memory transport; no network.
@@ -167,11 +187,12 @@ A fake lakeFS (`tests/fake_lakefs.py`) runs the real client over an in-memory tr
 | `config.py` | per-app config discovery, lakeFS URL, OIDC settings |
 | `credentials.py` | the credential chain, session cache, browser login |
 | `oidc.py` | PKCE browser login to Zitadel (ported from `dataset_tools`) |
-| `zitadel.py` | machine-key token (JWT-profile grant), extra `kubecore[zitadel]` |
+| `zitadel.py` | machine-key token (JWT-profile grant), extra `kaos-lib[zitadel]` |
 | `peers.py` | the other projects (`/kaos/v1/peers`) and what they share (`/kaos/v1/shared`) |
 | `lakefs.py` | lakeFS REST client |
 | `transfer.py` | mirror plan, upload, download of file trees |
 | `datasets.py` | refs (`[<owner>/]<repo>@<ref>`), resolve, list, versions, release, create, publish via PR, materialize |
 | `formats/` | format registry; `ultralytics.py` creator + consumer |
 | `outputs.py` | `outputs-<app>` writes |
-| `cli.py` | the `kubecore` command |
+| `cli.py` | the `kaos-cli` command (and the deprecated `kubecore` alias) |
+| `../kubecore/` | the deprecated `kubecore` import shim (0.3.x only) |

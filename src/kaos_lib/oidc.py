@@ -128,7 +128,7 @@ def _make_handler(result: dict):
             body = ("You can close this tab and return to the terminal." if ok
                     else "Return to the terminal for details.")
             self.wfile.write(
-                ("<!doctype html><meta charset=utf-8><title>kubecore</title>"
+                ("<!doctype html><meta charset=utf-8><title>kaos-cli</title>"
                  "<body style='font-family:system-ui,sans-serif;padding:3rem'>"
                  f"<h2>{title}</h2><p>{body}</p></body>").encode("utf-8"))
 

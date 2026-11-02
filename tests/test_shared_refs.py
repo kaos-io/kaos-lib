@@ -4,9 +4,9 @@ import json
 import pytest
 
 from conftest import write_dataset
-from kubecore import cli, datasets
-from kubecore.errors import DatasetError
-from kubecore.formats import get_format, local
+from kaos_lib import cli, datasets
+from kaos_lib.errors import DatasetError
+from kaos_lib.formats import get_format, local
 
 parse = datasets.DatasetRef.parse
 

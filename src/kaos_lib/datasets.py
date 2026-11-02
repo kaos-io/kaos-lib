@@ -157,7 +157,7 @@ def default_branch(c: LakeFS, repo: str) -> str:
     """The repository's default branch (``main`` when lakeFS does not say)."""
     info = c.repository(repo)
     if info is None:
-        raise DatasetError(f"repository {repo} does not exist. List datasets with `kubecore dataset list`.")
+        raise DatasetError(f"repository {repo} does not exist. List datasets with `kaos-cli dataset list`.")
     return info.get("default_branch") or MAIN
 
 
@@ -191,7 +191,7 @@ def resolve(ref: DatasetRef, client: Optional[LakeFS] = None, commit: Optional[s
     if _VERSION_RE.match(ref.version):
         have = ", ".join(versions(ref.repo, c))
         raise DatasetError(f"{ref.repo} has no version {ref.version}. "
-                           f"Available: {have or 'none yet (release one with `kubecore dataset release`)'}.")
+                           f"Available: {have or 'none yet (release one with `kaos-cli dataset release`)'}.")
     raise DatasetError(f"{ref.repo} has no branch, tag or commit {ref.version!r}.")
 
 
@@ -290,7 +290,7 @@ def ensure_repository(c: LakeFS, repo: str, labels: dict) -> bool:
 def _create_empty(c: LakeFS, repo: str, description: str) -> str:
     """An empty ``dataset-<name>`` labelled kaos.kind=dataset: no files, no starter commit, no template."""
     if c.repository(repo):
-        raise DatasetError(f"{repo} already exists. Push to it with `kubecore dataset push <dir> {repo}`.")
+        raise DatasetError(f"{repo} already exists. Push to it with `kaos-cli dataset push <dir> {repo}`.")
     c.create_repository(repo, _storage_namespace(c, repo), MAIN)
     labels = {LABEL_KIND: "dataset"}
     if description:
@@ -315,7 +315,7 @@ def create_dataset(name: str, fmt_name: str = "ultralytics", description: str = 
     repo = dataset_repo(name)
     files = fmt.creator.skeleton(description=description, **skeleton_args)
     if c.repository(repo):
-        raise DatasetError(f"{repo} already exists. Push to it with `kubecore dataset push <dir> {repo}`.")
+        raise DatasetError(f"{repo} already exists. Push to it with `kaos-cli dataset push <dir> {repo}`.")
     c.create_repository(repo, _storage_namespace(c, repo), MAIN)
     with tempfile.TemporaryDirectory() as tmp:
         for rel, content in files.items():

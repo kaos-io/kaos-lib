@@ -5,8 +5,8 @@ import pytest
 import yaml
 
 from conftest import write_dataset
-from kubecore import datasets
-from kubecore.errors import DatasetError
+from kaos_lib import datasets
+from kaos_lib.errors import DatasetError
 
 REF = datasets.DatasetRef.parse("dataset-default@v1")
 

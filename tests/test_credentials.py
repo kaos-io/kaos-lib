@@ -4,9 +4,9 @@ import stat
 
 import pytest
 
-from kubecore import config, credentials
-from kubecore.errors import AuthError, ConfigError
-from kubecore.lakefs import LakeFS
+from kaos_lib import config, credentials
+from kaos_lib.errors import AuthError, ConfigError
+from kaos_lib.lakefs import LakeFS
 
 URL = "https://lakefs.example"
 
@@ -24,7 +24,7 @@ def test_chain_prefers_access_key_over_bearer_over_session(monkeypatch):
 
 def test_access_key_needs_both_halves(monkeypatch):
     monkeypatch.setenv("LAKEFS_ACCESS_KEY", "AK")
-    with pytest.raises(AuthError, match="kubecore login"):
+    with pytest.raises(AuthError, match="kaos-cli login"):
         credentials.resolve(URL)
 
 

@@ -2,9 +2,9 @@
 import pytest
 
 from conftest import write_dataset
-from kubecore import cli, datasets
-from kubecore.errors import DatasetError
-from kubecore.formats import get_format
+from kaos_lib import cli, datasets
+from kaos_lib.errors import DatasetError
+from kaos_lib.formats import get_format
 
 FILES = {"a.txt": b"A", "sub/b.txt": b"B", "sub/deep/c.bin": b"C", "other/d.txt": b"D"}
 
@@ -167,7 +167,7 @@ def test_cli_create_template_none_explains_next_steps(fake, capsys, monkeypatch)
     out = capsys.readouterr().out
     assert code == 0 and "empty, no template" in out
     assert "http://lakefs.test/repositories/dataset-mine/objects" in out
-    assert "once its first commit lands" in out and "kubecore dataset push" in out
+    assert "once its first commit lands" in out and "kaos-cli dataset push" in out
     assert fake.repos["dataset-mine"]["metadata"]["kaos.kind"] == "dataset"
 
 

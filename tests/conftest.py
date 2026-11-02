@@ -21,7 +21,7 @@ def clean_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KUBECORE_ML_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("KUBECORE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
-    from kubecore import config, peers
+    from kaos_lib import config, peers
     config.load_config.cache_clear()
     peers.clear_cache()
 
@@ -66,7 +66,7 @@ def dataset_dir(tmp_path):
 def mesh(monkeypatch):
     """``{base URL: FakeLakeFS}``: every client the package builds itself (``for_owner``, ``connect``) is routed
     to the fake registered for its base URL, through the real session code (auth headers included)."""
-    from kubecore import lakefs
+    from kaos_lib import lakefs
     fakes: dict = {}
     real = lakefs._session
 
@@ -107,7 +107,7 @@ def zitadel_env(tmp_path, monkeypatch):
     """Machine-key env of a pipeline step, and a fake Zitadel token endpoint behind ``zitadel._session``."""
     import requests
     from fake_zitadel import FakeTokenEndpoint
-    from kubecore import zitadel
+    from kaos_lib import zitadel
     endpoint = FakeTokenEndpoint()
     monkeypatch.setenv("ZITADEL_MACHINE_KEY_FILE", str(write_machine_key(tmp_path / "machine-key.json")))
     monkeypatch.setenv("ZITADEL_DOMAIN", "zitadel.test")

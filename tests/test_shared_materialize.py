@@ -7,10 +7,10 @@ import yaml
 
 from conftest import write_dataset
 from fake_lakefs import FakeLakeFS
-from kubecore import cli, credentials, datasets
-from kubecore.errors import AuthError, ConfigError, DatasetError
-from kubecore.formats import get_format, local
-from kubecore.lakefs import LakeFS
+from kaos_lib import cli, credentials, datasets
+from kaos_lib.errors import AuthError, ConfigError, DatasetError
+from kaos_lib.formats import get_format, local
+from kaos_lib.lakefs import LakeFS
 
 OWN_BASE = "http://b-lakefs.ml-b.svc.cluster.local"
 A_ENDPOINT, A_URL = "http://a-lakefs.ml-a.svc.cluster.local", "https://lakefs-a.example"
@@ -288,7 +288,7 @@ def test_versions_refused_by_the_peer_is_not_shared(tagged, step_env, status):
     with pytest.raises(AuthError) as err:
         datasets.versions("a/dataset-x")
     assert "not shared with your project" in str(err.value) and "Ask a to share" in str(err.value)
-    assert "kubecore login" not in str(err.value)
+    assert "kaos-cli login" not in str(err.value)
 
 
 def test_materialize_refused_by_the_peer_is_not_shared(tagged, step_env):
@@ -301,7 +301,7 @@ def test_materialize_refused_by_the_peer_is_not_shared(tagged, step_env):
 def test_own_lakefs_refusal_still_says_login(tagged, step_env):
     own, _ = tagged
     own.deny = 401
-    with pytest.raises(AuthError, match="kubecore login"):
+    with pytest.raises(AuthError, match="kaos-cli login"):
         datasets.versions("dataset-x")
 
 
@@ -332,7 +332,7 @@ def test_cli_versions_of_a_shared_dataset_without_versions(lakes, step_env, caps
     out = capsys.readouterr().out
     assert "a/dataset-x: no versions yet (and latest, the head of main)" in out
     assert "ask project a to release a version" in out and "dataset = a/dataset-x@latest" in out
-    assert "kubecore dataset release" not in out                           # the owner releases, not you
+    assert "kaos-cli dataset release" not in out                           # the owner releases, not you
 
 
 @pytest.mark.parametrize("argv,fragment", [

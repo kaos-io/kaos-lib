@@ -1,20 +1,23 @@
-"""Error types. Everything the CLI shows as a one-line message derives from KubecoreError."""
+"""Error types. Everything the CLI shows as a one-line message derives from KaosLibError."""
 from __future__ import annotations
 
 
-class KubecoreError(Exception):
+class KaosLibError(Exception):
     """A user-facing failure: the message says what happened and what to do next."""
 
 
-class ConfigError(KubecoreError):
+KubecoreError = KaosLibError  # the 0.2 name; removed together with the ``kubecore`` shim
+
+
+class ConfigError(KaosLibError):
     """A required setting (lakeFS URL, ...) could not be determined."""
 
 
-class AuthError(KubecoreError):
+class AuthError(KaosLibError):
     """No usable credential, or lakeFS rejected the one we carry."""
 
 
-class LakeFSError(KubecoreError):
+class LakeFSError(KaosLibError):
     """A lakeFS API call failed. ``status`` is the HTTP status."""
 
     def __init__(self, message: str, status: int = 0):
@@ -26,11 +29,11 @@ class NotFoundError(LakeFSError):
     """The repository, ref, tag or object does not exist."""
 
 
-class DatasetError(KubecoreError):
+class DatasetError(KaosLibError):
     """A dataset reference or operation is invalid (bad ref, nothing to release, ...)."""
 
 
-class ValidationFailed(KubecoreError):
+class ValidationFailed(KaosLibError):
     """A local dataset failed format validation; ``errors`` holds every problem found."""
 
     def __init__(self, errors: list):

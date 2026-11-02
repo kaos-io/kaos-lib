@@ -2,9 +2,9 @@
 import pytest
 
 from fake_lakefs import FakeLakeFS
-from kubecore import credentials, peers
-from kubecore.errors import AuthError, ConfigError, DatasetError, LakeFSError
-from kubecore.lakefs import LakeFS
+from kaos_lib import credentials, peers
+from kaos_lib.errors import AuthError, ConfigError, DatasetError, LakeFSError
+from kaos_lib.lakefs import LakeFS
 
 OWN_SVC = "http://b-lakefs.ml-b.svc.cluster.local:80"
 A_ENDPOINT, A_URL = "http://a-lakefs.ml-a.svc.cluster.local:80", "https://lakefs-a.example"
@@ -108,8 +108,8 @@ def test_a_failed_load_is_not_cached(own):
 
 
 @pytest.mark.parametrize("status,err,fragment", [
-    (401, AuthError, "kubecore login"),
-    (302, AuthError, "kubecore login"),          # oauth2-proxy sends an unauthenticated caller to the login page
+    (401, AuthError, "kaos-cli login"),
+    (302, AuthError, "kaos-cli login"),          # oauth2-proxy sends an unauthenticated caller to the login page
     (403, AuthError, "not allowed"),
     (500, LakeFSError, "HTTP 500"),
 ])

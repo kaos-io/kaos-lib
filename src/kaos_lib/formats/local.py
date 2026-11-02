@@ -88,11 +88,11 @@ def fetch(client: LakeFS, repo: str, commit: str, prefixes, target: pathlib.Path
     """Download ``prefixes`` at ``commit`` into ``target`` atomically and write the marker.
 
     ``strip`` is removed from the start of every path; ``finalize(tmp_dir)`` may adjust the copy
-    before it is published. Refuses to overwrite a non-empty folder that is not a kubecore copy.
+    before it is published. Refuses to overwrite a non-empty folder that is not a kaos-lib copy.
     The marker records ``owner`` (None for the own project).
     """
     if target.exists() and any(target.iterdir()) and not (target / MARKER).is_file():
-        raise DatasetError(f"{target} is not empty and is not a kubecore dataset copy; pick another folder.")
+        raise DatasetError(f"{target} is not empty and is not a kaos-lib dataset copy; pick another folder.")
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=target.name + ".part-", dir=target.parent))
     try:

@@ -1,9 +1,9 @@
 """DatasetRef parsing, resolve, listing, versions and release numbering."""
 import pytest
 
-from kubecore import datasets
-from kubecore.errors import DatasetError
-from kubecore.formats import get_format
+from kaos_lib import datasets
+from kaos_lib.errors import DatasetError
+from kaos_lib.formats import get_format
 
 
 @pytest.mark.parametrize("text,repo,version", [

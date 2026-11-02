@@ -9,8 +9,8 @@ import requests
 
 from conftest import rsa_key, write_machine_key
 from fake_zitadel import FakeTokenEndpoint
-from kubecore import credentials, zitadel
-from kubecore.errors import AuthError
+from kaos_lib import credentials, zitadel
+from kaos_lib.errors import AuthError
 
 OWN = "http://b-lakefs.ml-b.svc.cluster.local"
 SCOPE = ("openid email profile urn:zitadel:iam:org:projects:roles "
@@ -124,24 +124,24 @@ def test_mint_from_env_names_what_is_missing(zitadel_env, monkeypatch, unset):
 
 def test_missing_extra_is_a_clear_error(zitadel_env, monkeypatch):
     monkeypatch.setitem(sys.modules, "jwt", None)          # `import jwt` now raises ImportError
-    with pytest.raises(AuthError, match=r"pip install 'kubecore\[zitadel\]'"):
+    with pytest.raises(AuthError, match=r"pip install 'kaos-lib\[zitadel\]'"):
         zitadel.mint_from_env()
-    with pytest.raises(AuthError, match=r"kubecore\[zitadel\]"):
+    with pytest.raises(AuthError, match=r"kaos-lib\[zitadel\]"):
         credentials.resolve_peer(OWN)
     assert zitadel_env.requests == []
 
 
 def test_missing_extra_is_reported_before_a_bad_key_file(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "jwt", None)
-    with pytest.raises(AuthError, match=r"kubecore\[zitadel\]"):
+    with pytest.raises(AuthError, match=r"kaos-lib\[zitadel\]"):
         zitadel.mint(tmp_path / "absent.json", "zitadel.test", "321")
 
 
 def test_importing_the_package_does_not_need_the_extra(monkeypatch):
     monkeypatch.setitem(sys.modules, "jwt", None)
     import importlib
-    import kubecore.zitadel
-    importlib.reload(kubecore.zitadel)                    # the module imports PyJWT lazily
+    import kaos_lib.zitadel
+    importlib.reload(kaos_lib.zitadel)                    # the module imports PyJWT lazily
 
 
 # ------------------------------------------------------------------ resolve_peer chain
@@ -176,7 +176,7 @@ def test_chain_never_uses_the_access_key(monkeypatch):
     with pytest.raises(AuthError) as err:
         credentials.resolve_peer(OWN)
     assert "LAKEFS_ACCESS_KEY is never sent to another project" in str(err.value)
-    assert "kubecore login" in str(err.value)
+    assert "kaos-cli login" in str(err.value)
 
 
 def test_chain_access_key_does_not_shadow_the_other_steps(zitadel_env, monkeypatch):

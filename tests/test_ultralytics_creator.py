@@ -3,10 +3,10 @@ import pytest
 import yaml
 
 from conftest import write_dataset
-from kubecore import datasets
-from kubecore.errors import DatasetError, ValidationFailed
-from kubecore.formats import get_format
-from kubecore.formats.ultralytics import validate
+from kaos_lib import datasets
+from kaos_lib.errors import DatasetError, ValidationFailed
+from kaos_lib.formats import get_format
+from kaos_lib.formats.ultralytics import validate
 
 creator = get_format("ultralytics").creator
 

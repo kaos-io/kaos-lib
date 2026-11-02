@@ -1,24 +1,33 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kubecore"
-version = "0.2.0"
-description = "KAOS platform package: datasets (formats, versions), run outputs and the kubecore CLI over kaos-lake."
+name = "kaos-lib"
+version = "0.3.0"
+description = "KAOS platform library: datasets (formats, versions), run outputs and the kaos-cli command over kaos-lake. Formerly kubecore."
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 dependencies = [
     "requests>=2.31",
     "PyYAML>=6,<7",
 ]
 
+[project.urls]
+Homepage = "https://github.com/kaos-io/kaos-lib"
+Source = "https://github.com/kaos-io/kaos-lib"
+Issues = "https://github.com/kaos-io/kaos-lib/issues"
+Changelog = "https://github.com/kaos-io/kaos-lib/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 zitadel = ["PyJWT>=2.8", "cryptography>=41"]   # machine-key tokens for datasets shared by other projects
 test = ["pytest>=7", "PyJWT>=2.8", "cryptography>=41"]
 
 [project.scripts]
-kubecore = "kubecore.cli:main"
+kaos-cli = "kaos_lib.cli:main"
+kubecore = "kaos_lib.cli:kubecore_alias"   # deprecated alias, removed in the next release
 
 [tool.setuptools.packages.find]
 where = ["src"]
