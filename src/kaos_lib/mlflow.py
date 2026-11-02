@@ -12,7 +12,7 @@ The bearer comes from the first link of the chain that has one:
      ``ZITADEL_MLFLOW_PROJECT_ID``, minted with the org project's audience scope
      (``urn:zitadel:iam:org:project:id:<id>:aud``) and minted again ``REFRESH_LEEWAY`` seconds before it
      expires, so a long run never sends an expired token;
-  3. the laptop session of ``kaos-cli login`` (the same browser login as for lakeFS), which carries the org
+  3. the laptop session of ``kaosctl login`` (the same browser login as for lakeFS), which carries the org
      project's audience when it was made inside an app clone.
 
 Project MLflow accepts only tokens whose audience is the organisation's Zitadel project (``OIDC_AUDIENCE``).
@@ -90,7 +90,7 @@ class TokenSource:
         raise AuthError(
             "no MLflow credential: set MLFLOW_TRACKING_TOKEN, or (pipeline steps) "
             f"{zitadel.KEY_FILE_ENV} with {zitadel.DOMAIN_ENV} and {zitadel.PROJECT_ENV}, "
-            "or run `kaos-cli login` inside your app clone.")
+            "or run `kaosctl login` inside your app clone.")
 
     def _machine(self) -> str:
         settings = zitadel.env_settings()
@@ -115,14 +115,14 @@ class TokenSource:
         claims = _claims(cred.token) or {}
         exp = claims.get("exp")
         if isinstance(exp, (int, float)) and exp <= self._clock():
-            raise AuthError("your `kaos-cli login` session has expired: run `kaos-cli login` again.")
+            raise AuthError("your `kaosctl login` session has expired: run `kaosctl login` again.")
         project = _project_id()
         aud = claims.get("aud")
         auds = [aud] if isinstance(aud, str) else aud if isinstance(aud, list) else None
         if project and auds is not None and project not in auds:
             raise AuthError(
-                f"your `kaos-cli login` session is not valid for MLflow: it lacks the organisation project "
-                f"audience ({project}). Run `kaos-cli login` again inside your app clone.")
+                f"your `kaosctl login` session is not valid for MLflow: it lacks the organisation project "
+                f"audience ({project}). Run `kaosctl login` again inside your app clone.")
         return cred.token
 
 

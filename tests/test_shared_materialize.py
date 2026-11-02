@@ -290,7 +290,7 @@ def test_versions_refused_by_the_peer_is_not_shared(tagged, step_env, status):
     with pytest.raises(AuthError) as err:
         datasets.versions("a/dataset-x")
     assert "not shared with your project" in str(err.value) and "Ask a to share" in str(err.value)
-    assert "kaos-cli login" not in str(err.value)
+    assert "kaosctl login" not in str(err.value)
 
 
 def test_materialize_refused_by_the_peer_is_not_shared(tagged, step_env):
@@ -303,7 +303,7 @@ def test_materialize_refused_by_the_peer_is_not_shared(tagged, step_env):
 def test_own_lakefs_refusal_still_says_login(tagged, step_env):
     own, _ = tagged
     own.deny = 401
-    with pytest.raises(AuthError, match="kaos-cli login"):
+    with pytest.raises(AuthError, match="kaosctl login"):
         datasets.versions("dataset-x")
 
 
@@ -334,7 +334,7 @@ def test_cli_versions_of_a_shared_dataset_without_versions(lakes, step_env, caps
     out = capsys.readouterr().out
     assert "a/dataset-x: no versions yet (and latest, the head of main)" in out
     assert "ask project a to release a version" in out and "dataset = a/dataset-x@latest" in out
-    assert "kaos-cli dataset release" not in out                           # the owner releases, not you
+    assert "kaosctl dataset release" not in out                           # the owner releases, not you
 
 
 @pytest.mark.parametrize("argv,fragment", [

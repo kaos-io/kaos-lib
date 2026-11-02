@@ -1,12 +1,12 @@
-"""The ``kaos-cli`` command line (``kubecore`` is a deprecated alias for one release).
+"""The ``kaosctl`` command line (``kubecore`` is a deprecated alias for one release).
 
-    kaos-cli login
-    kaos-cli dataset create|list|versions|release|push|pull|validate
-    kaos-cli dataset list --shared     datasets other projects share with yours (read-only)
-    kaos-cli upgrade                   install the kaos-lib the targeted platform recommends
-    kaos-cli --version                 version, release channel and the platform's recommendation
-    kaos-cli run --lock <mlflow-run-id> -- <command>   run a command reading exactly the commits that run read
-    kaos-cli layout list|show|init|validate|publish   dataset layouts (built-in, installed, the project's)
+    kaosctl login
+    kaosctl dataset create|list|versions|release|push|pull|validate
+    kaosctl dataset list --shared     datasets other projects share with yours (read-only)
+    kaosctl upgrade                   install the kaos-lib the targeted platform recommends
+    kaosctl --version                 version, release channel and the platform's recommendation
+    kaosctl run --lock <mlflow-run-id> -- <command>   run a command reading exactly the commits that run read
+    kaosctl layout list|show|init|validate|publish   dataset layouts (built-in, installed, the project's)
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
 traceback. Every successful command prints the next useful step and a link.
@@ -103,7 +103,7 @@ def _values(args, layout: layouts.Layout) -> dict:
 def cmd_login(args) -> int:
     url = resolve_endpoint(args.url)
     credentials.browser_login(url)
-    print("Next: kaos-cli dataset list")
+    print("Next: kaosctl dataset list")
     return 0
 
 
@@ -120,15 +120,15 @@ def cmd_create(args) -> int:
         print(f"Created {repo}: empty, no layout (labelled kaos.kind=dataset).")
         print(f"  Open it:  {_repo_url(c, repo)}")
         print("kaos-lake lists it as a dataset once its first commit lands. Next: push your files")
-        print(f"  kaos-cli dataset push ./my-files {repo} -m \"first files\"")
+        print(f"  kaosctl dataset push ./my-files {repo} -m \"first files\"")
         return 0
     layout = layouts.load(args.layout, c)
     repo = datasets.create_dataset(args.name, layout, args.description or "", c, _values(args, layout))
     print(f"Created {repo} (layout {layout.name}).")
     print(f"  Open it:  {_repo_url(c, repo)}")
     print("Next: get a local copy, add your files, then push (opens a pull request):")
-    print(f"  kaos-cli dataset pull {repo}@latest ./{repo}")
-    print(f"  kaos-cli dataset push ./{repo} {repo} -m \"add data\"")
+    print(f"  kaosctl dataset pull {repo}@latest ./{repo}")
+    print(f"  kaosctl dataset push ./{repo} {repo} -m \"add data\"")
     return 0
 
 
@@ -149,9 +149,9 @@ def cmd_list_shared(args) -> int:
     pick = next(((n, r) for n, r in zip(names, rows) if r.versions), None)
     if pick:
         print(f"Pick one in the pipeline:  dataset = {pick[0]}@{pick[1].versions[0]}")
-        print(f"Or download it:  kaos-cli dataset pull {pick[0]}@{pick[1].versions[0]}")
+        print(f"Or download it:  kaosctl dataset pull {pick[0]}@{pick[1].versions[0]}")
     else:
-        print(f"Next: kaos-cli dataset pull {names[0]}@{datasets.LATEST}")
+        print(f"Next: kaosctl dataset pull {names[0]}@{datasets.LATEST}")
     return 0
 
 
@@ -160,14 +160,14 @@ def cmd_list(args) -> int:
         return cmd_list_shared(args)
     rows = datasets.list_datasets(_connect(args))
     if not rows:
-        print("No datasets yet. Create one with: kaos-cli dataset create <name> [--layout <layout>] "
-              "(see kaos-cli layout list)")
+        print("No datasets yet. Create one with: kaosctl dataset create <name> [--layout <layout>] "
+              "(see kaosctl layout list)")
         return 0
     width = max(len(r.repo) for r in rows)
     for r in rows:
         flags = "  [default]" if r.default else ""
         print(f"{r.repo:<{width}}  {r.template or '-':<12}  {r.description}{flags}")
-    print(f"Next: kaos-cli dataset versions {rows[0].repo}")
+    print(f"Next: kaosctl dataset versions {rows[0].repo}")
     return 0
 
 
@@ -185,7 +185,7 @@ def cmd_versions(args) -> int:
     elif owner:
         print(f"Next: ask project {owner} to release a version, or pick  dataset = {repo}@{datasets.LATEST}")
     else:
-        print(f"Next: kaos-cli dataset release {repo}")
+        print(f"Next: kaosctl dataset release {repo}")
     return 0
 
 
@@ -215,7 +215,7 @@ def cmd_push(args) -> int:
         print(f"Created {repo}.")
     print(f"Uploaded to draft branch {result.branch} and opened a pull request into main.")
     print(f"  Review and merge it:  {result.pull_url}")
-    print(f"Next: after merging, run  kaos-cli dataset release {repo}")
+    print(f"Next: after merging, run  kaosctl dataset release {repo}")
     return 0
 
 
@@ -237,7 +237,7 @@ def cmd_validate(args) -> int:
     hook = f", and its hook {layout.spec['hook']}" if layout.spec.get("hook") else ""
     if report.ok:
         print(f"{args.dir} is a valid {layout.name} dataset (the layout's rules{hook}).")
-        print("Next: kaos-cli dataset push <dir> <dataset-repo> -m \"message\"")
+        print("Next: kaosctl dataset push <dir> <dataset-repo> -m \"message\"")
         return 0
     print(f"{args.dir} has {len(report.errors)} problem(s) for layout {layout.name}:", file=sys.stderr)
     print(report.format(), file=sys.stderr)
@@ -255,7 +255,7 @@ def _platform_support(url: Optional[str] = None):
 
 def version_text() -> str:
     """Two lines: the version and channel, then what the targeted platform recommends."""
-    first = f"kaos-cli {__version__} ({channel.describe(channel.installed(__version__))})"
+    first = f"kaosctl {__version__} ({channel.describe(channel.installed(__version__))})"
     try:
         base, value = _platform_support()
     except KaosLibError as exc:
@@ -305,7 +305,7 @@ def cmd_upgrade(args) -> int:
     code = subprocess.call(cmd)
     if code:
         raise KaosLibError(f"pip install failed (exit {code}); kaos-lib {__version__} is unchanged")
-    print("Next: kaos-cli --version")
+    print("Next: kaosctl --version")
     return 0
 
 
@@ -314,7 +314,7 @@ def cmd_run(args) -> int:
     from .mlflow import mlflow
     command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
     if not command:
-        raise KaosLibError("nothing to run: write kaos-cli run --lock <mlflow-run-id> -- <command> [args...].")
+        raise KaosLibError("nothing to run: write kaosctl run --lock <mlflow-run-id> -- <command> [args...].")
     data_lock = lock.load(args.lock, mlflow())
     print(f"Replaying the data lock of MLflow run {args.lock}:", file=sys.stderr)
     for r in data_lock.reads:
@@ -331,7 +331,7 @@ def cmd_layout_list(args) -> int:
     for r in rows:
         hook = "  (hook)" if r.spec.get("hook") else ""
         print(f"{r.name:<{width}}  {r.source:<9}  {r.title}{hook}")
-    print("Next: kaos-cli layout show <name>, or make your own: kaos-cli layout init ./my-layout")
+    print("Next: kaosctl layout show <name>, or make your own: kaosctl layout init ./my-layout")
     return 0
 
 
@@ -344,8 +344,8 @@ def cmd_layout_show(args) -> int:
 
 
 STARTER = """# A dataset layout (kaos-lib layouts, spec version 1). Check it with
-#   kaos-cli layout validate <a dataset folder> --layout {dir}
-# and share it with your project with  kaos-cli layout publish {dir}
+#   kaosctl layout validate <a dataset folder> --layout {dir}
+# and share it with your project with  kaosctl layout publish {dir}
 layout: 1
 name: {name}
 title: {title}
@@ -402,8 +402,8 @@ def cmd_layout_init(args) -> int:
     target.mkdir(parents=True, exist_ok=True)
     out.write_text(text)
     print(f"Wrote {out}. Edit it, then check a dataset folder with it:")
-    print(f"  kaos-cli layout validate <folder> --layout {shown}")
-    print(f"Share it with your project:  kaos-cli layout publish {shown}")
+    print(f"  kaosctl layout validate <folder> --layout {shown}")
+    print(f"Share it with your project:  kaosctl layout publish {shown}")
     return 0
 
 
@@ -431,13 +431,13 @@ def cmd_layout_publish(args) -> int:
               file=sys.stderr)
     print(f"Opened a pull request adding {name}/layout.yaml to the project's {repo} repository.")
     print(f"  Review and merge it:  {c.base_url}/repositories/{repo}/pulls/{pull}")
-    print(f"Once merged, the New dataset page and  kaos-cli dataset create <name> --layout {name}  offer it.")
+    print(f"Once merged, the New dataset page and  kaosctl dataset create <name> --layout {name}  offer it.")
     return 0
 
 
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="kaos-cli", description="KAOS platform tools: datasets and run outputs.")
+    p = argparse.ArgumentParser(prog="kaosctl", description="KAOS platform tools: datasets and run outputs.")
     p.add_argument("--version", action=_VersionAction, help="show the version, channel and platform recommendation")
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -453,7 +453,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="print the pip command instead of running it")
     ds = sub.add_parser("dataset", help="create, version, push and pull datasets")
     dsub = ds.add_subparsers(dest="dataset_command", required=True)
-    layout_help = "a layout name (kaos-cli layout list) or a path to a layout.yaml or its folder"
+    layout_help = "a layout name (kaosctl layout list) or a path to a layout.yaml or its folder"
 
     sp = add(dsub, "create", cmd_create, "create a new dataset repository from a layout")
     sp.add_argument("name", help="dataset name (the repository becomes dataset-<name>)")
@@ -527,8 +527,15 @@ def main(argv: Optional[list] = None) -> int:
 
 
 def kubecore_alias(argv: Optional[list] = None) -> int:
-    """The ``kubecore`` command: a deprecated alias of ``kaos-cli``, kept for one release."""
-    print("NOTE: `kubecore` is now `kaos-cli`; the `kubecore` command goes away in the next release.",
+    """The ``kubecore`` command: a deprecated alias of ``kaosctl``, kept for one release."""
+    print("NOTE: `kubecore` is now `kaosctl`; the `kubecore` command goes away in the next release.",
+          file=sys.stderr)
+    return main(argv)
+
+
+def kaos_cli_alias(argv: Optional[list] = None) -> int:
+    """The ``kaos-cli`` command: a hidden alias of ``kaosctl`` (not in the help or the docs), kept for one release."""
+    print("NOTE: `kaos-cli` is now `kaosctl`; the `kaos-cli` command goes away in the next release.",
           file=sys.stderr)
     return main(argv)
 

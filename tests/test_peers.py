@@ -108,8 +108,8 @@ def test_a_failed_load_is_not_cached(own):
 
 
 @pytest.mark.parametrize("status,err,fragment", [
-    (401, AuthError, "kaos-cli login"),
-    (302, AuthError, "kaos-cli login"),          # oauth2-proxy sends an unauthenticated caller to the login page
+    (401, AuthError, "kaosctl login"),
+    (302, AuthError, "kaosctl login"),          # oauth2-proxy sends an unauthenticated caller to the login page
     (403, AuthError, "not allowed"),
     (500, LakeFSError, "HTTP 500"),
 ])

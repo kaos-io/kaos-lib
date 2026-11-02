@@ -1,5 +1,5 @@
 """Release channels (PEP 440 version; PEP 610 for local/commit installs), the recommended spec, the public channel
-metadata, `kaos-cli upgrade` and `--version`."""
+metadata, `kaosctl upgrade` and `--version`."""
 import json
 import sys
 import threading
@@ -189,7 +189,7 @@ def test_pip_command_uses_this_interpreter():
         sys.executable, "-m", "pip", "install", "--upgrade", "kaos-lib==0.3.0"]
 
 
-# ------------------------------------------------------------------ kaos-cli --version / upgrade
+# ------------------------------------------------------------------ kaosctl --version / upgrade
 @pytest.fixture
 def platform(fake, monkeypatch):
     monkeypatch.setattr(cli.LakeFS, "connect", classmethod(lambda cls, url=None, start=None: fake.client()))
@@ -211,7 +211,7 @@ def version_lines(capsys):
 
 def test_version_shows_channel_and_the_platform_recommendation(capsys, platform):
     recommend(platform, f"@ {STABLE_WHEEL}")
-    assert version_lines(capsys) == [f"kaos-cli {kaos_lib.__version__} (prerelease v0.3.0-rc.2)",
+    assert version_lines(capsys) == [f"kaosctl {kaos_lib.__version__} (prerelease v0.3.0-rc.2)",
                                      f"platform http://lakefs.test: recommends kaos-lib @ {STABLE_WHEEL}"]
 
 
@@ -222,7 +222,7 @@ def test_version_when_the_platform_publishes_nothing_yet(capsys, platform):
 def test_version_without_a_platform(capsys, monkeypatch):
     monkeypatch.setattr(channel, "installed", lambda v: {"channel": "local", "tag": None, "url": None})
     lines = version_lines(capsys)
-    assert lines[0] == f"kaos-cli {kaos_lib.__version__} (local install)"
+    assert lines[0] == f"kaosctl {kaos_lib.__version__} (local install)"
     assert lines[1].startswith("platform: unknown (cannot determine the lakeFS URL")
 
 
@@ -260,7 +260,7 @@ def test_upgrade_installs_the_recommended_spec(capsys, platform, pip):
     assert code == 0 and pip == [[sys.executable, "-m", "pip", "install", "--upgrade",
                                   str(Requirement(f"kaos-lib[zitadel] @ {NEWER_WHEEL}"))]]
     assert f"http://lakefs.test recommends {Requirement(f'kaos-lib[zitadel] @ {NEWER_WHEEL}')}" in out
-    assert "kaos-cli --version" in out
+    assert "kaosctl --version" in out
 
 
 def test_upgrade_dry_run_installs_nothing(capsys, platform, pip):
