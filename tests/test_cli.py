@@ -21,19 +21,19 @@ def test_create_prints_lakefs_url_and_push_hint(capsys, fake):
                         "--description", "pets")
     assert code == 0
     assert "http://lakefs.test/repositories/dataset-cats/objects" in out
-    assert "kaos-cli dataset push" in out and "kaos-cli dataset pull dataset-cats@latest" in out
+    assert "kaosctl dataset push" in out and "kaosctl dataset pull dataset-cats@latest" in out
     assert "data.yaml" in fake.tree("dataset-cats", "main")
 
 
 def test_list_shows_datasets_and_next_step(capsys):
     code, out, _ = run(capsys, "dataset", "list")
     assert code == 0 and "dataset-default" in out and "[default]" in out
-    assert "kaos-cli dataset versions dataset-default" in out
+    assert "kaosctl dataset versions dataset-default" in out
 
 
 def test_versions_empty_then_with_release(capsys):
     _, out, _ = run(capsys, "dataset", "versions", "default")
-    assert "no versions yet" in out and "kaos-cli dataset release dataset-default" in out
+    assert "no versions yet" in out and "kaosctl dataset release dataset-default" in out
     run(capsys, "dataset", "release", "default")
     _, out, _ = run(capsys, "dataset", "versions", "dataset-default")
     assert "v1" in out and "dataset = dataset-default@v1" in out
@@ -49,7 +49,7 @@ def test_push_prints_pull_request_url(capsys, dataset_dir):
     code, out, _ = run(capsys, "dataset", "push", str(dataset_dir), "dataset-default", "-m", "more images")
     assert code == 0
     assert "http://lakefs.test/repositories/dataset-default/pulls/1" in out
-    assert "kaos-cli dataset release dataset-default" in out
+    assert "kaosctl dataset release dataset-default" in out
 
 
 def test_push_invalid_dataset_exit_2_lists_problems(capsys, tmp_path):
@@ -105,7 +105,7 @@ def test_not_signed_in_error(capsys, monkeypatch):
     monkeypatch.undo()
     monkeypatch.setenv("LAKEFS_ENDPOINT", "http://lakefs.test")
     code, _, err = run(capsys, "dataset", "list")
-    assert code == 1 and "kaos-cli login" in err
+    assert code == 1 and "kaosctl login" in err
 
 
 def test_push_no_validate_warns_and_uploads(capsys, tmp_path):

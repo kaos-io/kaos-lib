@@ -167,7 +167,7 @@ def test_cli_create_template_none_explains_next_steps(fake, capsys, monkeypatch)
     out = capsys.readouterr().out
     assert code == 0 and "empty, no layout" in out
     assert "http://lakefs.test/repositories/dataset-mine/objects" in out
-    assert "once its first commit lands" in out and "kaos-cli dataset push" in out
+    assert "once its first commit lands" in out and "kaosctl dataset push" in out
     assert fake.repos["dataset-mine"]["metadata"]["kaos.kind"] == "dataset"
 
 

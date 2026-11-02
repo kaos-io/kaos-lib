@@ -1,4 +1,4 @@
-"""kaos_lib.support: verdicts, deadline edges, malformed metadata, step start and the kaos-cli gate."""
+"""kaos_lib.support: verdicts, deadline edges, malformed metadata, step start and the kaosctl gate."""
 import datetime as dt
 import json
 import sys
@@ -252,7 +252,7 @@ def test_importing_kaos_lib_runs_the_step_check(monkeypatch, capsys):
     assert "unsupported" in capsys.readouterr().err
 
 
-# ------------------------------------------------------------------ kaos-cli gate
+# ------------------------------------------------------------------ kaosctl gate
 @pytest.fixture
 def cli_on_fake(fake, monkeypatch):
     monkeypatch.setattr(cli.LakeFS, "connect", classmethod(lambda cls, url=None, start=None: fake.client()))

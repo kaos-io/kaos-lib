@@ -10,8 +10,9 @@ labels next to it under `labels/<split>/`, and a `classes.yaml` naming the class
 ## 1. Write the layout
 
 ```bash
-pip install kaos-lib
-kaos-cli layout init ./sounds-layout --name sounds
+pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/ \
+    --extra-index-url https://pypi.org/simple/ "kaos-lib==0.4.0"
+kaosctl layout init ./sounds-layout --name sounds
 ```
 
 `init` writes a starter `sounds-layout/layout.yaml` that already loads. Edit it into this:
@@ -48,7 +49,7 @@ skeleton:                       # what `create` writes; folders become <folder>/
       {{/if}}
       {{classes|count}} classes. Put clips in `clips/<split>/` and their labels in `labels/<split>/`.
 
-rules:                          # checked by kaos-cli and by kaos-lake
+rules:                          # checked by kaosctl and by kaos-lake
   required: [classes.yaml, "clips/train/*.wav", "clips/val/*.wav"]
   allowed: [README.md, classes.yaml, "clips/**", "labels/**"]
   extensions:
@@ -88,15 +89,15 @@ same schema and passes the same test fixtures, so a layout means the same thing 
 Check a folder against it before anything else:
 
 ```bash
-kaos-cli layout show ./sounds-layout                    # the spec as kaos-lib read it
-kaos-cli layout validate ./my-clips --layout ./sounds-layout
+kaosctl layout show ./sounds-layout                    # the spec as kaos-lib read it
+kaosctl layout validate ./my-clips --layout ./sounds-layout
 ```
 
 ## 2. Share it with your project
 
 ```bash
-kaos-cli login
-kaos-cli layout publish ./sounds-layout
+kaosctl login
+kaosctl layout publish ./sounds-layout
 ```
 
 This opens a pull request adding `sounds/layout.yaml` to your project's `layouts` repository in lakeFS (created
@@ -116,10 +117,10 @@ Names are looked up built-in first, then installed packages, then the project's 
 ## 3. Create datasets with it
 
 ```bash
-kaos-cli dataset create birds --layout sounds --classes robin,wren --description "Garden recordings"
-kaos-cli dataset pull dataset-birds@latest ./birds      # the skeleton: add clips and labels
-kaos-cli dataset push ./birds dataset-birds -m "first clips"   # validated against `sounds`, then a pull request
-kaos-cli dataset release dataset-birds                  # v1, for pipelines
+kaosctl dataset create birds --layout sounds --classes robin,wren --description "Garden recordings"
+kaosctl dataset pull dataset-birds@latest ./birds      # the skeleton: add clips and labels
+kaosctl dataset push ./birds dataset-birds -m "first clips"   # validated against `sounds`, then a pull request
+kaosctl dataset release dataset-birds                  # v1, for pipelines
 ```
 
 `push` validates with the layout the repository is labelled with; nothing is uploaded when the folder breaks a

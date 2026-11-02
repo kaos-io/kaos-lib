@@ -1,7 +1,7 @@
 # kaos-lib
 
 The KAOS platform library (formerly `kubecore`): datasets (layouts, versions), run outputs, MLflow, the run
-context, the data lock and the `kaos-cli` command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11, F-14).
+context, the data lock and the `kaosctl` command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11, F-14).
 
 ## Install
 
@@ -10,7 +10,7 @@ PyPI. Install from the stable index; the dependencies come from PyPI:
 
 ```bash
 pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/ \
-    --extra-index-url https://pypi.org/simple/ "kaos-lib[zitadel]==0.3.0"
+    --extra-index-url https://pypi.org/simple/ "kaos-lib[zitadel]==0.4.0"
 ```
 
 Pin the version (`==`): pip takes the highest version it finds across both indexes, and kaos-lib exists only in
@@ -18,7 +18,7 @@ the first. Platform images install one exact file instead, the `recommended` spe
 its `#sha256=`), so no index decides anything:
 
 ```bash
-pip install "kaos-lib[zitadel] @ https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/kaos-lib/kaos_lib-0.3.0-py3-none-any.whl#sha256=<sha256>"
+pip install "kaos-lib[zitadel] @ https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/kaos-lib/kaos_lib-0.4.0-py3-none-any.whl#sha256=<sha256>"
 ```
 
 ### Channels
@@ -35,14 +35,14 @@ promotion checks that this wheel holds the rc wheel's code byte for byte (only t
 Each channel's newest release metadata is public: `https://storage.googleapis.com/kaos-dev-511509-kaos-lib/stable/release.json`
 (`.../rc/release.json` for prereleases), with `<channel>/<tag>/release.json` and `SHA256SUMS` for every release.
 
-`kaos-cli --version` shows the channel (from the version: an rc is a prerelease) and what the targeted platform
-recommends; `kaos-cli upgrade` installs that recommendation, or the newest release of the install's channel when
+`kaosctl --version` shows the channel (from the version: an rc is a prerelease) and what the targeted platform
+recommends; `kaosctl upgrade` installs that recommendation, or the newest release of the install's channel when
 the platform publishes none.
 
 Python 3.9+. Dependencies: `requests`, `PyYAML`, `packaging`. Reading datasets other projects share from a
 pipeline step (machine-key tokens) needs the `zitadel` extra (PyJWT, cryptography); without it, drop
 `[zitadel]` from the lines above.
-MLflow (`kaos_lib.mlflow`, writing and loading data locks, `kaos-cli run --lock`) needs the `mlflow` extra
+MLflow (`kaos_lib.mlflow`, writing and loading data locks, `kaosctl run --lock`) needs the `mlflow` extra
 (mlflow-skinny 3, PyJWT, cryptography). It also registers the MLflow auth provider `zitadel`:
 
 ```bash
@@ -51,7 +51,7 @@ pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos
 ```
 
 
-Import it as `kaos_lib`; the command is `kaos-cli`.
+Import it as `kaos_lib`; the command is `kaosctl`.
 
 ### Formerly kubecore
 
@@ -61,7 +61,7 @@ release (0.3.x, and still in 0.4.x) the distribution ships:
 - a `kubecore` import shim: `import kubecore` and `from kaos_lib import datasets` keep working (the very
   `kaos_lib` modules) and emit one `DeprecationWarning`. Replace `kubecore` with `kaos_lib` in your imports;
   `KubecoreError` is now `KaosLibError` (the old name stays an alias).
-- a `kubecore` command: runs `kaos-cli` after a note on stderr.
+- a `kubecore` command: runs `kaosctl` after a note on stderr.
 
 Unchanged on purpose (other components and existing installs rely on them): the per-app
 `.kubecore/dataset-config.yaml`, the login session in `~/.config/kubecore-ml/` (`$KUBECORE_ML_HOME`), the
@@ -74,7 +74,7 @@ Layouts are optional. `DatasetRef.parse` accepts any lakeFS repository (`my-repo
 `vN` (tag), `latest` (head of the default branch), a branch, a tag or a commit id. `materialize` uses the
 layout the repository's `kaos.template` label names, and otherwise `raw`: the whole tree (or `prefix=`) at the
 pinned commit, cached by (repo, commit, prefix), returned as a folder. `raw` checks nothing and publishes as is.
-`kaos-cli dataset create <name> --layout none` makes an empty `dataset-<name>` (only `kaos.kind=dataset`);
+`kaosctl dataset create <name> --layout none` makes an empty `dataset-<name>` (only `kaos.kind=dataset`);
 kaos-lake lists it as a dataset once its first commit lands. The pipeline dropdown lists only `dataset-*`
 repositories.
 
@@ -87,11 +87,11 @@ checks no rule can say. Two are built in: `yolo` (images with one YOLO txt label
 a package: **[Make your own dataset layout](docs/make-your-own-layout.md)**.
 
 ```
-kaos-cli layout list                              # built-in, installed and your project's layouts
-kaos-cli layout show yolo                         # its spec
-kaos-cli layout init ./my-layout [--from yolo]    # a starter layout.yaml to edit
-kaos-cli layout validate <dir> --layout <name|path>
-kaos-cli layout publish ./my-layout               # a pull request into the project's `layouts` repository
+kaosctl layout list                              # built-in, installed and your project's layouts
+kaosctl layout show yolo                         # its spec
+kaosctl layout init ./my-layout [--from yolo]    # a starter layout.yaml to edit
+kaosctl layout validate <dir> --layout <name|path>
+kaosctl layout publish ./my-layout               # a pull request into the project's `layouts` repository
 ```
 
 Names are looked up built-in first, then installed packages (entry point group `kaos_lib.layouts`), then the
@@ -148,7 +148,7 @@ chain once, so a missing credential fails before the step does any work. The bea
 2. the step's machine key: `ZITADEL_MACHINE_KEY_FILE` + `ZITADEL_DOMAIN` + `ZITADEL_MLFLOW_PROJECT_ID`, minted
    with the scope `urn:zitadel:iam:org:project:id:<id>:aud` (the organisation's Zitadel project) and minted again
    two minutes before it expires;
-3. your `kaos-cli login` session (the same browser login as for lakeFS). It carries the organisation project's
+3. your `kaosctl login` session (the same browser login as for lakeFS). It carries the organisation project's
    audience when you logged in inside your app clone; an expired session, or one without that audience, is a
    one-line error telling you to log in again. Outside a pipeline, set `MLFLOW_TRACKING_URI` yourself.
 
@@ -214,13 +214,13 @@ the caller pins (`ref.with_commit`, `commit=`) is used as given.
 Replay a run's reads from the command line:
 
 ```
-kaos-cli run --lock <mlflow-run-id> -- python -m app.entry --params params.yaml
+kaosctl run --lock <mlflow-run-id> -- python -m app.entry --params params.yaml
 ```
 
 It loads the lock (MLflow auth from the chain above), prints the pinned reads and runs the command with
 `$KAOS_LIB_LOCK` set to the lock's JSON, which kaos-lib honours in the child exactly like `DataLock.replay`. A
 malformed `$KAOS_LIB_LOCK` is a one-line `LockError` naming what is wrong. Running a pipeline step by name
-(`kaos-cli run <step>`) is not part of this release.
+(`kaosctl run <step>`) is not part of this release.
 
 ## Datasets shared with your project
 
@@ -237,9 +237,9 @@ for answer in peers.shared(client):                         # per peer: answer.d
 ```
 
 ```
-kaos-cli dataset list --shared                # what other projects share with yours, with versions
-kaos-cli dataset versions team-a/dataset-cats # its versions, read from team-a's lakeFS
-kaos-cli dataset pull team-a/dataset-cats@v3  # read-only copy
+kaosctl dataset list --shared                # what other projects share with yours, with versions
+kaosctl dataset versions team-a/dataset-cats # its versions, read from team-a's lakeFS
+kaosctl dataset pull team-a/dataset-cats@v3  # read-only copy
 ```
 
 - **Where**: your lakeFS lists the other projects (`GET /kaos/v1/peers`, read once per process).
@@ -248,7 +248,7 @@ kaos-cli dataset pull team-a/dataset-cats@v3  # read-only copy
 - **Who**: the owner sees a bearer token, never your project's `LAKEFS_ACCESS_KEY`/`LAKEFS_SECRET_KEY`
   (`credentials.resolve_peer`): `LAKEFS_BEARER_TOKEN`, else a short-lived Zitadel token minted from the step's
   machine key (`ZITADEL_MACHINE_KEY_FILE`, `ZITADEL_DOMAIN`, `ZITADEL_MLFLOW_PROJECT_ID`; needs
-  `kaos-lib[zitadel]`), else your `kaos-cli login` session. The owner grants read on exactly the datasets it
+  `kaos-lib[zitadel]`), else your `kaosctl login` session. The owner grants read on exactly the datasets it
   shares with your project.
 - **Cache**: `<cache>/<owner>/<repo>/<commit>` (your own: `<cache>/<repo>/<commit>`); the copy's marker records
   the owner, so your `dataset-x` and the owner's `dataset-x` never mix, even at the same commit id. A staged copy
@@ -274,7 +274,7 @@ pose (`kpt_shape: [K, D]`, K*D values per line, visibility 0/1/2 when D=3). `nc`
 | `outputs.run(...)` / `write_run` (`open`, `save`, `latest`, `finish`) | write on that app's `outputs-<app>` (an app key can) |
 | `release` | tag creation on the dataset: people or admins, not an app key |
 | `create_dataset`, `Layout.publish` / `publish_tree` (repository, draft branch, pull request) | people or admins, not an app key |
-| `kaos-cli layout publish` (the project's `layouts` repository) | people who may create datasets, not an app key |
+| `kaosctl layout publish` (the project's `layouts` repository) | people who may create datasets, not an app key |
 | `layouts.load` of a project layout | any signed-in caller (an app key can) |
 
 `materialize` downloads what the layout's `materialize.include` names (`yolo`: `data.yaml`, `images/`,
@@ -287,7 +287,7 @@ downloaded.
 
 1. `LAKEFS_ACCESS_KEY` + `LAKEFS_SECRET_KEY` (an app's key pair), endpoint `LAKEFS_ENDPOINT`
 2. `LAKEFS_BEARER_TOKEN` (MeluXina jobs)
-3. the browser login session of `kaos-cli login` (a person's Zitadel token), cached in
+3. the browser login session of `kaosctl login` (a person's Zitadel token), cached in
    `~/.config/kubecore-ml/lakefs-session.json`
 
 Another project's lakeFS gets its own chain (`credentials.resolve_peer`), without step 1; see
@@ -299,18 +299,18 @@ The lakeFS URL comes from `--url`, `LAKEFS_ENDPOINT`/`LAKEFS_URL`, or `.kubecore
 ## CLI
 
 ```
-kaos-cli --version                       # version, channel (prerelease vX.Y.Z-rc.N / stable vX.Y.Z), platform's recommendation
-kaos-cli upgrade [--dry-run]             # pip-install the kaos-lib the targeted platform recommends
-kaos-cli login
-kaos-cli dataset create <name> [--layout <name|path>] [--classes a,b,c] [--param key=value] [--description ...]
-kaos-cli dataset list [--shared]
-kaos-cli dataset versions <repo>
-kaos-cli dataset release <repo>
-kaos-cli dataset push <dir> <repo> -m "message" [--no-validate]   # validates with the label's layout, then a pull request
-kaos-cli dataset pull [<owner>/]<repo>@<version> [dest] [--layout ...]
-kaos-cli dataset validate <dir> [--layout <name|path>]
-kaos-cli layout list | show <name> | init <dir> | validate <dir> --layout <name|path> | publish <dir>
-kaos-cli run --lock <mlflow-run-id> -- <command> [args...]       # replay the dataset commits that run read
+kaosctl --version                       # version, channel (prerelease vX.Y.Z-rc.N / stable vX.Y.Z), platform's recommendation
+kaosctl upgrade [--dry-run]             # pip-install the kaos-lib the targeted platform recommends
+kaosctl login
+kaosctl dataset create <name> [--layout <name|path>] [--classes a,b,c] [--param key=value] [--description ...]
+kaosctl dataset list [--shared]
+kaosctl dataset versions <repo>
+kaosctl dataset release <repo>
+kaosctl dataset push <dir> <repo> -m "message" [--no-validate]   # validates with the label's layout, then a pull request
+kaosctl dataset pull [<owner>/]<repo>@<version> [dest] [--layout ...]
+kaosctl dataset validate <dir> [--layout <name|path>]
+kaosctl layout list | show <name> | init <dir> | validate <dir> --layout <name|path> | publish <dir>
+kaosctl run --lock <mlflow-run-id> -- <command> [args...]       # replay the dataset commits that run read
 ```
 
 `dataset create` and `dataset validate` default to the `yolo` layout; `--layout none` creates an empty repository.
@@ -336,7 +336,7 @@ a deprecated range whose `unsupported_after` has not passed, or that sets none),
 - Pipeline steps: when the platform sets `$KAOS_LIB_SUPPORT`, importing `kaos_lib` (or the `kubecore` shim) logs
   the verdict on stderr, tags the MLflow run `kaos_lib.support` (the active run, or `$MLFLOW_RUN_ID`), and stops
   the step only when unsupported.
-- `kaos-cli`: reads the policy from the project lakeFS (`/kaos/v1/ui`, key `kaos_lib_support`), else the newest
+- `kaosctl`: reads the policy from the project lakeFS (`/kaos/v1/ui`, key `kaos_lib_support`), else the newest
   public `release.json` of its channel, else the packaged `_release.json`. Reads warn; `create`, `release` and `push` are refused when the platform says unsupported.
   Offline or without platform metadata nothing is refused.
 
@@ -371,5 +371,5 @@ registry, a request to a local HTTP server, and a lock round trip through a file
 | `outputs.py` | `outputs-<app>` writes |
 | `support.py` | the support window: `release.json` checks for steps and the CLI |
 | `channel.py` | release channel of the install (PEP 610), the platform's recommended spec (`upgrade`) |
-| `cli.py` | the `kaos-cli` command (and the deprecated `kubecore` alias) |
+| `cli.py` | the `kaosctl` command (and the deprecated `kubecore` alias) |
 | `../kubecore/` | the deprecated `kubecore` import shim (0.3.x and 0.4.x) |

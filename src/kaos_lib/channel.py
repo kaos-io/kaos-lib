@@ -1,4 +1,4 @@
-"""Which release channel this kaos-lib is, and the recommended spec (``kaos-cli upgrade``).
+"""Which release channel this kaos-lib is, and the recommended spec (``kaosctl upgrade``).
 
 kaos-lib is published by the platform's CI to two PUBLIC Python repositories (Artifact Registry), not PyPI:
 
