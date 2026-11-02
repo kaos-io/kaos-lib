@@ -1,4 +1,4 @@
-"""A short-lived Zitadel access token from a machine key (JWT-profile grant), for another project's lakeFS.
+"""A short-lived Zitadel access token from a machine key (JWT-profile grant): another project's lakeFS, MLflow.
 
 Pipeline steps get ``ZITADEL_MACHINE_KEY_FILE`` (Zitadel's JSON key: ``type``, ``keyId``, ``key``, ``userId``),
 ``ZITADEL_DOMAIN`` and ``ZITADEL_MLFLOW_PROJECT_ID``. The token is minted the way the template's
@@ -75,8 +75,11 @@ def assertion(key: dict, domain: str, now: Optional[int] = None) -> str:
                         f"({exc.__class__.__name__}).") from None
 
 
-def mint(key_file, domain: str, project_id: str, session: Optional[requests.Session] = None) -> str:
-    """An access token for the machine user of ``key_file`` (POST ``https://<domain>/oauth/v2/token``)."""
+def grant(key_file, domain: str, project_id: str, session: Optional[requests.Session] = None) -> dict:
+    """Zitadel's token response (``access_token``, ``expires_in``, ...) for the machine user of ``key_file``.
+
+    POSTs the JWT-profile grant to ``https://<domain>/oauth/v2/token`` with the project-audience scope.
+    """
     _jwt()   # the missing extra is reported first, before any key-file problem
     signed = assertion(load_key(key_file), domain)
     url = f"https://{domain}/oauth/v2/token"
@@ -95,16 +98,25 @@ def mint(key_file, domain: str, project_id: str, session: Optional[requests.Sess
         reason = ": ".join(str(body[k]) for k in ("error", "error_description") if body.get(k)) \
             or (resp.text or "")[:200]
         raise AuthError(f"Zitadel refused the machine-key token request (HTTP {resp.status_code}): {reason}")
-    token = body.get("access_token")
-    if not token:
+    if not body.get("access_token"):
         raise AuthError(f"Zitadel answered {url} without an access_token.")
-    return token
+    return body
 
 
-def mint_from_env() -> str:
-    """``mint`` from ZITADEL_MACHINE_KEY_FILE, ZITADEL_DOMAIN and ZITADEL_MLFLOW_PROJECT_ID (all required)."""
+def mint(key_file, domain: str, project_id: str, session: Optional[requests.Session] = None) -> str:
+    """An access token for the machine user of ``key_file`` (see ``grant``)."""
+    return grant(key_file, domain, project_id, session)["access_token"]
+
+
+def env_settings() -> tuple:
+    """``(key_file, domain, project_id)`` from ZITADEL_MACHINE_KEY_FILE, ZITADEL_DOMAIN and ZITADEL_MLFLOW_PROJECT_ID."""
     missing = [e for e in (KEY_FILE_ENV, DOMAIN_ENV, PROJECT_ENV) if not os.environ.get(e)]
     if missing:
         raise AuthError(f"cannot mint a Zitadel token: {', '.join(missing)} not set "
                         f"(a machine-key token needs {KEY_FILE_ENV}, {DOMAIN_ENV} and {PROJECT_ENV}).")
-    return mint(os.environ[KEY_FILE_ENV], os.environ[DOMAIN_ENV], os.environ[PROJECT_ENV])
+    return os.environ[KEY_FILE_ENV], os.environ[DOMAIN_ENV], os.environ[PROJECT_ENV]
+
+
+def mint_from_env() -> str:
+    """``mint`` from ZITADEL_MACHINE_KEY_FILE, ZITADEL_DOMAIN and ZITADEL_MLFLOW_PROJECT_ID (all required)."""
+    return mint(*env_settings())

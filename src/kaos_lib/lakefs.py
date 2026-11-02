@@ -19,7 +19,7 @@ from . import credentials
 from .config import resolve_endpoint
 from .errors import AuthError, LakeFSError, NotFoundError
 
-USER_AGENT = "kaos-lib/0.3"
+USER_AGENT = "kaos-lib/0.4"
 
 
 def _q(value: str) -> str:

@@ -11,7 +11,11 @@ ENV_VARS = ("LAKEFS_ENDPOINT", "LAKEFS_URL", "LAKEFS_ACCESS_KEY", "LAKEFS_SECRET
             "KUBECORE_STAGED_DIR", "KUBECORE_CACHE_DIR", "KUBECORE_DATASET_CONFIG",
             "KUBECORE_STORAGE_NAMESPACE_BASE", "KUBECORE_ML_OIDC_ISSUER", "KUBECORE_ML_OIDC_CLIENT_ID",
             "KUBECORE_ML_OIDC_PROJECT_ID", "ZITADEL_MACHINE_KEY_FILE", "ZITADEL_DOMAIN",
-            "ZITADEL_MLFLOW_PROJECT_ID")
+            "ZITADEL_MLFLOW_PROJECT_ID", "MLFLOW_TRACKING_URI", "MLFLOW_TRACKING_TOKEN", "MLFLOW_TRACKING_AUTH",
+            "MLFLOW_RUN_ID", "KAOS_LIB_LOCK", "KAOS_LIB_SUPPORT", "KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME",
+            "KUBECORE_APP", "KUBECORE_PROJECT", "KUBECORE_STEP", "STEP_NAME", "OUTPUTS_REPO", "CHECKPOINT_BUCKET",
+            "KUBECORE_DATASET_REF", "KUBECORE_DATASET_COMMIT", "DATASET", "DATASET_REPO", "DATASET_REF",
+            "DATASET_COMMIT")
 
 
 @pytest.fixture(autouse=True)
@@ -22,9 +26,11 @@ def clean_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KUBECORE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("KAOS_LIB_RELEASES_BASE", "http://127.0.0.1:9")   # no test reaches the public bucket
     monkeypatch.chdir(tmp_path)
-    from kaos_lib import config, peers
+    from kaos_lib import config, lock, mlflow, peers
     config.load_config.cache_clear()
     peers.clear_cache()
+    lock.reset()
+    monkeypatch.setattr(mlflow, "_source", mlflow.TokenSource())
 
 
 @pytest.fixture
