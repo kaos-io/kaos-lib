@@ -3,6 +3,8 @@
     kaos-cli login
     kaos-cli dataset create|list|versions|release|push|pull|validate
     kaos-cli dataset list --shared     datasets other projects share with yours (read-only)
+    kaos-cli upgrade                   install the kaos-lib the targeted platform recommends
+    kaos-cli --version                 version, release channel and the platform's recommendation
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
 traceback. Every successful command prints the next useful step and a link.
@@ -10,14 +12,16 @@ traceback. Every successful command prints the next useful step and a link.
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
+import types
 from typing import Optional
 
 import requests
 
-from . import __version__, credentials, datasets, peers, support
+from . import __version__, channel, credentials, datasets, peers, support
 from .config import resolve_endpoint
-from .errors import KaosLibError, UnsupportedVersion, ValidationFailed
+from .errors import AuthError, KaosLibError, UnsupportedVersion, ValidationFailed
 from .formats import format_names, get_format
 from .lakefs import LakeFS
 
@@ -199,10 +203,64 @@ def cmd_validate(args) -> int:
     return EXIT_INVALID_DATASET
 
 
+def _platform_support(url: Optional[str] = None):
+    """(platform base URL, its kaos_lib_support value or None). Signed out: the same read without a credential."""
+    try:
+        client = LakeFS.connect(url)
+    except AuthError:
+        client = types.SimpleNamespace(base_url=resolve_endpoint(url), session=requests.Session())
+    return client.base_url, support.from_lakefs(client)
+
+
+def version_text() -> str:
+    """Two lines: the version and channel, then what the targeted platform recommends."""
+    first = f"kaos-cli {__version__} ({channel.describe(channel.installed())})"
+    try:
+        base, value = _platform_support()
+    except KaosLibError as exc:
+        return f"{first}\nplatform: unknown ({exc})"
+    rec = channel.recommended(value)
+    return f"{first}\nplatform {base}: " + (f"recommends kaos-lib {rec}" if rec else "publishes no recommendation yet")
+
+
+class _VersionAction(argparse.Action):
+    def __init__(self, option_strings, dest=argparse.SUPPRESS, default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest, default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(version_text())
+        parser.exit()
+
+
+def cmd_upgrade(args) -> int:
+    """Install the kaos-lib spec the targeted platform recommends (its lakeFS ``/kaos/v1/ui``)."""
+    base, value = _platform_support(getattr(args, "url", None))
+    rec = channel.recommended(value)
+    if not rec:
+        print(f"ERROR: the platform at {base} publishes no recommended kaos-lib yet (/kaos/v1/ui, "
+              "kaos_lib_support.recommended); nothing was installed. Releases: "
+              "https://github.com/kaos-io/kaos-lib/releases", file=sys.stderr)
+        return EXIT_USER_ERROR
+    req = channel.requirement(rec, channel.has_zitadel_extra())
+    print(f"{base} recommends {req}")
+    if channel.is_current(req, channel.installed(), __version__):
+        print(f"kaos-lib {__version__} is already that; nothing to do.")
+        return 0
+    cmd = channel.pip_command(req)
+    if args.dry_run:
+        print("would run: " + " ".join(cmd))
+        return 0
+    code = subprocess.call(cmd)
+    if code:
+        raise KaosLibError(f"pip install failed (exit {code}); kaos-lib {__version__} is unchanged")
+    print("Next: kaos-cli --version")
+    return 0
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="kaos-cli", description="KAOS platform tools: datasets and run outputs.")
-    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    p.add_argument("--version", action=_VersionAction, help="show the version, channel and platform recommendation")
     sub = p.add_subparsers(dest="command", required=True)
 
     def add(parent, name, func, help_, url=True):
@@ -213,6 +271,8 @@ def build_parser() -> argparse.ArgumentParser:
         return sp
 
     add(sub, "login", cmd_login, "sign in through the browser")
+    add(sub, "upgrade", cmd_upgrade, "install the kaos-lib the targeted platform recommends").add_argument(
+        "--dry-run", action="store_true", help="print the pip command instead of running it")
     ds = sub.add_parser("dataset", help="create, version, push and pull datasets")
     dsub = ds.add_subparsers(dest="dataset_command", required=True)
     fmts = format_names()

@@ -5,23 +5,34 @@ command, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 (D-15) and #1283 (D-11
 
 ## Install
 
-```bash
-pip install kaos-lib                # once it is on PyPI
-```
-
-Until then, install from git, pinned to a commit:
+Releases are GitHub Releases of `kaos-io/kaos-lib` (built by the platform's Argo CI; not on PyPI). Install the
+wheel of a release, with the extra you need:
 
 ```bash
-pip install "kaos-lib @ https://github.com/kaos-io/kaos-lib/archive/<sha>.zip"
+pip install "kaos-lib[zitadel] @ https://github.com/kaos-io/kaos-lib/releases/download/v0.3.0/kaos_lib-0.3.0-py3-none-any.whl"
 ```
 
-Python 3.9+. Dependencies: `requests`, `PyYAML`. Reading datasets other projects share from a pipeline step
-(machine-key tokens) needs the `zitadel` extra (PyJWT, cryptography):
+or the tagged source:
 
 ```bash
-pip install "kaos-lib[zitadel]"
-pip install "kaos-lib[zitadel] @ https://github.com/kaos-io/kaos-lib/archive/<sha>.zip"
+pip install "kaos-lib[zitadel] @ https://github.com/kaos-io/kaos-lib/archive/refs/tags/v0.3.0.zip"
 ```
+
+Each release also carries `release.json` (its support window, see below) and `SHA256SUMS`.
+
+### Channels
+
+- **prerelease** `vX.Y.Z-rc.N`: a GitHub pre-release cut by the platform CI on every merge to `main`
+  (`X.Y.Z` is the version in `pyproject.toml`, the version the rc will be released as; `N` counts up).
+- **stable** `vX.Y.Z`: made only by the platform's release train, from an rc that passed the dev e2e. It
+  carries that rc's wheel and sdist byte for byte, which is why an rc is built with its final version.
+
+`kaos-cli --version` shows the channel the install came from (read from the URL pip installed it from) and what
+the targeted platform recommends; `kaos-cli upgrade` installs that recommendation.
+
+Python 3.9+. Dependencies: `requests`, `PyYAML`, `packaging`. Reading datasets other projects share from a
+pipeline step (machine-key tokens) needs the `zitadel` extra (PyJWT, cryptography); without it, drop
+`[zitadel]` from the lines above.
 
 Import it as `kaos_lib`; the command is `kaos-cli`.
 
@@ -159,6 +170,8 @@ The lakeFS URL comes from `--url`, `LAKEFS_ENDPOINT`/`LAKEFS_URL`, or `.kubecore
 ## CLI
 
 ```
+kaos-cli --version                       # version, channel (prerelease vX.Y.Z-rc.N / stable vX.Y.Z), platform's recommendation
+kaos-cli upgrade [--dry-run]             # pip-install the kaos-lib the targeted platform recommends
 kaos-cli login
 kaos-cli dataset create <name> --classes a,b,c [--description ...]
 kaos-cli dataset list [--shared]
@@ -216,5 +229,7 @@ A fake lakeFS (`tests/fake_lakefs.py`) runs the real client over an in-memory tr
 | `datasets.py` | refs (`[<owner>/]<repo>@<ref>`), resolve, list, versions, release, create, publish via PR, materialize |
 | `formats/` | format registry; `ultralytics.py` creator + consumer |
 | `outputs.py` | `outputs-<app>` writes |
+| `support.py` | the support window: `release.json` checks for steps and the CLI |
+| `channel.py` | release channel of the install (PEP 610), the platform's recommended spec (`upgrade`) |
 | `cli.py` | the `kaos-cli` command (and the deprecated `kubecore` alias) |
 | `../kubecore/` | the deprecated `kubecore` import shim (0.3.x only) |
