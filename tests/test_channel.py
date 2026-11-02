@@ -204,9 +204,9 @@ def test_upgrade_installs_the_recommended_spec(capsys, platform, pip):
 
 
 def test_upgrade_dry_run_installs_nothing(capsys, platform, pip):
-    recommend(platform, "==0.4.0")
+    recommend(platform, "==9.9.9")
     code, out, _ = run(capsys, "upgrade", "--dry-run")
-    assert code == 0 and pip == [] and "would run:" in out and "kaos-lib[zitadel]==0.4.0" in out
+    assert code == 0 and pip == [] and "would run:" in out and "kaos-lib[zitadel]==9.9.9" in out
 
 
 def test_upgrade_when_already_on_the_recommendation(capsys, platform, pip):
@@ -229,7 +229,7 @@ def test_upgrade_refuses_a_recommendation_that_is_not_kaos_lib(capsys, platform,
 
 def test_upgrade_reports_a_failed_pip(capsys, platform, monkeypatch):
     monkeypatch.setattr(cli.subprocess, "call", lambda cmd: 3)
-    recommend(platform, "==0.4.0")
+    recommend(platform, "==9.9.9")
     code, _, err = run(capsys, "upgrade")
     assert code == 1 and "pip install failed (exit 3)" in err
 
