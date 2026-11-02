@@ -3,6 +3,7 @@
     kaos-cli login
     kaos-cli dataset create|list|versions|release|push|pull|validate
     kaos-cli dataset list --shared     datasets other projects share with yours (read-only)
+    kaos-cli run --lock <mlflow-run-id> -- <command>   run a command reading exactly the commits that run read
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
 traceback. Every successful command prints the next useful step and a link.
@@ -10,6 +11,8 @@ traceback. Every successful command prints the next useful step and a link.
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
 from typing import Optional
 
@@ -199,6 +202,22 @@ def cmd_validate(args) -> int:
     return EXIT_INVALID_DATASET
 
 
+def cmd_run(args) -> int:
+    from . import lock
+    from .mlflow import mlflow
+    command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
+    if not command:
+        raise KaosLibError("nothing to run: write kaos-cli run --lock <mlflow-run-id> -- <command> [args...].")
+    data_lock = lock.load(args.lock, mlflow())
+    print(f"Replaying the data lock of MLflow run {args.lock}:", file=sys.stderr)
+    for r in data_lock.reads:
+        print(f"  {r.owner + '/' if r.owner else ''}{r.repo}@{r.ref} -> {r.commit}", file=sys.stderr)
+    try:
+        return subprocess.call(command, env={**os.environ, lock.ENV: data_lock.to_json()})
+    except OSError as exc:
+        raise KaosLibError(f"cannot run {command[0]!r}: {exc.strerror or exc}.") from None
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="kaos-cli", description="KAOS platform tools: datasets and run outputs.")
@@ -244,6 +263,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add(dsub, "validate", cmd_validate, "check a local folder against the dataset format", url=False)
     sp.add_argument("dir")
     sp.add_argument("--format", default="ultralytics", choices=fmts + ["yolo"])
+
+    sp = add(sub, "run", cmd_run, "run a command with the dataset commits an earlier MLflow run read", url=False)
+    sp.add_argument("--lock", required=True, metavar="MLFLOW_RUN_ID",
+                    help="the MLflow run whose data.lock.json to replay (exported to the command as $KAOS_LIB_LOCK)")
+    sp.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- command", help="the command to run, after --")
     return p
 
 
