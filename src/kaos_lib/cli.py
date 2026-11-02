@@ -3,6 +3,9 @@
     kaos-cli login
     kaos-cli dataset create|list|versions|release|push|pull|validate
     kaos-cli dataset list --shared     datasets other projects share with yours (read-only)
+    kaos-cli upgrade                   install the kaos-lib the targeted platform recommends
+    kaos-cli --version                 version, release channel and the platform's recommendation
+    kaos-cli run --lock <mlflow-run-id> -- <command>   run a command reading exactly the commits that run read
     kaos-cli layout list|show|init|validate|publish   dataset layouts (built-in, installed, the project's)
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
@@ -12,15 +15,18 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 import pathlib
+import subprocess
 import sys
+import types
 from typing import Optional
 
 import requests
 
-from . import __version__, credentials, datasets, layouts, peers, support
+from . import __version__, channel, credentials, datasets, layouts, peers, support
 from .config import resolve_endpoint
-from .errors import DatasetError, KaosLibError, UnsupportedVersion, ValidationFailed
+from .errors import AuthError, DatasetError, KaosLibError, UnsupportedVersion, ValidationFailed
 from .lakefs import LakeFS
 
 EXIT_USER_ERROR, EXIT_INVALID_DATASET = 1, 2
@@ -52,11 +58,13 @@ def _maybe_connect(args) -> Optional[LakeFS]:
 def _support_gate(client: LakeFS, write: bool) -> None:
     """Warn when this kaos-lib is behind/deprecated/unsupported; refuse a write only when the platform says unsupported.
 
-    The platform's metadata comes from the project lakeFS; without it (offline, older kaos-lake) the packaged
-    ``_release.json`` is used and nothing is refused.
+    The platform's metadata comes from the project lakeFS; without it (offline, older kaos-lake) the newest public
+    release.json of this kaos-lib's channel is used, else the packaged ``_release.json``, and nothing is refused.
     """
     live = support.from_lakefs(client)
-    result = support.check(__version__, live if live is not None else support.packaged())
+    fallback = None if live is not None else (
+        channel.public_release(channel.channel_of_version(__version__)) or support.packaged())
+    result = support.check(__version__, live if live is not None else fallback)
     if result["verdict"] == support.CURRENT:
         return
     fix = f" Fix: {result['fix']}" if result["fix"] else ""
@@ -236,6 +244,87 @@ def cmd_validate(args) -> int:
     return EXIT_INVALID_DATASET
 
 
+def _platform_support(url: Optional[str] = None):
+    """(platform base URL, its kaos_lib_support value or None). Signed out: the same read without a credential."""
+    try:
+        client = LakeFS.connect(url)
+    except AuthError:
+        client = types.SimpleNamespace(base_url=resolve_endpoint(url), session=requests.Session())
+    return client.base_url, support.from_lakefs(client)
+
+
+def version_text() -> str:
+    """Two lines: the version and channel, then what the targeted platform recommends."""
+    first = f"kaos-cli {__version__} ({channel.describe(channel.installed(__version__))})"
+    try:
+        base, value = _platform_support()
+    except KaosLibError as exc:
+        return f"{first}\nplatform: unknown ({exc})"
+    rec = channel.recommended(value)
+    return f"{first}\nplatform {base}: " + (f"recommends kaos-lib {rec}" if rec else "publishes no recommendation yet")
+
+
+class _VersionAction(argparse.Action):
+    def __init__(self, option_strings, dest=argparse.SUPPRESS, default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest, default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(version_text())
+        parser.exit()
+
+
+def cmd_upgrade(args) -> int:
+    """Install the kaos-lib spec the targeted platform recommends (its lakeFS ``/kaos/v1/ui``), else the newest
+    release of this install's channel (the public release.json)."""
+    try:
+        base, value = _platform_support(getattr(args, "url", None))
+        rec, where = channel.recommended(value), f"the platform at {base}"
+    except KaosLibError as exc:
+        rec, where = None, f"no platform ({exc})"
+    if not rec:
+        mine = channel.channel_of_version(__version__)
+        newest = channel.public_release(mine if mine in channel.PREFIX else "stable") or {}
+        rec = channel.recommended(newest)
+        if not rec:
+            print(f"ERROR: {where} publishes no recommended kaos-lib, and no {mine} release is published yet "
+                  f"(index: {channel.INDEXES.get(mine, channel.INDEXES['stable'])}); nothing was installed.",
+                  file=sys.stderr)
+            return EXIT_USER_ERROR
+        print(f"NOTE: {where} publishes no recommended kaos-lib; using the newest {newest.get('channel', mine)} "
+              f"release {newest.get('tag', '')}.", file=sys.stderr)
+        base = newest.get("index_url") or "the public channel"
+    req = channel.requirement(rec, channel.has_zitadel_extra())
+    print(f"{base} recommends {req}")
+    if channel.is_current(req, channel.installed(__version__), __version__):
+        print(f"kaos-lib {__version__} is already that; nothing to do.")
+        return 0
+    cmd = channel.pip_command(req)
+    if args.dry_run:
+        print("would run: " + " ".join(cmd))
+        return 0
+    code = subprocess.call(cmd)
+    if code:
+        raise KaosLibError(f"pip install failed (exit {code}); kaos-lib {__version__} is unchanged")
+    print("Next: kaos-cli --version")
+    return 0
+
+
+def cmd_run(args) -> int:
+    from . import lock
+    from .mlflow import mlflow
+    command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
+    if not command:
+        raise KaosLibError("nothing to run: write kaos-cli run --lock <mlflow-run-id> -- <command> [args...].")
+    data_lock = lock.load(args.lock, mlflow())
+    print(f"Replaying the data lock of MLflow run {args.lock}:", file=sys.stderr)
+    for r in data_lock.reads:
+        print(f"  {r.owner + '/' if r.owner else ''}{r.repo}@{r.ref} -> {r.commit}", file=sys.stderr)
+    try:
+        return subprocess.call(command, env={**os.environ, lock.ENV: data_lock.to_json()})
+    except OSError as exc:
+        raise KaosLibError(f"cannot run {command[0]!r}: {exc.strerror or exc}.") from None
+
+
 def cmd_layout_list(args) -> int:
     rows = layouts.available(_maybe_connect(args))
     width = max(len(r.name) for r in rows)
@@ -349,7 +438,7 @@ def cmd_layout_publish(args) -> int:
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="kaos-cli", description="KAOS platform tools: datasets and run outputs.")
-    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    p.add_argument("--version", action=_VersionAction, help="show the version, channel and platform recommendation")
     sub = p.add_subparsers(dest="command", required=True)
 
     def add(parent, name, func, help_, url=True):
@@ -360,6 +449,8 @@ def build_parser() -> argparse.ArgumentParser:
         return sp
 
     add(sub, "login", cmd_login, "sign in through the browser")
+    add(sub, "upgrade", cmd_upgrade, "install the kaos-lib the targeted platform recommends").add_argument(
+        "--dry-run", action="store_true", help="print the pip command instead of running it")
     ds = sub.add_parser("dataset", help="create, version, push and pull datasets")
     dsub = ds.add_subparsers(dest="dataset_command", required=True)
     layout_help = "a layout name (kaos-cli layout list) or a path to a layout.yaml or its folder"
@@ -394,6 +485,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add(dsub, "validate", cmd_validate, "check a local folder against a layout (same as layout validate)")
     sp.add_argument("dir")
     sp.add_argument("--layout", "--format", dest="layout", default="yolo", help=f"{layout_help} (default yolo)")
+
+    sp = add(sub, "run", cmd_run, "run a command with the dataset commits an earlier MLflow run read", url=False)
+    sp.add_argument("--lock", required=True, metavar="MLFLOW_RUN_ID",
+                    help="the MLflow run whose data.lock.json to replay (exported to the command as $KAOS_LIB_LOCK)")
+    sp.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- command", help="the command to run, after --")
 
     ly = sub.add_parser("layout", help="dataset layouts: list, show, make your own, check a folder, publish")
     lsub = ly.add_subparsers(dest="layout_command", required=True)

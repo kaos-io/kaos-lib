@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kaos-lib"
-version = "0.3.0"
-description = "KAOS platform library: datasets (formats, versions), run outputs and the kaos-cli command over kaos-lake. Formerly kubecore."
+version = "0.4.0"
+description = "KAOS platform library: datasets (formats, versions), run outputs, MLflow, run context, data lock and the kaos-cli command over kaos-lake. Formerly kubecore."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -24,11 +24,15 @@ Changelog = "https://github.com/kaos-io/kaos-lib/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 zitadel = ["PyJWT>=2.8", "cryptography>=41"]   # machine-key tokens for datasets shared by other projects
-test = ["pytest>=7", "PyJWT>=2.8", "cryptography>=41"]
+mlflow = ["mlflow-skinny>=3,<4", "PyJWT>=2.8", "cryptography>=41"]   # kaos_lib.mlflow, kaos_lib.lock.write/load, run --lock
+test = ["pytest>=7", "PyJWT>=2.8", "cryptography>=41", "mlflow-skinny>=3,<4"]
 
 [project.scripts]
 kaos-cli = "kaos_lib.cli:main"
 kubecore = "kaos_lib.cli:kubecore_alias"   # deprecated alias, removed in the next release
+
+[project.entry-points."mlflow.request_auth_provider"]
+zitadel = "kaos_lib.mlflow:ZitadelRequestAuthProvider"   # MLFLOW_TRACKING_AUTH=zitadel
 
 [tool.setuptools.packages.find]
 where = ["src"]

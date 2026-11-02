@@ -43,3 +43,7 @@ class ValidationFailed(KaosLibError):
 
 class UnsupportedVersion(KaosLibError):
     """This kaos-lib is past its support deadline (``kaos_lib.support``): steps stop, writes are refused."""
+
+
+class LockError(KaosLibError):
+    """A data lock (``kaos_lib.lock``) is malformed, missing from its MLflow run, or cannot be written."""

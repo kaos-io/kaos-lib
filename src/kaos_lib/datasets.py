@@ -16,6 +16,7 @@ import tempfile
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
+from . import lock as _lock
 from .errors import DatasetError, LakeFSError, NotFoundError
 from .lakefs import LakeFS
 from .transfer import apply_plan, plan_mirror, upload_tree
@@ -176,12 +177,20 @@ def resolve(ref: DatasetRef, client: Optional[LakeFS] = None, commit: Optional[s
 
     ``latest`` is the head of the default branch, ``vN`` a tag, anything else a branch, tag or commit id
     (tried in that order). A pinned ``commit`` (argument, or carried by ``ref``) is returned as is,
-    with no lakeFS call.
+    with no lakeFS call. While a data lock is replayed (``kaos_lib.lock``) a locked repository returns
+    its locked commit, also with no lakeFS call. Every answer is recorded in ``lock.current()``.
     """
     pinned = commit or ref.commit
-    if pinned:
-        return ref.with_commit(pinned).commit
-    ref, c = source(ref, client)
+    found = ref.with_commit(pinned).commit if pinned else _lock.pinned(ref.repo, ref.version, ref.owner)
+    if not found:
+        ref, c = source(ref, client)
+        found = _resolve_live(ref, c)
+    _lock.record(ref.repo, ref.version, found, ref.owner)
+    return found
+
+
+def _resolve_live(ref: DatasetRef, c: LakeFS) -> str:
+    """``resolve`` against lakeFS, for a ref already routed to its project's client by ``source``."""
     branch = default_branch(c, ref.repo)  # also the clear "does not exist" error
     if ref.version == LATEST:
         return c.branch_commit(ref.repo, branch)
