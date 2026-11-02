@@ -38,7 +38,7 @@ zitadel = "kaos_lib.mlflow:ZitadelRequestAuthProvider"   # MLFLOW_TRACKING_AUTH=
 where = ["src"]
 
 [tool.setuptools.package-data]
-kaos_lib = ["_release.json"]
+kaos_lib = ["_release.json", "layouts/shared/*.json", "layouts/shared/builtin/*/layout.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

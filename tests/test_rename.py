@@ -21,18 +21,18 @@ with warnings.catch_warnings(record=True) as caught:
     import kubecore                                    # a second import warns no more
     from kubecore import datasets, outputs
     from kubecore.errors import DatasetError, KubecoreError
-    from kubecore.formats import get_format
-    import kubecore.formats.ultralytics
-import kaos_lib, kaos_lib.datasets, kaos_lib.errors, kaos_lib.formats.ultralytics
+    from kubecore.layouts import load
+    import kubecore.layouts.yolo
+import kaos_lib, kaos_lib.datasets, kaos_lib.errors, kaos_lib.layouts.yolo
 print(json.dumps({
     "deprecations": [str(w.message) for w in caught if w.category is DeprecationWarning],
     "where": [w.filename for w in caught if w.category is DeprecationWarning],
     "same_datasets": datasets is kaos_lib.datasets,
     "same_outputs": outputs is kaos_lib.outputs,
-    "same_nested": kubecore.formats.ultralytics is kaos_lib.formats.ultralytics,
+    "same_nested": kubecore.layouts.yolo is kaos_lib.layouts.yolo,
     "same_error": DatasetError is kaos_lib.errors.DatasetError,
     "old_base": KubecoreError is kaos_lib.errors.KaosLibError,
-    "get_format": get_format is kaos_lib.formats.get_format,
+    "load": load is kaos_lib.layouts.load,
     "version": kubecore.__version__,
 }))
 """
@@ -51,7 +51,7 @@ def test_kubecore_import_shim_works_and_warns_once():
     assert "kaos_lib" in got["deprecations"][0] and "pip install kaos-lib" in got["deprecations"][0]
     assert got["where"] == ["<string>"]                     # points at the importer, not at importlib
     assert got["same_datasets"] and got["same_outputs"] and got["same_nested"]
-    assert got["same_error"] and got["old_base"] and got["get_format"]
+    assert got["same_error"] and got["old_base"] and got["load"]
     assert got["version"] == kaos_lib.__version__
 
 
@@ -68,7 +68,8 @@ def test_kubecore_command_alias_notes_the_rename_and_runs_kaos_cli(capsys, tmp_p
     out, err = capsys.readouterr()
     assert out.splitlines()[0].startswith(f"kaos-cli {kaos_lib.__version__} (")
     assert "`kubecore` is now `kaos-cli`" in err
-    assert cli.kubecore_alias(["dataset", "validate", str(tmp_path)]) == cli.main(["dataset", "validate", str(tmp_path)])
+    argv = ["dataset", "validate", str(tmp_path), "--layout", "yolo"]
+    assert cli.kubecore_alias(argv) == cli.main(argv)
 
 
 def test_console_scripts_and_version_match_pyproject():

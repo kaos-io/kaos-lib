@@ -26,7 +26,7 @@ MAIN = "main"
 LATEST = "latest"
 LABEL_KIND, LABEL_TEMPLATE, LABEL_DESCRIPTION = "kaos.kind", "kaos.template", "kaos.description"
 LABEL_DEFAULT, LABEL_LOCATION, LABEL_SHARED = "kaos.default", "kaos.location", "kaos.shared_with"
-NO_TEMPLATE = "none"   # create_dataset(fmt_name="none"): an empty repository
+NO_TEMPLATE = "none"   # create_dataset(layout="none"): an empty repository
 STORAGE_BASE_ENV = "KUBECORE_STORAGE_NAMESPACE_BASE"
 
 _NAME_RE = re.compile(r"^[a-z0-9-]{3,48}$")
@@ -211,19 +211,32 @@ def _tag_or_none(c: LakeFS, ref: DatasetRef) -> Optional[str]:
         return None
 
 
-def format_of(repo: str, client: Optional[LakeFS] = None) -> str:
-    """Name of the format a repository is labelled with (``kaos.template``) if we know it, else ``raw``."""
-    from .formats import format_names, get_format
+def layout_of(repo: str, client: Optional[LakeFS] = None) -> str:
+    """The layout a repository is labelled with (``kaos.template``) when it is a known layout, else ``raw``.
+
+    Known: built-in, installed or the project's (``kaos_lib.layouts.load``). A label naming no known layout
+    (for instance one that was renamed) reads as ``raw``.
+    """
+    from . import layouts
+    c = _client(client)
     try:
-        label = _client(client).metadata(repo).get(LABEL_TEMPLATE)
+        label = c.metadata(repo).get(LABEL_TEMPLATE)
     except LakeFSError:
         label = None
-    known = label and (label in format_names() or label == "yolo")
-    return get_format(label).name if known else "raw"
+    if not label:
+        return "raw"
+    try:
+        return layouts.load(label, c).name
+    except DatasetError:
+        return "raw"
+
+
+format_of = layout_of   # the 0.3 name
 
 
 def list_datasets(client: Optional[LakeFS] = None) -> list:
-    """Every ``dataset-*`` repository the caller can see, with its labels."""
+    """Every ``dataset-*`` repository the caller can see, with its labels (``template``: the layout's current name)."""
+    from .layouts import canonical
     c = _client(client)
     rows = []
     for repo in sorted(r["id"] for r in c.repositories() if r["id"].startswith(DATASET_PREFIX)):
@@ -233,7 +246,7 @@ def list_datasets(client: Optional[LakeFS] = None) -> list:
             labels = {}  # unlabelled or unreadable metadata must not hide the dataset
         rows.append(DatasetInfo(
             repo=repo, labels=labels, description=labels.get(LABEL_DESCRIPTION, ""),
-            template=labels.get(LABEL_TEMPLATE, ""), location=labels.get(LABEL_LOCATION, ""),
+            template=canonical(labels.get(LABEL_TEMPLATE, "")), location=labels.get(LABEL_LOCATION, ""),
             default=str(labels.get(LABEL_DEFAULT, "")).lower() == "true"))
     return rows
 
@@ -308,21 +321,25 @@ def _create_empty(c: LakeFS, repo: str, description: str) -> str:
     return repo
 
 
-def create_dataset(name: str, fmt_name: str = "ultralytics", description: str = "",
-                   client: Optional[LakeFS] = None, **skeleton_args) -> str:
+def create_dataset(name: str, layout="yolo", description: str = "",
+                   client: Optional[LakeFS] = None, values: Optional[dict] = None, **more_values) -> str:
     """Create ``dataset-<name>`` the way the kaos-lake UI does; returns the repository name.
 
-    Order: create the repository, commit the format's skeleton to main (commit metadata
-    ``kaos.template``), then set the labels. Fails if the repository already exists. ``fmt_name="none"`` creates an empty labelled repository.
+    ``layout`` is a layout name, a path or a ``kaos_lib.layouts.Layout``; ``values`` fills its parameters
+    (e.g. ``{"classes": ["cat"]}`` for ``yolo``; keyword values such as ``classes=[...]`` are added). Order:
+    create the repository, commit the layout's skeleton to main (commit metadata ``kaos.template``), then set
+    the labels. Fails if the repository already exists.
+    ``layout="none"`` creates an empty labelled repository.
     """
-    from .formats import get_format
+    from . import layouts
     refuse_shared(name, "create")
     c = _client(client)
-    if fmt_name == NO_TEMPLATE:
+    if layout == NO_TEMPLATE:
         return _create_empty(c, dataset_repo(name), description)
-    fmt = get_format(fmt_name)
+    lay = layouts.load(layout, c)
     repo = dataset_repo(name)
-    files = fmt.creator.skeleton(description=description, **skeleton_args)
+    more_values.pop("title", None)   # 0.3 skeleton argument, now the repository name
+    files = lay.skeleton(repo, description, {**(values or {}), **more_values})
     if c.repository(repo):
         raise DatasetError(f"{repo} already exists. Push to it with `kaos-cli dataset push <dir> {repo}`.")
     c.create_repository(repo, _storage_namespace(c, repo), MAIN)
@@ -332,8 +349,8 @@ def create_dataset(name: str, fmt_name: str = "ultralytics", description: str = 
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
         upload_tree(c, repo, MAIN, pathlib.Path(tmp))
-    c.commit(repo, MAIN, f"Create {fmt.name} dataset skeleton", {LABEL_TEMPLATE: fmt.name})
-    labels = {LABEL_KIND: "dataset", LABEL_TEMPLATE: fmt.name}
+    c.commit(repo, MAIN, f"Create {repo} from the {lay.name} layout", {LABEL_TEMPLATE: lay.name})
+    labels = {LABEL_KIND: "dataset", LABEL_TEMPLATE: lay.name}
     if description:
         labels[LABEL_DESCRIPTION] = description
     c.set_metadata(repo, labels)
@@ -379,18 +396,19 @@ def publish_tree(local_dir, repo: str, message: str, via_pull_request: bool = Tr
                          f"{c.base_url}/repositories/{repo}/pulls/{pull_id}")
 
 
-def materialize(ref: DatasetRef, dest=None, fmt_name: Optional[str] = None,
+def materialize(ref: DatasetRef, dest=None, layout=None,
                 client: Optional[LakeFS] = None, commit: Optional[str] = None,
-                prefix: Optional[str] = None) -> pathlib.Path:
-    """Local copy of ``ref`` through its format's consumer.
+                prefix: Optional[str] = None, fmt_name: Optional[str] = None) -> pathlib.Path:
+    """Local copy of ``ref`` through its layout (``kaos_lib.layouts``; ``fmt_name`` is the 0.3 name of ``layout``).
 
-    Returns the format's entry: ``data.yaml`` for ``ultralytics``, the folder for ``raw``. The format is
-    ``fmt_name`` if given, else the repository's ``kaos.template`` label (``yolo`` is an alias), else
-    ``raw``. ``commit`` (or ``ref.commit``) pins the exact commit; ``prefix`` (raw only) downloads one folder.
-    A shared reference (``<owner>/dataset-x@v1``) is read from the owner's lakeFS and cached apart.
+    Returns the layout's entry: ``data.yaml`` for ``yolo``, the folder for ``raw``. The layout is ``layout``
+    if given (a name, a path or a ``Layout``), else the repository's ``kaos.template`` label when it names a
+    known layout, else ``raw``. ``commit`` (or ``ref.commit``) pins the exact commit; ``prefix`` (layouts that
+    download the whole tree) downloads one folder. A shared reference (``<owner>/dataset-x@v1``) is read from
+    the owner's lakeFS and cached apart.
     """
-    from .formats import get_format
+    from . import layouts
     ref, c = source(ref, client)
-    fmt = get_format(fmt_name) if fmt_name else get_format(format_of(ref.repo, c))
-    extra = {"prefix": prefix} if prefix else {}
-    return fmt.consumer.materialize(ref, dest, c, commit, **extra)
+    layout = layout or fmt_name
+    lay = layouts.load(layout if layout else layout_of(ref.repo, c), c)
+    return lay.materialize(ref, dest, c, commit, prefix=prefix)

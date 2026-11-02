@@ -9,13 +9,14 @@ from conftest import write_dataset
 from fake_lakefs import FakeLakeFS
 from kaos_lib import cli, credentials, datasets
 from kaos_lib.errors import AuthError, ConfigError, DatasetError
-from kaos_lib.formats import get_format, local
+from kaos_lib import layouts
+from kaos_lib.layouts import local
 from kaos_lib.lakefs import LakeFS
 
 OWN_BASE = "http://b-lakefs.ml-b.svc.cluster.local"
 A_ENDPOINT, A_URL = "http://a-lakefs.ml-a.svc.cluster.local", "https://lakefs-a.example"
 PEERS = {"project": "b", "peers": [{"project": "a", "endpoint": A_ENDPOINT, "url": A_URL}]}
-YOLO = {"kaos.kind": "dataset", "kaos.template": "ultralytics"}
+YOLO = {"kaos.kind": "dataset", "kaos.template": "yolo"}
 
 
 def tree_of(root):
@@ -71,7 +72,8 @@ def test_cache_path_and_marker_carry_the_owner(lakes, step_env, tmp_path):
     commit = owner.head("dataset-x")
     assert data_yaml.parent == tmp_path / "cache" / "a" / "dataset-x" / commit
     marker = json.loads((data_yaml.parent / local.MARKER).read_text())
-    assert marker == {"repo": "dataset-x", "commit": commit, "prefix": None, "owner": "a"}
+    assert marker == {"repo": "dataset-x", "commit": commit, "prefix": None, "owner": "a",
+                      "include": ["data.yaml", "images/**", "labels/**"]}
 
 
 def test_own_and_shared_dataset_x_never_collide(lakes, step_env, tmp_path):
@@ -142,9 +144,9 @@ def test_resolve_of_a_shared_ref_asks_the_owner(lakes, step_env):
     assert datasets.resolve(datasets.DatasetRef.parse("dataset-x@latest")) == own.head("dataset-x")
 
 
-def test_consumer_called_directly_with_the_own_client(lakes, step_env):
+def test_layout_called_directly_with_the_own_client(lakes, step_env):
     _, owner = lakes
-    path = get_format("ultralytics").consumer.materialize(SHARED, None, LakeFS.connect())
+    path = layouts.load("yolo").materialize(SHARED, None, LakeFS.connect())
     assert (path.parent / "images/train/shared.jpg").is_file() and object_gets(owner)
 
 

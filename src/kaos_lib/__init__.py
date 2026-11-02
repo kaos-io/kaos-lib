@@ -3,7 +3,7 @@
 Public API:
     kaos_lib.datasets  DatasetRef, resolve, list_datasets, versions, release, create_dataset, materialize
     kaos_lib.outputs   outputs_repo, write_run
-    kaos_lib.formats   get_format (creator + consumer pairs, first: ultralytics)
+    kaos_lib.layouts   load, available, Layout (validate, skeleton, materialize, publish): dataset layouts
     kaos_lib.peers     the projects whose shared datasets this one reads (peers, shared)
     kaos_lib.mlflow    mlflow(), token(); the MLflow request-auth provider ``zitadel`` (extra kaos-lib[mlflow])
     kaos_lib.runtime   context(), run_id(): what the platform injected, from the environment

@@ -33,6 +33,7 @@ class FakeLakeFS(BaseAdapter):
         self.deny = None             # an HTTP status every /api/v1 call answers (a token this server refuses)
         self.writes: list = []       # (kind, repo, branch, path) for object uploads/deletes
         self.storage_prefix = "gs://bucket/lakefs"   # None: kaos-lake publishes no prefix
+        self.templates: list = []                    # /kaos/v1/dataset-templates entries (layouts kaos-lake serves)
         self._ids = itertools.count(1)
 
     # ---- test helpers
@@ -120,7 +121,7 @@ class FakeLakeFS(BaseAdapter):
         if path == "/kaos/v1/dataset-templates":
             if self.storage_prefix is None:
                 return 404, {}
-            return 200, {"storage_namespace_prefix": self.storage_prefix, "templates": []}
+            return 200, {"storage_namespace_prefix": self.storage_prefix, "templates": self.templates}
         if path.startswith("/kaos/"):
             return self.kaos.get(path, (404, b"<html><body>404 page not found</body></html>"))
         m, body = req.method, (json.loads(req.body) if req.body and not _is_multipart(req) else {})
