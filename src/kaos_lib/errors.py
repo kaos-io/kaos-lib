@@ -39,3 +39,7 @@ class ValidationFailed(KaosLibError):
     def __init__(self, errors: list):
         self.errors = errors
         super().__init__(f"dataset failed validation ({len(errors)} problem(s))")
+
+
+class UnsupportedVersion(KaosLibError):
+    """This kaos-lib is past its support deadline (``kaos_lib.support``): steps stop, writes are refused."""

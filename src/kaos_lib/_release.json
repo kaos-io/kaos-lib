@@ -1,0 +1,7 @@
+{
+  "version": "0.3.0",
+  "supported": ">=0.2",
+  "deprecated": [],
+  "breaking": false,
+  "migration": "https://github.com/kaos-io/kaos-lib/blob/main/README.md#formerly-kubecore"
+}

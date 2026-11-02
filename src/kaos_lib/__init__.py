@@ -7,3 +7,7 @@ Public API:
     kaos_lib.peers     the projects whose shared datasets this one reads (peers, shared)
 """
 __version__ = "0.3.0"
+
+from . import support as _support  # noqa: E402
+
+_support.at_step_start(__version__)   # pipeline steps only ($KAOS_LIB_SUPPORT): log, MLflow tag, stop if unsupported

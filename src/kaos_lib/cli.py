@@ -15,18 +15,37 @@ from typing import Optional
 
 import requests
 
-from . import __version__, credentials, datasets, peers
+from . import __version__, credentials, datasets, peers, support
 from .config import resolve_endpoint
-from .errors import KaosLibError, ValidationFailed
+from .errors import KaosLibError, UnsupportedVersion, ValidationFailed
 from .formats import format_names, get_format
 from .lakefs import LakeFS
 
 EXIT_USER_ERROR, EXIT_INVALID_DATASET = 1, 2
+WRITE_COMMANDS = {"create", "release", "push"}   # change data in lakeFS: refused when kaos-lib is unsupported
 
 
 def _connect(args) -> LakeFS:
-    """Build the lakeFS client from --url / env / app config and the credential chain."""
-    return LakeFS.connect(getattr(args, "url", None))
+    """Build the lakeFS client from --url / env / app config and the credential chain, then check support."""
+    client = LakeFS.connect(getattr(args, "url", None))
+    _support_gate(client, getattr(args, "dataset_command", None) in WRITE_COMMANDS)
+    return client
+
+
+def _support_gate(client: LakeFS, write: bool) -> None:
+    """Warn when this kaos-lib is behind/deprecated/unsupported; refuse a write only when the platform says unsupported.
+
+    The platform's metadata comes from the project lakeFS; without it (offline, older kaos-lake) the packaged
+    ``_release.json`` is used and nothing is refused.
+    """
+    live = support.from_lakefs(client)
+    result = support.check(__version__, live if live is not None else support.packaged())
+    if result["verdict"] == support.CURRENT:
+        return
+    fix = f" Fix: {result['fix']}" if result["fix"] else ""
+    if write and live is not None and result["verdict"] == support.UNSUPPORTED:
+        raise UnsupportedVersion(f"{result['message']}; commands that change data are refused.{fix}")
+    print(f"WARNING: {result['message']}.{fix}", file=sys.stderr)
 
 
 def _repo_url(c: LakeFS, repo: str, tail: str = "objects") -> str:
