@@ -51,7 +51,10 @@ user-definable layouts.
 - The `yolo` format is the built-in `yolo` layout: a declarative `layout.yaml` plus a small hook
   (`kaos_lib.layouts.yolo`: class ids, value counts, coordinates, the `data.yaml` path rewrite). Some problems are
   worded differently (`data.yaml: no file matches (required)`, `images/x.jpg has no labels/x.txt`).
-- `raw` creates a README; `create_dataset`'s default layout is `yolo`, as before.
+- `raw` creates a README.
+- `kaosctl dataset create` and `create_dataset` make an empty dataset unless a layout is named: the default layout is
+  `none`, not `yolo` (owner, 2026-11-03). Name it: `--layout yolo`, or `create_dataset(name, "yolo", ...)`.
+  `--classes` / `--param` without a layout is an error naming `--layout yolo`.
 - `datasets.materialize(..., layout=...)` and `datasets.layout_of`; `fmt_name=`, `format_of` and
   `kaos_lib.formats.get_format` keep working.
 - The cache marker records the layout's download patterns: a copy made with other patterns is fetched again.

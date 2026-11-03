@@ -336,7 +336,7 @@ def _create_empty(c: LakeFS, repo: str, description: str) -> str:
     return repo
 
 
-def create_dataset(name: str, layout="yolo", description: str = "",
+def create_dataset(name: str, layout=NO_TEMPLATE, description: str = "",
                    client: Optional[LakeFS] = None, values: Optional[dict] = None, **more_values) -> str:
     """Create ``dataset-<name>`` the way the kaos-lake UI does; returns the repository name.
 
@@ -344,7 +344,7 @@ def create_dataset(name: str, layout="yolo", description: str = "",
     (e.g. ``{"classes": ["cat"]}`` for ``yolo``; keyword values such as ``classes=[...]`` are added). Order:
     create the repository, commit the layout's skeleton to main (commit metadata ``kaos.template``), then set
     the labels. Fails if the repository already exists.
-    ``layout="none"`` creates an empty labelled repository.
+    ``layout="none"`` (the default) creates an empty labelled repository; a layout is always named.
     """
     from . import layouts
     refuse_shared(name, "create")

@@ -28,7 +28,7 @@ Python 3.9+. Extras: `zitadel` (reading datasets other projects share, from a pi
 
 ```bash
 kaosctl login
-kaosctl dataset create cats --classes cat,kitten          # dataset-cats, yolo layout (--layout none: any files)
+kaosctl dataset create cats --layout yolo --classes cat,kitten   # dataset-cats, yolo layout (no --layout: empty)
 kaosctl dataset push ./dataset-cats dataset-cats -m "first images"   # validates, opens a pull request
 kaosctl dataset release dataset-cats                      # after the merge: v1
 ```
