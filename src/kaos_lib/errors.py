@@ -33,6 +33,10 @@ class DatasetError(KaosLibError):
     """A dataset reference or operation is invalid (bad ref, nothing to release, ...)."""
 
 
+class EmptyDataset(DatasetError):
+    """The dataset commit holds no files (for instance a new project's ``dataset-default``)."""
+
+
 class ValidationFailed(KaosLibError):
     """A local dataset failed format validation; ``errors`` holds every problem found."""
 

@@ -16,7 +16,7 @@ import shutil
 import tempfile
 from typing import Optional
 
-from ..errors import DatasetError
+from ..errors import DatasetError, EmptyDataset
 from ..lakefs import LakeFS
 from ..transfer import download_prefixes
 
@@ -101,7 +101,7 @@ def fetch(client: LakeFS, repo: str, commit: str, prefixes, target: pathlib.Path
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=target.name + ".part-", dir=target.parent))
     try:
         if download_prefixes(client, repo, commit, prefixes, tmp, strip, keep) == 0 and empty_message:
-            raise DatasetError(empty_message)
+            raise EmptyDataset(empty_message)
         if finalize:
             finalize(tmp)
         marker = {"repo": repo, "commit": commit, "prefix": prefix, "owner": owner}

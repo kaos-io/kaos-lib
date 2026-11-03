@@ -3,7 +3,7 @@ import pytest
 
 from conftest import write_dataset
 from kaos_lib import cli, datasets
-from kaos_lib.errors import DatasetError
+from kaos_lib.errors import DatasetError, EmptyDataset
 from kaos_lib import layouts
 
 FILES = {"a.txt": b"A", "sub/b.txt": b"B", "sub/deep/c.bin": b"C", "other/d.txt": b"D"}
@@ -75,6 +75,15 @@ def test_raw_uses_staged_dir_whole_and_prefix(repo, fake, client, tmp_path, monk
 def test_raw_empty_prefix_is_a_clear_error(repo, client):
     with pytest.raises(DatasetError, match="holds no files under nothing/"):
         datasets.materialize(repo, client=client, prefix="nothing")
+
+
+def test_an_empty_repository_raises_empty_dataset_a_dataset_error(fake, client):
+    # A new project's dataset-default has only its initial commit. EmptyDataset lets a step tell
+    # "no data yet" apart from every other dataset failure; it stays a DatasetError for old callers.
+    fake.add_repo("dataset-default", files={})
+    with pytest.raises(EmptyDataset, match="holds no files") as err:
+        datasets.materialize(datasets.DatasetRef.parse("dataset-default@latest"), client=client)
+    assert isinstance(err.value, DatasetError)
 
 
 def test_raw_refuses_foreign_nonempty_dest(repo, client, tmp_path):
