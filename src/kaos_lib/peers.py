@@ -59,7 +59,7 @@ def load(client) -> Peers:
         return _CACHE[client.base_url]
     resp = client.session.get(client.base_url + PEERS_PATH, timeout=TIMEOUT, allow_redirects=False)
     if resp.status_code in (301, 302, 303, 307, 308, 401):
-        raise AuthError(f"lakeFS rejected the credential (peers of {client.base_url}). Run `kaos-cli login` again.")
+        raise AuthError(f"lakeFS rejected the credential (peers of {client.base_url}). Run `kaosctl login` again.")
     if resp.status_code == 403:
         raise AuthError(f"you are not allowed to list the peers of {client.base_url}.")
     if resp.status_code in (404, 405, 501):

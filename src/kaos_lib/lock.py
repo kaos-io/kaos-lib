@@ -10,7 +10,7 @@ of a step, ``write()`` puts the lock on the MLflow run:
   with the one already on the run, so several steps logging to one run add up.
 
 ``load(run_id)`` reads a lock back. ``DataLock.replay(lock)`` makes later resolves of the locked repositories return
-the locked commits; ``kaos-cli run --lock <run-id> -- <command>`` hands the lock to a child process as
+the locked commits; ``kaosctl run --lock <run-id> -- <command>`` hands the lock to a child process as
 ``$KAOS_LIB_LOCK`` (the JSON), which this module honours the same way.
 
 Replay matches a resolve on (owner, repo, ref) first, then on (owner, repo) when the lock holds a single commit for
