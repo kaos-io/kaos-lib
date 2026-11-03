@@ -9,9 +9,9 @@ labels next to it under `labels/<split>/`, and a `classes.yaml` naming the class
 
 ## 1. Write the layout
 
+Install kaos-lib first ([Install](install.md) has the command for the newest release), then:
+
 ```bash
-pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/ \
-    --extra-index-url https://pypi.org/simple/ "kaos-lib==0.4.0"
 kaosctl layout init ./sounds-layout --name sounds
 ```
 
@@ -83,7 +83,7 @@ What the pieces mean:
   `type`, `required`, `properties`, `additionalProperties`, `items`, `enum`, `minItems`/`maxItems`,
   `minProperties`/`maxProperties`, `minimum`/`maximum`, `minLength`/`maxLength`, `pattern`).
 
-The whole spec is [`layout.schema.json`](../src/kaos_lib/layouts/shared/layout.schema.json). kaos-lake reads the
+The whole spec is [`layout.schema.json`](https://github.com/kaos-io/kaos-lib/blob/main/src/kaos_lib/layouts/shared/layout.schema.json). kaos-lake reads the
 same schema and passes the same test fixtures, so a layout means the same thing in the CLI and in the web UI.
 
 Check a folder against it before anything else:
@@ -175,7 +175,7 @@ Hooks run only in kaos-lib, where your package is installed: `layout validate`, 
 `materialize`. kaos-lake never runs code from a layout; it checks the declarative rules only and says so. A project
 layout whose hook package is not installed still works, with a warning that the hook's checks were skipped.
 
-The built-in `yolo` layout is made the same way: [its layout.yaml](../src/kaos_lib/layouts/shared/builtin/yolo/layout.yaml)
+The built-in `yolo` layout is made the same way: [its layout.yaml](https://github.com/kaos-io/kaos-lib/blob/main/src/kaos_lib/layouts/shared/builtin/yolo/layout.yaml)
 declares the folders, the image to label pairing, the label line format and the `data.yaml` schema, and
-[its hook](../src/kaos_lib/layouts/yolo.py) adds the class-id, value-count and coordinate checks and points
+[its hook](https://github.com/kaos-io/kaos-lib/blob/main/src/kaos_lib/layouts/yolo.py) adds the class-id, value-count and coordinate checks and points
 `data.yaml`'s `path:` at the downloaded copy.

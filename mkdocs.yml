@@ -1,0 +1,98 @@
+site_name: kaos-lib
+site_description: The KAOS platform library and the kaosctl command — datasets, run outputs, MLflow, the run context and the data lock
+site_author: Novelcore
+site_url: https://kaos-io.github.io/kaos-lib/
+
+repo_name: kaos-io/kaos-lib
+repo_url: https://github.com/kaos-io/kaos-lib
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+exclude_docs: |
+  hooks.py
+  requirements.txt
+  generated/built.md
+  generated/install.md
+hooks:
+  - docs/hooks.py
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            show_root_heading: true
+            heading_level: 2
+            members_order: source
+            docstring_style: google
+            show_if_no_docstring: false
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.details
+  - pymdownx.snippets:
+      base_path: [docs, "."]
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Quickstart: quickstart.md
+  - Guides:
+      - Datasets: datasets.md
+      - Outputs: outputs.md
+      - MLflow: mlflow.md
+      - Run context: runtime.md
+      - Data lock: data-lock.md
+      - Datasets shared with your project: shared-datasets.md
+      - Make your own dataset layout: make-your-own-layout.md
+  - Reference:
+      - CLI: generated/cli.md
+      - Python API: api.md
+      - Credentials: credentials.md
+      - Support window: support-window.md
+      - Formerly kubecore: formerly-kubecore.md
+      - Develop: develop.md
+  - Changelog: changelog.md

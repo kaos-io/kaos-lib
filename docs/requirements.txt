@@ -1,0 +1,5 @@
+# Dependencies to build the documentation site (mkdocs build --strict), pinned so the build stays stable.
+# The site is built by the platform's CI (Argo Workflows), never by GitHub Actions.
+mkdocs-material>=9.5,<10
+mkdocstrings[python]>=0.26,<1
+pymdown-extensions>=10.14,<10.17   # 10.17+ breaks mkdocstrings' highlighter (Highlight() needs md)

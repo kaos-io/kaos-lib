@@ -10,6 +10,9 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Added
+- The documentation site (`mkdocs.yml`, `docs/`), <https://kaos-io.github.io/kaos-lib/>: guides for datasets, outputs,
+  MLflow, the run context, the data lock and layouts, an API reference from the docstrings, and pages generated on
+  every build by `docs_gen.py` (the CLI reference from the parser, the version, each channel's install command).
 - `kaos_lib.errors.EmptyDataset`, a `DatasetError`: `materialize` raises it when the commit holds no files
   (a new project's `dataset-default`), so a step can tell "no data yet" from other dataset failures.
 - `kaos_lib.mlflow`: `mlflow(tracking_uri=None, token=None)` configures the `mlflow` module and returns an
@@ -39,7 +42,7 @@ user-definable layouts.
   `dataset push` validates with the layout of the repository's label.
 - The schema, the built-in layouts and the test fixtures (`tests/layout_fixtures`) are shared byte for byte with
   kaos-lake, pinned by `SHA256SUMS`; both implementations pass the same fixtures.
-- Guide: [Make your own dataset layout](docs/make-your-own-layout.md).
+- Guide: [Make your own dataset layout](https://kaos-io.github.io/kaos-lib/make-your-own-layout/).
 
 ### Changed
 - The command is `kaosctl` (it was `kaos-cli`, which keeps working as a hidden alias for one release, as does
