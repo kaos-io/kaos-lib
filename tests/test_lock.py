@@ -248,7 +248,7 @@ def test_malformed_lock_is_reported_by_the_cli_in_one_line(lakes, monkeypatch, c
     assert err.startswith("ERROR: $KAOS_LIB_LOCK is not JSON") and "Traceback" not in err
 
 
-# ------------------------------------------------------------------ kaos-cli run --lock
+# ------------------------------------------------------------------ kaosctl run --lock
 @pytest.fixture
 def mlflow_with_lock(monkeypatch):
     client = FakeMlflowClient()

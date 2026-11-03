@@ -1,4 +1,4 @@
-"""0.3.0 rename: the ``kubecore`` import shim, the ``kubecore`` command alias and ``kaos-cli --version``."""
+"""0.3.0 rename: the ``kubecore`` import shim, the ``kubecore`` command alias and ``kaosctl --version``."""
 import json
 import os
 import pathlib
@@ -59,15 +59,15 @@ def test_kaos_cli_version(capsys):
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--version"])
     assert exit_.value.code == 0
-    assert capsys.readouterr().out.splitlines()[0].startswith(f"kaos-cli {kaos_lib.__version__} (")
+    assert capsys.readouterr().out.splitlines()[0].startswith(f"kaosctl {kaos_lib.__version__} (")
 
 
 def test_kubecore_command_alias_notes_the_rename_and_runs_kaos_cli(capsys, tmp_path):
     with pytest.raises(SystemExit):
         cli.kubecore_alias(["--version"])
     out, err = capsys.readouterr()
-    assert out.splitlines()[0].startswith(f"kaos-cli {kaos_lib.__version__} (")
-    assert "`kubecore` is now `kaos-cli`" in err
+    assert out.splitlines()[0].startswith(f"kaosctl {kaos_lib.__version__} (")
+    assert "`kubecore` is now `kaosctl`" in err
     argv = ["dataset", "validate", str(tmp_path), "--layout", "yolo"]
     assert cli.kubecore_alias(argv) == cli.main(argv)
 
@@ -76,5 +76,25 @@ def test_console_scripts_and_version_match_pyproject():
     pyproject = (ROOT / "pyproject.toml").read_text()
     assert re.search(r'^name = "kaos-lib"$', pyproject, re.M)
     assert re.search(r'^version = "(.+)"$', pyproject, re.M).group(1) == kaos_lib.__version__
-    assert re.search(r'^kaos-cli = "kaos_lib\.cli:main"$', pyproject, re.M)
+    assert re.search(r'^kaosctl = "kaos_lib\.cli:main"$', pyproject, re.M)
     assert re.search(r'^kubecore = "kaos_lib\.cli:kubecore_alias"', pyproject, re.M)
+
+
+def test_kaos_cli_is_a_hidden_alias_of_kaosctl(capsys, tmp_path):
+    with pytest.raises(SystemExit):
+        cli.kaos_cli_alias(["--version"])
+    out, err = capsys.readouterr()
+    assert out.splitlines()[0].startswith(f"kaosctl {kaos_lib.__version__} (")
+    assert "`kaos-cli` is now `kaosctl`" in err
+    assert cli.kaos_cli_alias(["dataset", "validate", str(tmp_path)]) == cli.main(["dataset", "validate", str(tmp_path)])
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    assert "kaos-cli" not in capsys.readouterr().out               # hidden: not in the help
+
+
+def test_the_three_commands_are_declared():
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    assert re.search(r'^kaosctl = "kaos_lib\.cli:main"$', pyproject, re.M)
+    assert re.search(r'^kaos-cli = "kaos_lib\.cli:kaos_cli_alias"', pyproject, re.M)
+    assert re.search(r'^kubecore = "kaos_lib\.cli:kubecore_alias"', pyproject, re.M)
+

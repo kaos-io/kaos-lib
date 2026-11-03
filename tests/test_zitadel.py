@@ -176,7 +176,7 @@ def test_chain_never_uses_the_access_key(monkeypatch):
     with pytest.raises(AuthError) as err:
         credentials.resolve_peer(OWN)
     assert "LAKEFS_ACCESS_KEY is never sent to another project" in str(err.value)
-    assert "kaos-cli login" in str(err.value)
+    assert "kaosctl login" in str(err.value)
 
 
 def test_chain_access_key_does_not_shadow_the_other_steps(zitadel_env, monkeypatch):

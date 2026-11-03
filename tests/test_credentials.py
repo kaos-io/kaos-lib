@@ -24,7 +24,7 @@ def test_chain_prefers_access_key_over_bearer_over_session(monkeypatch):
 
 def test_access_key_needs_both_halves(monkeypatch):
     monkeypatch.setenv("LAKEFS_ACCESS_KEY", "AK")
-    with pytest.raises(AuthError, match="kaos-cli login"):
+    with pytest.raises(AuthError, match="kaosctl login"):
         credentials.resolve(URL)
 
 

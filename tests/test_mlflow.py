@@ -28,7 +28,7 @@ def session_token(**claims):
 
 @pytest.fixture
 def laptop(monkeypatch):
-    """A laptop inside an app clone: lakeFS URL and login settings known, ``kaos-cli login`` done."""
+    """A laptop inside an app clone: lakeFS URL and login settings known, ``kaosctl login`` done."""
     monkeypatch.setenv("LAKEFS_ENDPOINT", LAKEFS)
     monkeypatch.setenv("KUBECORE_ML_OIDC_PROJECT_ID", "321")
 
@@ -70,7 +70,7 @@ def test_laptop_session_is_the_last_link(laptop):
 
 
 def test_empty_chain_says_what_to_do():
-    with pytest.raises(AuthError, match="no MLflow credential.*MLFLOW_TRACKING_TOKEN.*kaos-cli login"):
+    with pytest.raises(AuthError, match="no MLflow credential.*MLFLOW_TRACKING_TOKEN.*kaosctl login"):
         kmlflow.token()
 
 
@@ -93,7 +93,7 @@ def test_machine_key_without_the_project_id_is_refused(zitadel_env, monkeypatch)
 
 def test_session_without_the_org_project_audience_is_refused(laptop):
     laptop(session_token(aud="console-project"))
-    with pytest.raises(AuthError, match=r"lacks the organisation project audience \(321\).*kaos-cli login"):
+    with pytest.raises(AuthError, match=r"lacks the organisation project audience \(321\).*kaosctl login"):
         kmlflow.token()
 
 

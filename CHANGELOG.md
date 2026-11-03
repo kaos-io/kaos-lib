@@ -15,7 +15,7 @@ user-definable layouts.
 - `kaos_lib.mlflow`: `mlflow(tracking_uri=None, token=None)` configures the `mlflow` module and returns an
   `MlflowClient`; `token()`. One credential chain: explicit token or `$MLFLOW_TRACKING_TOKEN`, the step's machine
   key (`ZITADEL_MACHINE_KEY_FILE`, `ZITADEL_DOMAIN`, `ZITADEL_MLFLOW_PROJECT_ID`; minted with the organisation
-  project's audience scope and refreshed before expiry), then the `kaos-cli login` session (checked for expiry and
+  project's audience scope and refreshed before expiry), then the `kaosctl login` session (checked for expiry and
   for the organisation project's audience). New extra `kaos-lib[mlflow]`; `mlflow` is imported lazily.
 - The MLflow request-auth provider `zitadel` (entry point `mlflow.request_auth_provider`), registered by
   kaos-lib: `MLFLOW_TRACKING_AUTH=zitadel` works without the `mlflow_zitadel_auth.py` file templates copied
@@ -26,7 +26,7 @@ user-definable layouts.
 - `kaos_lib.lock`: the data lock. `datasets.resolve` (and so `materialize`) records every read; `record`,
   `write` (MLflow tags `kaos_lib.data.<repo>.commit` / `.owner` and the artifact `data.lock.json`, merged with
   the run's), `load`, `DataLock.replay`, and `$KAOS_LIB_LOCK`. `LockError` for malformed or missing locks.
-- `kaos-cli run --lock <mlflow-run-id> -- <command>`: runs the command with the lock in `$KAOS_LIB_LOCK`.
+- `kaosctl run --lock <mlflow-run-id> -- <command>`: runs the command with the lock in `$KAOS_LIB_LOCK`.
 - `zitadel.grant` (the whole token response, with `expires_in`) and `zitadel.env_settings`.
 - `kaos_lib.layouts`: a layout is a `layout.yaml` (spec `layouts/shared/layout.schema.json`) with parameters, a
   starter skeleton (`{{placeholders}}`), declarative rules (required and allowed patterns, extensions, pairs, line
@@ -35,13 +35,15 @@ user-definable layouts.
 - Sources, in lookup order: built-in (`yolo`, `raw`), installed packages (entry point group `kaos_lib.layouts`),
   the project's registry in kaos-lake (`GET /kaos/v1/dataset-templates`, from the project's `layouts`
   repository); a path is read as is.
-- `kaos-cli layout list|show|init|validate|publish`; `dataset create --layout <name|path> --param key=value`;
+- `kaosctl layout list|show|init|validate|publish`; `dataset create --layout <name|path> --param key=value`;
   `dataset push` validates with the layout of the repository's label.
 - The schema, the built-in layouts and the test fixtures (`tests/layout_fixtures`) are shared byte for byte with
   kaos-lake, pinned by `SHA256SUMS`; both implementations pass the same fixtures.
 - Guide: [Make your own dataset layout](docs/make-your-own-layout.md).
 
 ### Changed
+- The command is `kaosctl` (it was `kaos-cli`, which keeps working as a hidden alias for one release, as does
+  `kubecore`).
 - The `yolo` format is the built-in `yolo` layout: a declarative `layout.yaml` plus a small hook
   (`kaos_lib.layouts.yolo`: class ids, value counts, coordinates, the `data.yaml` path rewrite). Some problems are
   worded differently (`data.yaml: no file matches (required)`, `images/x.jpg has no labels/x.txt`).
@@ -61,7 +63,7 @@ The package is renamed and moves to its own repository, `kaos-io/kaos-lib` (it w
 
 ### Changed
 - Distribution `kubecore` → `kaos-lib` (extra `kaos-lib[zitadel]`); import `kubecore` → `kaos_lib`; command
-  `kubecore` → `kaos-cli`. Published by the platform's CI to public Python repositories (Artifact Registry), not
+  `kubecore` → `kaosctl`. Published by the platform's CI to public Python repositories (Artifact Registry), not
   PyPI: `pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/
   --extra-index-url https://pypi.org/simple/ "kaos-lib[zitadel]==0.3.0"`.
 - `KubecoreError` → `KaosLibError`.
@@ -70,18 +72,18 @@ The package is renamed and moves to its own repository, `kaos-io/kaos-lib` (it w
 ### Added
 - `release.json` (packaged as `kaos_lib/_release.json`, published per release in the public release bucket) and
   `kaos_lib.support.check`: verdicts current / behind / deprecated / unsupported. Pipeline steps check at import
-  when `$KAOS_LIB_SUPPORT` is set; `kaos-cli` warns on reads and refuses writes when unsupported.
+  when `$KAOS_LIB_SUPPORT` is set; `kaosctl` warns on reads and refuses writes when unsupported.
 - Release channels: prerelease `X.Y.ZrcN` (repository `kaos-lib-rc`, every merge to `main`) and stable `X.Y.Z`
   (repository `kaos-lib`, promoted by the platform's release train from a passed rc, checked to hold the rc's
-  code byte for byte). `kaos-cli --version` shows the channel and the targeted platform's recommendation;
-  `kaos-cli upgrade` installs that recommendation (kaos-lib over https only), else the newest release of the
+  code byte for byte). `kaosctl --version` shows the channel and the targeted platform's recommendation;
+  `kaosctl upgrade` installs that recommendation (kaos-lib over https only), else the newest release of the
   install's channel from the public `release.json`.
 - Apache-2.0 license, project URLs, this changelog.
 
 ### Deprecated (removed in the next release)
 - The `kubecore` import shim: `import kubecore` / `from kubecore import datasets` still work (the same
   `kaos_lib` modules) and emit one `DeprecationWarning`.
-- The `kubecore` command: runs `kaos-cli` after a note on stderr.
+- The `kubecore` command: runs `kaosctl` after a note on stderr.
 - The `KubecoreError` alias.
 
 ### Unchanged on purpose
