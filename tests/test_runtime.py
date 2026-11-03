@@ -83,3 +83,29 @@ def test_reads_os_environ_by_default(monkeypatch):
 def test_context_is_frozen():
     with pytest.raises(dataclasses.FrozenInstanceError):
         runtime.context({}).run_id = "x"
+
+
+# ── PRD-HPC-1609: a step's slot on a shared Slurm node ──────────────────────────────────────
+
+def test_no_slot_outside_a_shared_node():
+    assert runtime.context({}).slot is None
+    assert runtime.context({"KUBECORE_SLOT_SHARED": "1"}).slot is None, "no share without numbers"
+
+
+def test_the_slot_the_runner_set():
+    env = {"KUBECORE_SLOT_GPUS": "1", "KUBECORE_SLOT_CPUS": "32", "KUBECORE_SLOT_MEM_GIB": "120",
+           "KUBECORE_SLOT_SHARED": "1"}
+    assert runtime.context(env).slot == runtime.Slot(gpus=1, cpus=32, mem_gib=120, shared=True)
+
+
+def test_a_malformed_slot_value_is_absent_not_an_error():
+    slot = runtime.context({"KUBECORE_SLOT_CPUS": "lots", "KUBECORE_SLOT_GPUS": "1"}).slot
+    assert slot.cpus is None and slot.gpus == 1
+
+
+def test_usable_cpus_prefers_the_slot_then_the_binding():
+    assert runtime.usable_cpus({"KUBECORE_SLOT_CPUS": "32"}) == 32
+    import os
+    bound = len(os.sched_getaffinity(0))
+    assert runtime.usable_cpus({}) == bound, "the scheduler's CPU binding, never the whole machine"
+    assert runtime.usable_cpus({}) >= 1

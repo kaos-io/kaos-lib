@@ -9,6 +9,11 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,
 user-definable layouts.
 
+### Added
+- `kaos_lib.runtime`: `context().slot`, a step's share of a shared Slurm node (`Slot(gpus, cpus, mem_gib,
+  shared)` from `KUBECORE_SLOT_*`, PRD-HPC-1609), and `usable_cpus()`: the cores to size worker pools by (the
+  slot's, else the process's CPU binding, else the machine's).
+
 ### Changed
 - The docs and docstrings say Slurm, not MeluXina: Slurm is the kind of machine, MeluXina is today's provider.
   No API or environment variable changes.
