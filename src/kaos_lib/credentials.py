@@ -2,7 +2,7 @@
 
 Order (first hit wins):
   1. LAKEFS_ACCESS_KEY + LAKEFS_SECRET_KEY   an app's key pair (pods, CI) -> Basic auth
-  2. LAKEFS_BEARER_TOKEN                     a bearer token (MeluXina jobs)
+  2. LAKEFS_BEARER_TOKEN                     a bearer token (Slurm jobs)
   3. the cached browser-login session       a person's Zitadel token (laptop)
 
 The session cache is ~/.config/kubecore-ml/lakefs-session.json (0600), the file

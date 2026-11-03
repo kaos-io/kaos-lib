@@ -46,7 +46,7 @@ def test_what_the_enhancer_injects_today():
     assert (ctx.project, ctx.step, ctx.dataset_ref, ctx.dataset_commit, ctx.support) == (None,) * 5
 
 
-def test_meluxina_job_names():
+def test_slurm_job_names():
     ctx = runtime.context({"STEP_NAME": "model-training", "DATASET_REPO": "dataset-default", "DATASET_REF": "v3",
                            "DATASET_COMMIT": "c9", "OUTPUTS_REPO": "outputs-yolo", "LAKEFS_URL": "https://lakefs-b"})
     assert (ctx.step, ctx.dataset_ref, ctx.dataset_commit) == ("model-training", "dataset-default@v3", "c9")

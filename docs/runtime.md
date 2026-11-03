@@ -22,4 +22,4 @@ runtime.run_id()           # $KUBECORE_RUN_ID, or None
 
 Nothing is hardcoded: when the platform changes what it injects, the names above keep working. Today the enhancer
 injects the run id, workflow name, outputs repository and endpoints into every step; `KUBECORE_APP`,
-`KUBECORE_PROJECT` and `KUBECORE_STEP` are not injected yet (on MeluXina the step comes from `STEP_NAME`).
+`KUBECORE_PROJECT` and `KUBECORE_STEP` are not injected yet (in a Slurm job the step comes from `STEP_NAME`).

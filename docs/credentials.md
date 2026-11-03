@@ -3,7 +3,7 @@
 One chain, and no secrets in the package.
 
 1. `LAKEFS_ACCESS_KEY` + `LAKEFS_SECRET_KEY` (an app's key pair), endpoint `LAKEFS_ENDPOINT`
-2. `LAKEFS_BEARER_TOKEN` (MeluXina jobs)
+2. `LAKEFS_BEARER_TOKEN` (Slurm jobs)
 3. the browser login session of `kaosctl login` (a person's Zitadel token), cached in
    `~/.config/kubecore-ml/lakefs-session.json`
 
