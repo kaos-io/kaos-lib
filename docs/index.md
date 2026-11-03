@@ -12,6 +12,9 @@ work with the platform's data:
 
 --8<-- "generated/built.md"
 
+This site lives at <https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html> and is republished
+with every prerelease, so it always describes the newest published kaos-lib.
+
 ## Where to start
 
 | You want to… | Read |
