@@ -3,13 +3,13 @@
 The KAOS platform library and the `kaosctl` command: datasets (layouts, versions), run outputs, MLflow, the run
 context and the data lock, over kaos-lake (lakeFS). PRD novelcore/kaos#1147 and #1283.
 
-**Documentation: <https://kaos-io.github.io/kaos-lib/>** (sources in [`docs/`](docs/)): guides, the current install
+**Documentation: <https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html>** (sources in [`docs/`](docs/)): guides, the current install
 command of each channel and a CLI reference generated from the code.
 
 ## Install
 
 kaos-lib is published to public Python repositories (Google Artifact Registry), not PyPI. Until the first stable
-release, install the newest prerelease; [Install](https://kaos-io.github.io/kaos-lib/install/) always shows its
+release, install the newest prerelease; [Install](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/install.html) always shows its
 exact version:
 
 ```bash
@@ -44,7 +44,7 @@ with outputs.run("myapp", "exp1", "run-7") as r:                            # ou
 
 The command is `kaosctl`; `kaos-cli` is a hidden alias for one release (it prints a notice) and `kubecore` a
 deprecated one. Up to 0.2 this was the `kubecore` package:
-[Formerly kubecore](https://kaos-io.github.io/kaos-lib/formerly-kubecore/).
+[Formerly kubecore](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/formerly-kubecore.html).
 
 ## Develop
 
