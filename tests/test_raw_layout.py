@@ -213,3 +213,36 @@ def test_cli_push_with_yolo_label_validates(fake, use_fake, capsys, tmp_path):
     (junk / "notes.txt").write_text("hi")
     assert cli.main(["dataset", "push", str(junk), "pics", "-m", "files"]) == 2
     assert "data.yaml: no file matches (required)" in capsys.readouterr().err
+
+
+def test_a_first_push_that_loses_the_create_race_pushes_into_the_winners_repository(fake, client, tmp_path, monkeypatch):
+    # Two people push into the same new dataset at once: both see no repository, the other one
+    # creates it first, and this create answers 409. The push must carry on into that repository.
+    src = tmp_path / "data"
+    src.mkdir()
+    (src / "a.txt").write_text("A")
+    real = client.repository
+    seen = []
+
+    def racing(repo):
+        if not seen:                        # the check before the other push's create landed
+            seen.append(repo)
+            fake.add_repo(repo, ns="gs://b/x/winner")
+            return None
+        return real(repo)
+
+    monkeypatch.setattr(client, "repository", racing)
+    result = datasets.publish_tree(src, "dataset-race", "first images", client=client)
+    assert result.created is False and result.pull_id
+    assert fake.repos["dataset-race"]["ns"] == "gs://b/x/winner", "the winner's repository, not a second one"
+
+
+def test_a_409_for_a_repository_that_does_not_exist_is_raised(fake, client, monkeypatch):
+    from kaos_lib.errors import LakeFSError
+
+    def taken(*a, **kw):
+        raise LakeFSError("create repository dataset-x failed: HTTP 409 conflict", 409)
+
+    monkeypatch.setattr(client, "create_repository", taken)
+    with pytest.raises(LakeFSError, match="409"):
+        datasets.ensure_repository(client, "dataset-x", {})

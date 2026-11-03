@@ -306,10 +306,20 @@ def _storage_namespace(c: LakeFS, repo: str) -> str:
 
 
 def ensure_repository(c: LakeFS, repo: str, labels: dict) -> bool:
-    """Create ``repo`` and set ``labels`` unless it exists; returns True when it was created."""
+    """Create ``repo`` and set ``labels`` unless it exists; returns True when it was created.
+
+    Two first pushes into the same new dataset race: both find no repository, one creates it and
+    the other's create answers 409. That one then pushes into the repository the winner made (the
+    winner sets the labels); a 409 for a repository that still does not exist is raised.
+    """
     if c.repository(repo):
         return False
-    c.create_repository(repo, _storage_namespace(c, repo), MAIN)
+    try:
+        c.create_repository(repo, _storage_namespace(c, repo), MAIN)
+    except LakeFSError as exc:
+        if exc.status == 409 and c.repository(repo):
+            return False
+        raise
     c.set_metadata(repo, labels)
     return True
 

@@ -136,6 +136,8 @@ class FakeLakeFS(BaseAdapter):
             if m == "GET":
                 return 200, {"results": [{"id": n, "storage_namespace": r["ns"]} for n, r in sorted(self.repos.items())],
                              "pagination": {"has_more": False}}
+            if body["name"] in self.repos:                          # lakeFS: the name is taken
+                return 409, {"message": "error creating repository: repository already exists"}
             if body["storage_namespace"] in self.used_ns:        # lakeFS keeps a deleted repo's storage and refuses it
                 return 400, {"message": "failed to create repository: storage namespace already in use"}
             self.add_repo(body["name"], body["storage_namespace"])
