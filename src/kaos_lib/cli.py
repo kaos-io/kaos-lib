@@ -114,6 +114,9 @@ def _repo(c: LakeFS, name: str) -> str:
 
 def cmd_create(args) -> int:
     datasets.refuse_shared(args.name, "create")
+    if args.layout == datasets.NO_TEMPLATE and (args.classes or args.param):
+        raise datasets.DatasetError("--classes and --param fill a layout's parameters, and no layout is named "
+                                    "(the default is none): add --layout yolo, or another from `kaosctl layout list`")
     c = _connect(args)
     if args.layout == datasets.NO_TEMPLATE:
         repo = datasets.create_dataset(args.name, datasets.NO_TEMPLATE, args.description or "", c)
@@ -457,8 +460,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add(dsub, "create", cmd_create, "create a new dataset repository from a layout")
     sp.add_argument("name", help="dataset name (the repository becomes dataset-<name>)")
-    sp.add_argument("--layout", "--template", dest="layout", default="yolo",
-                    help=f"{layout_help}; none for an empty repository (default yolo)")
+    sp.add_argument("--layout", "--template", dest="layout", default=datasets.NO_TEMPLATE,
+                    help=f"{layout_help}; none for an empty repository (default none)")
     sp.add_argument("--param", action="append", metavar="KEY=VALUE",
                     help="a layout parameter; list items comma-separated (repeat for more)")
     sp.add_argument("--classes", help="shortcut for --param classes=a,b,c (the yolo layout)")

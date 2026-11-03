@@ -60,8 +60,9 @@ kaosctl dataset pull [<owner>/]<repo>@<version> [dest]
 kaosctl dataset list [--shared]
 ```
 
-`create` and `validate` use the `yolo` layout unless you name another; `--layout none` makes an empty dataset that
-kaos-lake lists once its first commit lands. Every command prints the next step and the lakeFS link. Exit codes:
+`create` makes an empty dataset unless you name a layout (`--layout yolo`, or `--layout none` to say so); kaos-lake
+lists an empty dataset once its first commit lands. `--classes` and `--param` need a named layout. `validate` uses the
+`yolo` layout unless you name another. Every command prints the next step and the lakeFS link. Exit codes:
 `0` ok, `1` a user error (one `ERROR:` line), `2` an invalid dataset.
 
 ## Rights each call needs

@@ -84,6 +84,8 @@ def test_validate_ok_and_failing(capsys, dataset_dir, tmp_path):
     (["dataset", "create", "cats", "--layout", "yolo"], "Class names needs at least one item"),
     (["dataset", "create", "cats", "--layout", "raw", "--classes", "a"], "layout raw has no parameter 'classes'"),
     (["dataset", "create", "cats", "--layout", "coco"], "unknown layout 'coco'"),
+    (["dataset", "create", "cats", "--classes", "a"], "add --layout yolo"),
+    (["dataset", "create", "cats", "--param", "classes=a"], "no layout is named (the default is none)"),
     (["dataset", "pull", "my_repo@main"], "not a valid lakeFS repository name"),
     (["dataset", "create", "default", "--layout", "yolo", "--classes", "a"], "already exists"),
     (["dataset", "release", "dataset-ghost"], "does not exist"),
@@ -113,3 +115,9 @@ def test_push_no_validate_warns_and_uploads(capsys, tmp_path):
     code, out, err = run(capsys, "dataset", "push", str(root), "dataset-default", "-m", "x", "--no-validate")
     assert code == 0 and "WARNING" in err and "not validated" in err
     assert "/pulls/1" in out
+
+
+def test_create_without_a_layout_makes_an_empty_dataset(capsys, fake):
+    """The owner's default (2026-11-03): no layout unless one is named, `--layout yolo` included."""
+    code, out, _ = run(capsys, "dataset", "create", "notes")
+    assert code == 0 and "Created dataset-notes: empty, no layout" in out

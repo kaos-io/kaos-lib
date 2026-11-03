@@ -14,15 +14,15 @@ Your browser opens once and asks you to sign in. The session is cached, and ever
 ## 2. Create a dataset
 
 ```bash
-kaosctl dataset create cats --classes cat,kitten
+kaosctl dataset create cats --layout yolo --classes cat,kitten
 ```
 
 This makes the lakeFS repository `dataset-cats` with the starter files of the `yolo` layout: `data.yaml`,
 `images/` and `labels/`, split into `train`, `val` and `test`. It prints the link to it.
 
 !!! note "Not a YOLO dataset?"
-    `kaosctl dataset create cats --layout none` makes an empty `dataset-cats` that accepts any files (the `raw`
-    layout). You can also [make your own layout](make-your-own-layout.md).
+    With no `--layout` (or `--layout none`), `kaosctl dataset create cats` makes an empty `dataset-cats` that
+    accepts any files. Pick a layout with `kaosctl layout list`, or [make your own](make-your-own-layout.md).
 
 ## 3. Put your files in
 
