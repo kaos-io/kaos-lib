@@ -10,7 +10,7 @@ import mlflow as mlf       # the mlflow module is configured too: mlf.start_run(
 `mlflow(tracking_uri=None, token=None)` sets the tracking URI and `MLFLOW_TRACKING_AUTH=zitadel`, and asks the chain
 once, so a missing credential fails before the step does any work. The bearer is the first of:
 
-1. an explicit token, `mlflow(token=...)`, else `$MLFLOW_TRACKING_TOKEN` (MeluXina jobs get one);
+1. an explicit token, `mlflow(token=...)`, else `$MLFLOW_TRACKING_TOKEN` (Slurm jobs get one);
 2. the step's machine key: `ZITADEL_MACHINE_KEY_FILE`, `ZITADEL_DOMAIN` and `ZITADEL_MLFLOW_PROJECT_ID`, minted
    for the organisation's Zitadel project and minted again two minutes before it expires;
 3. your `kaosctl login` session. Inside your app clone it carries the organisation project's audience; an expired

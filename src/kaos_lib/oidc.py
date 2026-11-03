@@ -27,7 +27,7 @@ Why not the two earlier designs (kubecore-operator #1347):
 
 The resulting token is per-user, short-lived, audience-scoped to the project
 and revocable in Zitadel. oauth2-proxy accepts it as a bearer
-(``--skip-jwt-bearer-tokens``) exactly as it does for the MeluXina HPC jobs.
+(``--skip-jwt-bearer-tokens``) exactly as it does for Slurm jobs.
 """
 from __future__ import annotations
 

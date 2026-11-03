@@ -7,7 +7,7 @@ provider ships with kaos-lib (entry point ``mlflow.request_auth_provider``: ``zi
 
 The bearer comes from the first link of the chain that has one:
 
-  1. an explicit token: ``mlflow(token=...)``, else ``$MLFLOW_TRACKING_TOKEN`` (MeluXina jobs get one);
+  1. an explicit token: ``mlflow(token=...)``, else ``$MLFLOW_TRACKING_TOKEN`` (Slurm jobs get one);
   2. the in-cluster machine key: ``ZITADEL_MACHINE_KEY_FILE`` + ``ZITADEL_DOMAIN`` +
      ``ZITADEL_MLFLOW_PROJECT_ID``, minted with the org project's audience scope
      (``urn:zitadel:iam:org:project:id:<id>:aud``) and minted again ``REFRESH_LEEWAY`` seconds before it

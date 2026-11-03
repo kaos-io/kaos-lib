@@ -9,6 +9,10 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,
 user-definable layouts.
 
+### Changed
+- The docs and docstrings say Slurm, not MeluXina: Slurm is the kind of machine, MeluXina is today's provider.
+  No API or environment variable changes.
+
 ### Added
 - The documentation site (`mkdocs.yml`, `docs/`), <https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html>,
   republished with every rc: guides for datasets, outputs, MLflow, the run context, the data lock and layouts, an API

@@ -11,13 +11,13 @@ run_id             KUBECORE_RUN_ID                                 the enhancer,
 workflow           KUBECORE_WORKFLOW_NAME                          the enhancer, every step (names the MLflow run)
 app                KUBECORE_APP, else derived from outputs_repo    outputs_repo ``outputs-<app>``
 project            KUBECORE_PROJECT                                not injected yet
-step               KUBECORE_STEP, STEP_NAME                        STEP_NAME: MeluXina submit pod and job
+step               KUBECORE_STEP, STEP_NAME                        STEP_NAME: Slurm submit pod and job
 outputs_repo       OUTPUTS_REPO, CHECKPOINT_BUCKET                 CHECKPOINT_BUCKET every step; OUTPUTS_REPO HPC
 lakefs_endpoint    LAKEFS_ENDPOINT, LAKEFS_URL                     the enhancer (in-cluster); public URL on HPC
 mlflow_uri         MLFLOW_TRACKING_URI                             the enhancer (in-cluster); public URL on HPC
 dataset_ref        KUBECORE_DATASET_REF, DATASET,                  steps set KUBECORE_DATASET_REF; DATASET and
-                   DATASET_REPO + "@" + DATASET_REF                DATASET_REPO/DATASET_REF on MeluXina
-dataset_commit     KUBECORE_DATASET_COMMIT, DATASET_COMMIT         steps / MeluXina job
+                   DATASET_REPO + "@" + DATASET_REF                DATASET_REPO/DATASET_REF in Slurm jobs
+dataset_commit     KUBECORE_DATASET_COMMIT, DATASET_COMMIT         steps / Slurm job
 support            verdict of kaos_lib.support.check against       the platform (``KAOS_LIB_SUPPORT``)
                    KAOS_LIB_SUPPORT
 =================  ==============================================  ==========================================
