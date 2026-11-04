@@ -12,6 +12,7 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
   `SLOT_GPUS`, `SLOT_CPUS`, `SLOT_MEM_GIB`, `SLOT_SHARED`, `STORAGE_NAMESPACE_BASE`, `ML_HOME`, `ML_LOGIN_TIMEOUT`,
   `ML_OIDC_ISSUER`, `ML_OIDC_CLIENT_ID`, `ML_OIDC_PROJECT_ID`), the app config is `.kaos/dataset-config.yaml`, and a
   pulled dataset's marker is `.kaos-dataset.json` (never uploaded). Messages and docs use these names.
+- Defaults: cache `~/.cache/kaos/datasets`, login `~/.config/kaos-ml`, temp `kaos-runs`; an existing `~/.cache/kubecore/datasets` or `~/.config/kubecore-ml` (with no new one) keeps being used, nothing is moved.
 - Nothing breaks: each `KAOS_<X>` falls back to the older `KUBECORE_<X>` (the new name wins when both are set),
   `.kubecore/dataset-config.yaml` is still found when there is no `.kaos/` one, and a copy marked
   `.kubecore-dataset.json` is still recognised and not uploaded. The older spellings are deprecated aliases.

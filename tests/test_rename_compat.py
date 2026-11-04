@@ -163,3 +163,41 @@ def test_marker_old_name_is_recognised(tmp_path):
     new.mkdir()
     (new / ".kaos-dataset.json").write_text(json.dumps(marker))
     assert local.marker_matches(new, "r", "c")
+
+
+@pytest.fixture
+def fake_home(tmp_path, monkeypatch):
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("KAOS_CACHE_DIR")
+    monkeypatch.delenv("KAOS_ML_HOME")
+    return home
+
+
+def test_default_dirs_fresh_use_kaos(fake_home):
+    assert local.cache_root() == fake_home / ".cache" / "kaos" / "datasets"
+    assert credentials.session_path() == fake_home / ".config" / "kaos-ml" / "lakefs-session.json"
+
+
+def test_default_dirs_existing_old_are_kept(fake_home):
+    (fake_home / ".cache" / "kubecore" / "datasets").mkdir(parents=True)
+    (fake_home / ".config" / "kubecore-ml").mkdir(parents=True)
+    assert local.cache_root() == fake_home / ".cache" / "kubecore" / "datasets"
+    assert credentials.session_path() == fake_home / ".config" / "kubecore-ml" / "lakefs-session.json"
+
+
+def test_default_dirs_both_exist_use_kaos(fake_home):
+    for d in (".cache/kubecore/datasets", ".cache/kaos/datasets", ".config/kubecore-ml", ".config/kaos-ml"):
+        (fake_home / d).mkdir(parents=True)
+    assert local.cache_root() == fake_home / ".cache" / "kaos" / "datasets"
+    assert credentials.session_path() == fake_home / ".config" / "kaos-ml" / "lakefs-session.json"
+
+
+def test_explicit_overrides_beat_old_dirs(fake_home, tmp_path, monkeypatch):
+    (fake_home / ".cache" / "kubecore" / "datasets").mkdir(parents=True)
+    (fake_home / ".config" / "kubecore-ml").mkdir(parents=True)
+    monkeypatch.setenv("KAOS_CACHE_DIR", str(tmp_path / "c"))
+    monkeypatch.setenv("KUBECORE_ML_HOME", str(tmp_path / "m"))
+    assert local.cache_root() == tmp_path / "c"
+    assert credentials.session_path() == tmp_path / "m" / "lakefs-session.json"

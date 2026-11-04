@@ -39,7 +39,10 @@ class Credential:
 
 def session_path() -> pathlib.Path:
     """Where the login session is cached (re-evaluated so tests/env can redirect it)."""
-    home = _env.get("ML_HOME") or pathlib.Path.home() / ".config" / "kubecore-ml"
+    home = _env.get("ML_HOME")
+    if not home:
+        new, old = pathlib.Path.home() / ".config" / "kaos-ml", pathlib.Path.home() / ".config" / "kubecore-ml"
+        home = old if old.exists() and not new.exists() else new  # an existing older login keeps being used
     return pathlib.Path(home) / "lakefs-session.json"
 
 

@@ -33,7 +33,11 @@ def _marker_path(directory: pathlib.Path) -> pathlib.Path:
 
 def cache_root() -> pathlib.Path:
     """Default home of materialized datasets (``$KAOS_CACHE_DIR``)."""
-    return pathlib.Path(_env.get("CACHE_DIR") or pathlib.Path.home() / ".cache" / "kubecore" / "datasets")
+    override = _env.get("CACHE_DIR")
+    if override:
+        return pathlib.Path(override)
+    new, old = pathlib.Path.home() / ".cache" / "kaos" / "datasets", pathlib.Path.home() / ".cache" / "kubecore" / "datasets"
+    return old if old.exists() and not new.exists() else new  # an existing older cache keeps being used
 
 
 def cache_dir(repo: str, commit: str, prefix: Optional[str] = None, owner: Optional[str] = None) -> pathlib.Path:

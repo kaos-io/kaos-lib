@@ -131,7 +131,7 @@ class RunWriter:
         objs = list(c.list_objects(self.repo, self.branch, base))
         if not objs:
             return None
-        root = pathlib.Path(dest) if dest else pathlib.Path(tempfile.gettempdir()) / "kubecore-runs" / self.repo / self.branch
+        root = pathlib.Path(dest) if dest else pathlib.Path(tempfile.gettempdir()) / "kaos-runs" / self.repo / self.branch
         if path_prefix == "" or path_prefix.endswith("/"):
             for o in objs:
                 c.download_object(self.repo, self.branch, o["path"], root / o["path"][len(self.prefix):])
