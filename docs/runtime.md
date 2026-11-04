@@ -22,9 +22,9 @@ runtime.usable_cpus()      # the cores to size worker pools by (see "A shared Sl
 | `support` | the `kaos_lib.support` verdict for `$KAOS_LIB_SUPPORT` |
 | `slot` | `KUBECORE_SLOT_GPUS`, `KUBECORE_SLOT_CPUS`, `KUBECORE_SLOT_MEM_GIB`, `KUBECORE_SLOT_SHARED` (a `Slot`, or None) |
 
-Nothing is hardcoded: when the platform changes what it injects, the names above keep working. Today the enhancer
-injects the run id, workflow name, outputs repository and endpoints into every step; `KUBECORE_APP`,
-`KUBECORE_PROJECT` and `KUBECORE_STEP` are not injected yet (in a Slurm job the step comes from `STEP_NAME`).
+Every step gets the run id, workflow name, results repository and endpoints; a value the step does not have is
+`None` (`KUBECORE_APP`, `KUBECORE_PROJECT` and `KUBECORE_STEP` are not set yet; in a Slurm job the step comes from
+`STEP_NAME`).
 
 ## A shared Slurm node
 

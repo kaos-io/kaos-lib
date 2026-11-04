@@ -1,7 +1,17 @@
 # Quickstart
 
-From nothing to a dataset version that a pipeline step reads. Run the commands inside your app folder: its
-`.kubecore/dataset-config.yaml` tells `kaosctl` where your project's lakeFS is.
+From nothing to a dataset version that a pipeline step reads. Run the commands inside your app folder: it
+tells `kaosctl` which project you work in.
+
+## 0. Install
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib-rc/simple/ \
+    --extra-index-url https://pypi.org/simple/ "kaos-lib[zitadel]==<version>"
+```
+
+[Install](install.md) shows the exact `<version>` of the newest release. `kaosctl --version` checks it.
 
 ## 1. Sign in
 
@@ -60,7 +70,7 @@ print("training on", datasets.resolve(ref), data)
 ```
 
 `materialize` downloads that commit once and caches it. In a pipeline the platform injects the credentials, so the
-same code runs unchanged in a step, on a laptop (after `kaosctl login`) and in a Slurm job (provider MeluXina).
+same code runs unchanged in a pipeline step, on a laptop (after `kaosctl login`) and in a Slurm job.
 
 ## 6. Save results
 
@@ -71,6 +81,16 @@ with outputs.run("myapp", "exp1", "run-7") as r:   # in a step: app = $CHECKPOIN
     r.save("./ckpt")                               # durable on the run's own branch, reused on a retry
     r.finish({"dataset_ref": "dataset-cats@v1"})   # one merge commit on main of outputs-myapp
 ```
+
+## 7. Use it in a pipeline
+
+Nothing changes in your code. The step already has your project's data access, a run id, the name of your results
+repository and the MLflow settings in its environment ([Run context](runtime.md)). The pipeline
+templates [hera](https://novelcore.github.io/hera-pipeline-template/) and
+[yolo](https://novelcore.github.io/yolo-pipelines-template/) call `materialize`, `outputs.run` and `mlflow()` for you:
+pick the version in the run form's `dataset` dropdown.
+
+Stuck? [Troubleshooting](troubleshooting.md) lists the real error messages.
 
 Next: [Datasets](datasets.md) for versions, layouts and rights, [Outputs](outputs.md) for resuming a run, and the
 [CLI reference](generated/cli.md) for every option.

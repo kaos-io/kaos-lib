@@ -27,7 +27,7 @@ datasets.list_datasets(); datasets.versions("dataset-x"); datasets.release("data
 
 `materialize` downloads what the dataset's layout names at the pinned commit and caches it by (repository, commit)
 in `$KUBECORE_CACHE_DIR` (default `~/.cache/kubecore/datasets`), so a second call is free. When
-`$KUBECORE_STAGED_DIR` holds that commit (Slurm staging), it is used in place and nothing is downloaded. A commit
+`$KUBECORE_STAGED_DIR` holds that commit (a Slurm job with pre-staged data), it is used in place and nothing is downloaded. A commit
 with no files raises `EmptyDataset` (a `DatasetError`), so a step can tell "no data yet" from other failures.
 
 ## Layouts
@@ -60,8 +60,8 @@ kaosctl dataset pull [<owner>/]<repo>@<version> [dest]
 kaosctl dataset list [--shared]
 ```
 
-`create` makes an empty dataset unless you name a layout (`--layout yolo`, or `--layout none` to say so); kaos-lake
-lists an empty dataset once its first commit lands. `--classes` and `--param` need a named layout. `validate` uses the
+`create` makes an empty dataset unless you name a layout (`--layout yolo`, or `--layout none` to say so); the
+platform lists an empty dataset once its first commit lands. `--classes` and `--param` need a named layout. `validate` uses the
 `yolo` layout unless you name another. Every command prints the next step and the lakeFS link. Exit codes:
 `0` ok, `1` a user error (one `ERROR:` line), `2` an invalid dataset.
 

@@ -1,19 +1,17 @@
 # kaos-lib
 
-kaos-lib is the KAOS platform library, and `kaosctl` is its command. It gives pipeline steps and people one way to
-work with the platform's data:
+kaos-lib is the Python library of the KAOS platform (`import kaos_lib`), and `kaosctl` is its command. They give
+you one way to work with your project's data and results, from your laptop or from a pipeline step:
 
-- **Datasets**: each dataset is its own lakeFS repository `dataset-<name>`, with versions `v1`, `v2`, … Create,
-  fill, validate, release and read them, from a laptop or from a pipeline step.
-- **Outputs**: every ML app writes its results to its own repository `outputs-<app>`, one commit per step per run.
-- **MLflow**: one call configures MLflow with the right credential, with no plugin file to copy.
-- **Run context** and **data lock**: what the platform injected into a step, and the exact dataset commits a run read,
-  recorded on its MLflow run and replayable.
+- **Datasets**: versioned collections of files, `dataset-<name>@v1`, `@v2`, … Create, fill, check, release and read them.
+- **Outputs**: save checkpoints and results of a run, and resume after an interruption.
+- **MLflow**: log to your project's MLflow with one call.
+- **Data lock**: record which dataset versions a run read, and replay them.
 
 --8<-- "generated/built.md"
 
-This site lives at <https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html> and is republished
-with every prerelease, so it always describes the newest published kaos-lib.
+This site is rebuilt with every prerelease, so it describes the newest published kaos-lib; it may be ahead of the
+version you have installed (`kaosctl --version`).
 
 ## Where to start
 
@@ -22,13 +20,12 @@ with every prerelease, so it always describes the newest published kaos-lib.
 | install it | [Install](install.md) |
 | make a dataset and use it in a pipeline | [Quickstart](quickstart.md) |
 | understand datasets, versions and layouts | [Datasets](datasets.md) |
-| look up a command | [CLI reference](generated/cli.md) |
-| look up a function | [Python API](api.md) |
+| fix an error message | [Troubleshooting](troubleshooting.md) |
+| look up a command or a function | [CLI](generated/cli.md), [Python API](api.md) |
 
-kaos-lib talks to **kaos-lake**, the platform's lakeFS. Every app repository the platform creates carries
-`.kubecore/dataset-config.yaml`, which tells kaos-lib where your project's lakeFS is and how to sign in. Run
-`kaosctl` inside your app folder and you never type a URL or a password.
+Run `kaosctl` inside your app folder and it already knows your project: you never type a URL or a password, only
+sign in once with `kaosctl login`.
 
-The pipeline templates ([hera](https://novelcore.github.io/hera-pipeline-template/) and
-[yolo](https://novelcore.github.io/yolo-pipelines-template/)) already use kaos-lib in their steps: start from one of
-them to build a pipeline.
+The pipeline templates [hera](https://novelcore.github.io/hera-pipeline-template/) and
+[yolo](https://novelcore.github.io/yolo-pipelines-template/) already use kaos-lib: start from one of them to build
+a pipeline.

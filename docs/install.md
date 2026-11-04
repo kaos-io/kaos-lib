@@ -1,7 +1,7 @@
 # Install
 
-kaos-lib is published by the platform's CI to two **public Python repositories** (Google Artifact Registry), not
-PyPI. Its dependencies come from PyPI.
+kaos-lib is served from two **Python package indexes** (Google Artifact Registry), not PyPI. Its dependencies come
+from PyPI.
 
 ## The newest release of each channel
 
@@ -18,24 +18,18 @@ python3 -m venv .venv && . .venv/bin/activate
 
 | channel | pip index | versions | made by |
 | --- | --- | --- | --- |
-| prerelease | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib-rc/simple/` | `X.Y.ZrcN` | every merge to `main` |
-| stable | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` | `X.Y.Z` | the platform's release train only, from an rc that passed the dev e2e |
+| prerelease | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib-rc/simple/` | `X.Y.ZrcN` | published first, with every change |
+| stable | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` | `X.Y.Z` | published after a prerelease has been tested |
 
-`X.Y.Z` is the version in `pyproject.toml`, the next release. Versions are immutable in a repository, so every rc
-has its own number; the stable `X.Y.Z` is the rc's commit built again at `X.Y.Z`, and the release train checks that
-it holds the rc's code byte for byte.
-
-Each channel's newest release metadata is public, at
-`https://storage.googleapis.com/kaos-dev-511509-kaos-lib/<channel>/release.json` (`rc` or `stable`), with
-`<channel>/<tag>/release.json` and `SHA256SUMS` for every release. Its `recommended` field is the exact requirement
-platform images install: one wheel file with its `#sha256=`, so no index decides anything.
+Use the prerelease channel until a stable release exists. Each release has its own number (`0.4.0rc10`, later
+`0.4.0`), so pin it with `==`. The exact current version of each channel is listed at the top of this page.
 
 ## Extras
 
 | extra | adds | needed for |
 | --- | --- | --- |
-| `zitadel` | PyJWT, cryptography | a pipeline step reading datasets other projects share (machine-key tokens) |
-| `mlflow` | mlflow-skinny 3, PyJWT, cryptography | `kaos_lib.mlflow`, writing and loading data locks, `kaosctl run --lock`, the MLflow auth provider `zitadel` |
+| `zitadel` | PyJWT, cryptography | reading datasets that another project shares with yours, from a pipeline step |
+| `mlflow` | mlflow-skinny 3, PyJWT, cryptography | `kaos_lib.mlflow`, writing and loading data locks, `kaosctl run --lock`, MLflow sign-in from a step |
 
 Without an extra, drop the `[...]` from the commands above.
 
