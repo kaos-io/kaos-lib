@@ -11,22 +11,22 @@ run_id             KAOS_RUN_ID                                     the enhancer,
 workflow           KAOS_WORKFLOW_NAME                              the enhancer, every step (names the MLflow run)
 app                KAOS_APP, else derived from outputs_repo        outputs_repo ``outputs-<app>``
 project            KAOS_PROJECT                                    not injected yet
-step               KAOS_STEP, STEP_NAME                            STEP_NAME: Slurm submit pod and job
+step               KAOS_STEP, STEP_NAME                            STEP_NAME: HPC (Slurm) submit pod and job
 outputs_repo       OUTPUTS_REPO, CHECKPOINT_BUCKET                 CHECKPOINT_BUCKET every step; OUTPUTS_REPO HPC
 lakefs_endpoint    LAKEFS_ENDPOINT, LAKEFS_URL                     the enhancer (in-cluster); public URL on HPC
 mlflow_uri         MLFLOW_TRACKING_URI                             the enhancer (in-cluster); public URL on HPC
 dataset_ref        KAOS_DATASET_REF, DATASET,                      steps set KAOS_DATASET_REF; DATASET and
-                   DATASET_REPO + "@" + DATASET_REF                DATASET_REPO/DATASET_REF in Slurm jobs
-dataset_commit     KAOS_DATASET_COMMIT, DATASET_COMMIT             steps / Slurm job
+                   DATASET_REPO + "@" + DATASET_REF                DATASET_REPO/DATASET_REF in HPC jobs
+dataset_commit     KAOS_DATASET_COMMIT, DATASET_COMMIT             steps / HPC job
 support            verdict of kaos_lib.support.check against       the platform (``KAOS_LIB_SUPPORT``)
                    KAOS_LIB_SUPPORT
-slot               KAOS_SLOT_GPUS, KAOS_SLOT_CPUS,                 the Slurm runner, on a shared node;
+slot               KAOS_SLOT_GPUS, KAOS_SLOT_CPUS,                 the HPC runner, on a shared node;
                    KAOS_SLOT_MEM_GIB, KAOS_SLOT_SHARED             None elsewhere
 =================  ==============================================  ==========================================
 
 Every ``KAOS_<X>`` name is also read as ``KUBECORE_<X>`` when it is not set (steps started before the rename).
 
-On a shared Slurm node a step gets one slot: its GPUs, its cores and its memory share
+On a shared HPC node a step gets one slot: its GPUs, its cores and its memory share
 (``slot``). ``usable_cpus()`` is the number of cores a step should size its worker pools by: the slot's,
 else the CPUs this process may run on, else the machine's.
 """
@@ -54,7 +54,7 @@ ENV = {
 
 @dataclass(frozen=True)
 class Slot:
-    """This step's share of a shared Slurm node: what it may use, not the whole node."""
+    """This step's share of a shared HPC node: what it may use, not the whole node."""
     gpus: Optional[int] = None
     cpus: Optional[int] = None
     mem_gib: Optional[int] = None
@@ -112,7 +112,7 @@ def _int(environ: Mapping, names: tuple) -> Optional[int]:
 
 
 def _slot(environ: Mapping) -> Optional[Slot]:
-    """The slot the Slurm runner set, or None when none was set (in-cluster, a node of its own)."""
+    """The slot the HPC runner set, or None when none was set (in-cluster, a node of its own)."""
     values = {k: _int(environ, v) for k, v in SLOT_ENV.items() if k != "shared"}
     if not any(v is not None for v in values.values()):
         return None
@@ -120,7 +120,7 @@ def _slot(environ: Mapping) -> Optional[Slot]:
 
 
 def usable_cpus(environ: Optional[Mapping] = None) -> int:
-    """The cores this step should size worker pools by: its slot's (shared Slurm node), else the CPUs this
+    """The cores this step should size worker pools by: its slot's (shared HPC node), else the CPUs this
     process may run on (the scheduler's binding), else the machine's. ``os.cpu_count()`` alone sees every
     core of a shared node, so data loaders sized by it overrun the step's share."""
     slot = _slot(os.environ if environ is None else environ)

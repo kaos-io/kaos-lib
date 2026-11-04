@@ -13,7 +13,7 @@ import mlflow as mlf       # the mlflow module is configured too: mlf.start_run(
 `mlflow(tracking_uri=None, token=None)` sets the tracking URI and the sign-in method, and asks the chain
 once, so a missing credential fails before the step does any work. The bearer is the first of:
 
-1. an explicit token, `mlflow(token=...)`, else `$MLFLOW_TRACKING_TOKEN` (Slurm jobs get one);
+1. an explicit token, `mlflow(token=...)`, else `$MLFLOW_TRACKING_TOKEN` (HPC (Slurm) jobs get one);
 2. the step's own credential, which the platform provides to pipeline steps and kaos-lib renews before it expires;
 3. your `kaosctl login` session. Inside your app clone it carries the organisation project's audience; an expired
    session, or one without that audience, is a one-line error telling you to log in again. Outside a pipeline, set

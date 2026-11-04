@@ -12,6 +12,7 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
   `SLOT_GPUS`, `SLOT_CPUS`, `SLOT_MEM_GIB`, `SLOT_SHARED`, `STORAGE_NAMESPACE_BASE`, `ML_HOME`, `ML_LOGIN_TIMEOUT`,
   `ML_OIDC_ISSUER`, `ML_OIDC_CLIENT_ID`, `ML_OIDC_PROJECT_ID`), the app config is `.kaos/dataset-config.yaml`, and a
   pulled dataset's marker is `.kaos-dataset.json` (never uploaded). Messages and docs use these names.
+- Docs, docstrings and help text name the machine "HPC (Slurm)" (later "HPC job", "HPC node"), not bare "Slurm"; the Slurm-only wording is gone from user-facing text. No API or variable changes.
 - Defaults: cache `~/.cache/kaos/datasets`, login `~/.config/kaos-ml`, temp `kaos-runs`; an existing `~/.cache/kubecore/datasets` or `~/.config/kubecore-ml` (with no new one) keeps being used, nothing is moved.
 - Nothing breaks: each `KAOS_<X>` falls back to the older `KUBECORE_<X>` (the new name wins when both are set),
   `.kubecore/dataset-config.yaml` is still found when there is no `.kaos/` one, and a copy marked
@@ -21,7 +22,7 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Added
-- `kaos_lib.runtime`: `context().slot`, a step's share of a shared Slurm node (`Slot(gpus, cpus, mem_gib,
+- `kaos_lib.runtime`: `context().slot`, a step's share of a shared HPC (Slurm) node (`Slot(gpus, cpus, mem_gib,
   shared)` from `KUBECORE_SLOT_*`, PRD-HPC-1609), and `usable_cpus()`: the cores to size worker pools by (the
   slot's, else the process's CPU binding, else the machine's).
 
