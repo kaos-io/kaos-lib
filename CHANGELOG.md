@@ -10,6 +10,11 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Added
+- `kaos_lib.outputs`: progress is saved on the stop signal. While a run writer is open, `SIGUSR1` (sent on HPC
+  (Slurm) about 10 minutes before the job's time limit) uploads again everything the step passed to `save`, and the
+  new `autosave=` paths of `outputs.run(...)`, commits on the run branch and exits with `CHECKPOINT_EXIT_CODE` (85).
+  The platform continues the run in a new job, where `latest` finds the checkpoint. Forked workers ignore the signal;
+  the previous handler is restored when the last writer closes. No change for steps elsewhere.
 - `kaos_lib.runtime`: `context().slot`, a step's share of a shared Slurm node (`Slot(gpus, cpus, mem_gib,
   shared)` from `KUBECORE_SLOT_*`, PRD-HPC-1609), and `usable_cpus()`: the cores to size worker pools by (the
   slot's, else the process's CPU binding, else the machine's).

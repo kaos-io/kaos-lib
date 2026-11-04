@@ -3,12 +3,21 @@
 One commit on ``main`` per step per run (a merge from the run's own branch), under
 ``<kind>/<experiment>/<run>/`` (kind is ``checkpoints`` by default). Pipelines never write to a ``dataset-*`` repository.
 The repository is declared and created by the platform, never here.
+
+Saved on the stop signal: while a run writer is open, a step that gets ``SIGUSR1`` (sent by the platform about
+10 minutes before a Slurm time limit) uploads again everything it already passed to ``save`` and every
+``autosave`` path, commits on the run branch, and exits with ``CHECKPOINT_EXIT_CODE``. The platform then
+continues the run in a new job, where ``latest`` finds the checkpoint. Step code adds nothing.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import re
+import signal
+import sys
 import tempfile
+import threading
 from typing import Optional
 
 from .errors import DatasetError, LakeFSError, NotFoundError
@@ -17,6 +26,8 @@ from .transfer import upload_files, upload_tree
 
 OUTPUTS_PREFIX = "outputs-"
 MAIN = "main"
+STOP_SIGNAL = signal.SIGUSR1
+CHECKPOINT_EXIT_CODE = 85   # "saved, continue me": the platform resubmits the run instead of failing it
 _APP_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
 _SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._=-]*$")
 
@@ -68,12 +79,15 @@ class RunWriter:
     """
 
     def __init__(self, app: str, experiment: str, run: str, kind: str = "checkpoints",
-                 client: Optional[LakeFS] = None):
+                 client: Optional[LakeFS] = None, autosave=None):
         self.app, self.experiment, self.run, self.kind = app, experiment, run, kind
         self.repo, self.prefix = outputs_repo(app), run_prefix(experiment, run, kind)
         self.branch = run_branch(run, kind)
         self.client = client or LakeFS.connect()
         self._finished: Optional[str] = None
+        # Saved again on the stop signal: these paths, and every source passed to ``save``.
+        self.autosave = [autosave] if isinstance(autosave, (str, pathlib.Path)) else list(autosave or [])
+        self._saved: list = []
 
     @property
     def metadata(self) -> dict:
@@ -93,14 +107,18 @@ class RunWriter:
             except LakeFSError as exc:
                 if exc.status != 409:  # 409: a parallel attempt created it first, which is fine
                     raise
+        _watch(self)
         return self
 
     def __enter__(self) -> "RunWriter":
         return self.open()
 
     def __exit__(self, exc_type, exc, tb) -> bool:
-        if exc_type is None and self._finished is None:
-            self.finish()
+        try:
+            if exc_type is None and self._finished is None:
+                self.finish()
+        finally:
+            _unwatch(self)
         return False  # on an exception: no merge, no delete; the retry resumes from the branch
 
     def save(self, source, message: Optional[str] = None) -> str:
@@ -117,6 +135,8 @@ class RunWriter:
             count = upload_files(self.client, self.repo, self.branch, files)
         if count == 0:
             raise DatasetError(f"{source} has no files to save.")
+        if not any(source is s or source == s for s in self._saved):
+            self._saved.append(source)
         return self.client.commit(self.repo, self.branch, message or f"{self.kind}: {self.experiment}/{self.run}",
                                   self.metadata, tolerate_empty=True)
 
@@ -154,13 +174,75 @@ class RunWriter:
                          {**self.metadata, **(metadata or {})}, tolerate_empty=True)
         c.delete_branch(self.repo, self.branch)
         self._finished = commit
+        _unwatch(self)
         return commit
+
+    def save_on_stop(self) -> int:
+        """Upload again what ``save`` wrote and the ``autosave`` paths that exist now; returns how many were saved.
+
+        Called by the stop-signal handler. A path that is gone or empty is skipped, and a failed upload is reported
+        and skipped, so one bad path cannot cost the others.
+        """
+        saved = 0
+        for source in [*self.autosave, *self._saved]:
+            items = [source] if isinstance(source, (str, pathlib.Path)) else list(source)
+            present = [p for p in items if pathlib.Path(p).exists()]
+            if not present:
+                continue
+            try:
+                self.save(present[0] if len(present) == 1 and isinstance(source, (str, pathlib.Path)) else present,
+                          message=f"{self.kind}: {self.experiment}/{self.run} (saved on the stop signal)")
+                saved += 1
+            except Exception as exc:   # noqa: BLE001 - keep saving the others, the step is stopping anyway
+                print(f"kaos-lib: could not save {source} on the stop signal: {exc}", file=sys.stderr, flush=True)
+        return saved
+
+
+# Run writers open in this process, and the stop-signal handler they share (installed by the first one).
+_WATCHED: list = []
+_HANDLER = {"pid": None, "previous": None, "stopping": False}
+
+
+def _on_stop_signal(signum, frame):
+    """Save every open run writer, then exit with CHECKPOINT_EXIT_CODE so the platform continues the run.
+
+    Only the process that installed the handler acts: forked workers (DataLoader) inherit it and ignore it.
+    """
+    if os.getpid() != _HANDLER["pid"] or _HANDLER["stopping"]:
+        return
+    _HANDLER["stopping"] = True
+    print("kaos-lib: stop signal - saving progress before the time limit", file=sys.stderr, flush=True)
+    saved = sum(w.save_on_stop() for w in list(_WATCHED))
+    print(f"kaos-lib: saved {saved} path(s); exiting {CHECKPOINT_EXIT_CODE} so the run continues in a new job",
+          file=sys.stderr, flush=True)
+    raise SystemExit(CHECKPOINT_EXIT_CODE)   # no merge: the run branch stays for the continued run
+
+
+def _watch(writer: RunWriter) -> None:
+    if writer in _WATCHED:
+        return
+    _WATCHED.append(writer)
+    if _HANDLER["pid"] != os.getpid() and threading.current_thread() is threading.main_thread():
+        _HANDLER["previous"] = signal.signal(STOP_SIGNAL, _on_stop_signal)
+        _HANDLER["pid"], _HANDLER["stopping"] = os.getpid(), False
+
+
+def _unwatch(writer: RunWriter) -> None:
+    if writer in _WATCHED:
+        _WATCHED.remove(writer)
+    if not _WATCHED and _HANDLER["pid"] == os.getpid() and threading.current_thread() is threading.main_thread():
+        signal.signal(STOP_SIGNAL, _HANDLER["previous"] or signal.SIG_DFL)
+        _HANDLER["pid"], _HANDLER["previous"] = None, None
 
 
 def run(app: str, experiment: str, run: str, kind: str = "checkpoints",
-        client: Optional[LakeFS] = None) -> RunWriter:
-    """``with outputs.run(app, experiment, run, kind) as r:`` ... see ``RunWriter``."""
-    return RunWriter(app, experiment, run, kind, client)
+        client: Optional[LakeFS] = None, autosave=None) -> RunWriter:
+    """``with outputs.run(app, experiment, run, kind) as r:`` ... see ``RunWriter``.
+
+    ``autosave``: a path or a list of paths (for example the folder a framework writes its checkpoints to) uploaded
+    on the stop signal even if the step never passed them to ``save``.
+    """
+    return RunWriter(app, experiment, run, kind, client, autosave)
 
 
 def write_run(app: str, experiment: str, run: str, local_dir, kind: str = "checkpoints",
