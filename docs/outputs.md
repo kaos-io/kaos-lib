@@ -25,3 +25,29 @@ How a run stays safe:
 - An empty commit or an empty merge is a success and returns the existing commit.
 
 Writing needs write rights on `outputs-<app>` only: the app's own key has them, other apps' keys do not.
+
+## Long runs on HPC (Slurm): saved before the time limit
+
+A job on HPC (Slurm) has a time limit. About 10 minutes before it, the platform tells the step to stop. While a run
+writer is open, kaos-lib then:
+
+1. uploads again everything the step passed to `save`, with what the files hold now;
+2. uploads the paths named in `autosave`, even if the step never saved them;
+3. commits on the run's branch and ends the step with exit code 85.
+
+The platform sees 85 and continues the run in a new job under the same run name, so `latest` returns what was saved.
+Your code only needs to resume from `latest`, as in the example at the top of this page.
+
+```python
+with outputs.run(app, experiment, run, autosave="runs/") as r:   # the folder your framework writes to
+    resume = r.latest("train/weights/last.pt")                    # None on the first job
+    train(resume=resume)
+    r.save("runs/")
+```
+
+- A folder that is missing or empty is skipped; the others are still saved.
+- Steps that do not open a run writer are not stopped early; they run to the time limit as before.
+- PyTorch Lightning: pass `plugins=[SLURMEnvironment(auto_requeue=False)]` to the `Trainer`. Lightning's own handler
+  for this signal tries to requeue the job, which HPC sites usually refuse.
+- A continued run waits in the queue again and its time counts against your budget.
+
