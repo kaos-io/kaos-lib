@@ -35,17 +35,28 @@ writer is open, kaos-lib then:
 2. uploads the paths named in `autosave`, even if the step never saved them;
 3. commits on the run's branch and ends the step with exit code 85.
 
-The platform sees 85 and continues the run in a new job under the same run name, so `latest` returns what was saved.
-Your code only needs to resume from `latest`, as in the example at the top of this page.
+The platform sees 85 and continues the run in a new job under the same run name. The new job is often on another
+machine, so its disk is empty. When its run writer opens, every `autosave` **file** the run holds is put back where it
+was. Code that already loads its checkpoint "if the file exists" resumes with no change:
 
 ```python
-with outputs.run(app, experiment, run, autosave="runs/") as r:   # the folder your framework writes to
-    resume = r.latest("train/weights/last.pt")                    # None on the first job
-    train(resume=resume)
-    r.save("runs/")
+CKPT = "state.pt"
+with outputs.run(app, experiment, run, autosave=CKPT) as r:   # a continued run gets state.pt back here
+    state = torch.load(CKPT) if os.path.exists(CKPT) else fresh_state()
+    for epoch in range(state.epoch, epochs):
+        train_one_epoch(state)
+        torch.save(state, CKPT)                                # saved again before the time limit
+    r.save(CKPT)
 ```
 
-- A folder that is missing or empty is skipped; the others are still saved.
+- A file that is already on the local disk is never replaced.
+- Folders are not put back: their files are saved without the folder's name. Use `r.latest("folder/")`.
+- If the file cannot be downloaded, opening the run writer fails, so a run never quietly starts over.
+- Two `autosave` files need different names: each is saved under its name.
+
+When saving at the stop signal:
+
+- A path that is missing or empty is skipped; the others are still saved.
 - Steps that do not open a run writer are not stopped early; they run to the time limit as before.
 - PyTorch Lightning: pass `plugins=[SLURMEnvironment(auto_requeue=False)]` to the `Trainer`. Lightning's own handler
   for this signal tries to requeue the job, which HPC sites usually refuse.

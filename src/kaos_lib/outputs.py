@@ -94,14 +94,20 @@ class RunWriter:
         return {"app": self.app, "experiment": self.experiment, "run": self.run, "kind": self.kind}
 
     def open(self) -> "RunWriter":
-        """Make sure the run branch exists (never deletes an existing one)."""
+        """Make sure the run branch exists (never deletes an existing one).
+
+        When it already exists (a continued or retried run), the ``autosave`` files it holds are put back where
+        they were (see ``restore``).
+        """
         c = self.client
         try:
             c.branch_commit(self.repo, MAIN)
         except NotFoundError as exc:
             raise DatasetError(f"{self.repo} does not exist: the platform creates it for each ML app. "
                                "Check the app name.") from exc
-        if not c.branch_exists(self.repo, self.branch):
+        if c.branch_exists(self.repo, self.branch):
+            self.restore()
+        else:
             try:
                 c.create_branch(self.repo, self.branch, MAIN)
             except LakeFSError as exc:
@@ -176,6 +182,34 @@ class RunWriter:
         self._finished = commit
         _unwatch(self)
         return commit
+
+    def restore(self) -> list:
+        """Put each ``autosave`` file the run branch holds back at its local path; returns the paths restored.
+
+        A file is saved under its name (``save``), so the object ``<prefix><name>`` is the file of ``<.../name>``.
+        Skipped: a path that already exists locally (never overwritten), a name the branch does not hold, and
+        folders (their files are saved without the folder's name; use ``latest("folder/")``). The download goes
+        to a temporary name first, so a failed one leaves nothing half-written, and raises: a run that cannot get
+        its checkpoint back must not quietly start over.
+        """
+        restored = []
+        for item in self.autosave:
+            local = pathlib.Path(item)
+            if str(item).endswith(("/", "\\")) or local.exists():
+                continue
+            remote = self.prefix + local.name
+            if not any(o["path"] == remote for o in self.client.list_objects(self.repo, self.branch, remote)):
+                continue
+            part = local.with_name(local.name + ".kaos-restore")
+            try:
+                self.client.download_object(self.repo, self.branch, remote, part)
+                os.replace(part, local)
+            except BaseException:
+                part.unlink(missing_ok=True)
+                raise
+            print(f"kaos-lib: restored {local} from the run branch", file=sys.stderr, flush=True)
+            restored.append(local)
+        return restored
 
     def save_on_stop(self) -> int:
         """Upload again what ``save`` wrote and the ``autosave`` paths that exist now; returns how many were saved.

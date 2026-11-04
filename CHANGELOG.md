@@ -15,6 +15,11 @@ user-definable layouts.
   new `autosave=` paths of `outputs.run(...)`, commits on the run branch and exits with `CHECKPOINT_EXIT_CODE` (85).
   The platform continues the run in a new job, where `latest` finds the checkpoint. Forked workers ignore the signal;
   the previous handler is restored when the last writer closes. No change for steps elsewhere.
+- `kaos_lib.outputs`: a continued run gets its `autosave` files back. When a run writer opens on a run whose
+  branch still exists (continued after the stop signal, or retried after a crash), each `autosave` file the branch
+  holds is put back at its local path, unless that path already exists; `RunWriter.restore()` returns what it put
+  back. A loop that already resumes "if the checkpoint file exists" continues with no change. Folders are not
+  restored (use `latest("folder/")`). The download is atomic; a failed one raises.
 - `kaos_lib.runtime`: `context().slot`, a step's share of a shared Slurm node (`Slot(gpus, cpus, mem_gib,
   shared)` from `KUBECORE_SLOT_*`, PRD-HPC-1609), and `usable_cpus()`: the cores to size worker pools by (the
   slot's, else the process's CPU binding, else the machine's).
