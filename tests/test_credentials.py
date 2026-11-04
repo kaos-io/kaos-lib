@@ -43,8 +43,8 @@ def test_client_sends_bearer_or_basic():
 
 
 def test_endpoint_precedence(tmp_path, monkeypatch):
-    (tmp_path / ".kubecore").mkdir()
-    (tmp_path / ".kubecore" / "dataset-config.yaml").write_text("lakefsUrl: https://from-config/\n")
+    (tmp_path / ".kaos").mkdir()
+    (tmp_path / ".kaos" / "dataset-config.yaml").write_text("lakefsUrl: https://from-config/\n")
     config.load_config.cache_clear()
     assert config.resolve_endpoint() == "https://from-config"
     monkeypatch.setenv("LAKEFS_URL", "https://from-url-env/")

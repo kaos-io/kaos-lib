@@ -177,6 +177,6 @@ def test_staged_dir_checks_repository_and_owner(tmp_path, monkeypatch, record, r
     staged = tmp_path / "lustre" / "c1"
     staged.mkdir(parents=True)
     (staged / ".kaos-ready").write_text(record if isinstance(record, str) else json.dumps(record))
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    monkeypatch.setenv("KAOS_STAGED_DIR", str(staged))
     assert (local.staged_dir("c1", repo=repo, owner=owner) == staged) is used
     assert local.staged_dir("c2", repo=repo, owner=owner) is None             # another commit: never

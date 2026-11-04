@@ -8,9 +8,9 @@ validation. In Python the same messages are the text of `kaos_lib.errors.KaosLib
 
 | You see | Why | Do |
 | --- | --- | --- |
-| `cannot determine the lakeFS URL. Run inside your app clone (it carries .kubecore/dataset-config.yaml), pass --url, or set LAKEFS_ENDPOINT.` | You are not inside your app folder (the one holding `.kubecore/dataset-config.yaml`) and no URL is set. | `cd` into your app clone, or pass `--url`, or export `LAKEFS_ENDPOINT`. |
+| `cannot determine the lakeFS URL. Run inside your app clone (it carries .kaos/dataset-config.yaml), pass --url, or set LAKEFS_ENDPOINT.` | You are not inside your app folder (the one holding `.kaos/dataset-config.yaml`) and no URL is set. | `cd` into your app clone, or pass `--url`, or export `LAKEFS_ENDPOINT`. |
 | `not signed in. Run `kaosctl login`, or set LAKEFS_ACCESS_KEY/LAKEFS_SECRET_KEY (or LAKEFS_BEARER_TOKEN) in the environment.` | No credential in the [chain](credentials.md). | `kaosctl login`. In a pipeline step the platform sets the key pair: if it is missing, the step was not started by the platform. |
-| `browser sign-in is not configured for this app (no oidcIssuer/oidcClientId in .kubecore/dataset-config.yaml)…` | `kaosctl login` outside an app clone. | Run it inside the clone, or use an access key. |
+| `browser sign-in is not configured for this app (no oidcIssuer/oidcClientId in .kaos/dataset-config.yaml)…` | `kaosctl login` outside an app clone. | Run it inside the clone, or use an access key. |
 | `timed out waiting for the browser sign-in`, `sign-in failed: …` | The browser tab was closed or the sign-in was refused. | Run `kaosctl login` again. It opens a browser: there is no device-code flow. |
 | `your `kaosctl login` session has expired: run `kaosctl login` again.` | The cached token ran out (MLflow calls). | `kaosctl login`. |
 | `kaos_lib.mlflow needs the mlflow extra: pip install 'kaos-lib[mlflow]'.` | The `mlflow` extra is not installed. | Install it, see [Install](install.md#extras). |

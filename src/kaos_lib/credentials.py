@@ -20,7 +20,7 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
-from . import oidc
+from . import _env, oidc
 from .config import oidc_settings
 from .errors import AuthError
 
@@ -39,7 +39,10 @@ class Credential:
 
 def session_path() -> pathlib.Path:
     """Where the login session is cached (re-evaluated so tests/env can redirect it)."""
-    home = os.environ.get("KUBECORE_ML_HOME") or pathlib.Path.home() / ".config" / "kubecore-ml"
+    home = _env.get("ML_HOME")
+    if not home:
+        new, old = pathlib.Path.home() / ".config" / "kaos-ml", pathlib.Path.home() / ".config" / "kubecore-ml"
+        home = old if old.exists() and not new.exists() else new  # an existing older login keeps being used
     return pathlib.Path(home) / "lakefs-session.json"
 
 
@@ -111,7 +114,7 @@ def browser_login(base_url: str, start: Optional[str] = None) -> Credential:
     if not issuer or not client_id:
         raise AuthError(
             "browser sign-in is not configured for this app (no oidcIssuer/oidcClientId in "
-            ".kubecore/dataset-config.yaml). Run inside your app clone, or use an access key.")
+            ".kaos/dataset-config.yaml). Run inside your app clone, or use an access key.")
     try:
         tokens = oidc.login(issuer, client_id, audience_project_id=audience)
     except oidc.LoginError as exc:

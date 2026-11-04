@@ -16,14 +16,19 @@ ENV_VARS = ("LAKEFS_ENDPOINT", "LAKEFS_URL", "LAKEFS_ACCESS_KEY", "LAKEFS_SECRET
             "KUBECORE_APP", "KUBECORE_PROJECT", "KUBECORE_STEP", "STEP_NAME", "OUTPUTS_REPO", "CHECKPOINT_BUCKET",
             "KUBECORE_DATASET_REF", "KUBECORE_DATASET_COMMIT", "DATASET", "DATASET_REPO", "DATASET_REF",
             "DATASET_COMMIT")
+# both spellings of every platform variable are cleared, so the host's environment never leaks in
+ENV_VARS += tuple(v.replace("KUBECORE_", "KAOS_") for v in ENV_VARS if v.startswith("KUBECORE_")) + (
+    "KAOS_ML_HOME", "KAOS_ML_LOGIN_TIMEOUT", "KUBECORE_ML_HOME", "KUBECORE_ML_LOGIN_TIMEOUT",
+    "KAOS_SLOT_GPUS", "KAOS_SLOT_CPUS", "KAOS_SLOT_MEM_GIB", "KAOS_SLOT_SHARED",
+    "KUBECORE_SLOT_GPUS", "KUBECORE_SLOT_CPUS", "KUBECORE_SLOT_MEM_GIB", "KUBECORE_SLOT_SHARED")
 
 
 @pytest.fixture(autouse=True)
 def clean_env(tmp_path, monkeypatch):
     for var in ENV_VARS:
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("KUBECORE_ML_HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("KUBECORE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("KAOS_ML_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("KAOS_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("KAOS_LIB_RELEASES_BASE", "http://127.0.0.1:9")   # no test reaches the public bucket
     monkeypatch.chdir(tmp_path)
     from kaos_lib import config, lock, mlflow, peers
