@@ -1,7 +1,6 @@
-# Support window
+# Support policy and upgrades
 
-Every release ships `release.json` (in the package as `kaos_lib/_release.json`, and in the public release bucket
-as `<channel>/<tag>/release.json`, plus `tag`, `channel`, `commit`, `recommended` and the files' sha256):
+Every release states which kaos-lib versions are supported (`release.json`, packaged as `kaos_lib/_release.json`):
 
 ```json
 {"version": "0.4.0", "supported": ">=0.3", "deprecated": [{"range": "<0.3", "unsupported_after": "YYYY-MM-DD"}],
@@ -19,3 +18,11 @@ a deprecated range whose `unsupported_after` has not passed, or that sets none),
 - `kaosctl`: reads the policy from the project lakeFS (`/kaos/v1/ui`, key `kaos_lib_support`), else the newest
   public `release.json` of its channel, else the packaged `_release.json`. Reads warn; `create`, `release` and `push` are refused when the platform says unsupported.
   Offline or without platform metadata nothing is refused.
+
+## Upgrade
+
+```bash
+kaosctl --version         # the installed version, its channel, and the version the platform recommends
+kaosctl upgrade --dry-run # print the pip command
+kaosctl upgrade           # run it
+```

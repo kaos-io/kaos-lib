@@ -18,14 +18,11 @@ kaosctl dataset versions team-a/dataset-cats # its versions, read from team-a's 
 kaosctl dataset pull team-a/dataset-cats@v3  # read-only copy
 ```
 
-- **Where**: your lakeFS lists the other projects (`GET /kaos/v1/peers`, read once per process).
-  `LakeFS.for_owner(owner)` talks to the owner's in-cluster endpoint when your own lakeFS address is an
-  in-cluster `.svc` one (pipeline steps), else to its public URL (laptops).
-- **Who**: the owner sees a bearer token, never your project's `LAKEFS_ACCESS_KEY`/`LAKEFS_SECRET_KEY`
-  (`credentials.resolve_peer`): `LAKEFS_BEARER_TOKEN`, else a short-lived Zitadel token minted from the step's
-  machine key (`ZITADEL_MACHINE_KEY_FILE`, `ZITADEL_DOMAIN`, `ZITADEL_MLFLOW_PROJECT_ID`; needs
-  `kaos-lib[zitadel]`), else your `kaosctl login` session. The owner grants read on exactly the datasets it
-  shares with your project.
+- **Where**: kaos-lib finds the other projects through your own project, and reads the dataset from the owner's
+  storage: the same code works in a pipeline step and on a laptop.
+- **Who**: the owner never sees your project's access key. In a pipeline step kaos-lib uses a short-lived token of
+  the step (this needs `kaos-lib[zitadel]`); on a laptop it uses your `kaosctl login` session. The owner grants
+  read on exactly the datasets it shares with your project.
 - **Cache**: `<cache>/<owner>/<repo>/<commit>` (your own: `<cache>/<repo>/<commit>`); the copy's marker records
   the owner, so your `dataset-x` and the owner's `dataset-x` never mix, even at the same commit id. A staged copy
   (`$KUBECORE_STAGED_DIR`) is used only when its `.kaos-ready` record names the same repository and owner.

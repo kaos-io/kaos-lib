@@ -10,6 +10,12 @@ repo_url: https://github.com/kaos-io/kaos-lib
 edit_uri: edit/main/docs/
 
 docs_dir: docs
+
+validation:   # --strict then fails on a broken link or anchor
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
 exclude_docs: |
   __pycache__/
   hooks.py
@@ -87,15 +93,16 @@ nav:
       - Datasets: datasets.md
       - Outputs: outputs.md
       - MLflow: mlflow.md
-      - Run context: runtime.md
       - Data lock: data-lock.md
       - Datasets shared with your project: shared-datasets.md
       - Make your own dataset layout: make-your-own-layout.md
   - Reference:
       - CLI: generated/cli.md
       - Python API: api.md
+      - Run context: runtime.md
       - Credentials: credentials.md
-      - Support window: support-window.md
+      - Support policy and upgrades: support-window.md
+      - Troubleshooting: troubleshooting.md
       - Formerly kubecore: formerly-kubecore.md
       - Develop: develop.md
   - Changelog: changelog.md

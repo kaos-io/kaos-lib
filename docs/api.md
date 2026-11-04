@@ -16,6 +16,10 @@ Generated from the code's docstrings on every build. The guides show how the pie
 
 ::: kaos_lib.mlflow
 
+::: kaos_lib.lakefs
+
+::: kaos_lib.zitadel
+
 ::: kaos_lib.peers
 
 ::: kaos_lib.support

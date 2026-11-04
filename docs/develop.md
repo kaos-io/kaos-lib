@@ -36,7 +36,7 @@ registry, a request to a local HTTP server, and a lock round trip through a file
 
 ## The documentation site
 
-Built with `mkdocs build --strict` (`pip install -r docs/requirements.txt -e .`). The mkdocs hook `docs/hooks.py`
+Build it with `mkdocs build --strict` (`pip install -r docs/requirements.txt -e .`). The mkdocs hook `docs/hooks.py`
 runs `docs_gen.py` before every build and writes `docs/generated/`: the CLI reference (every `kaosctl` command's
 `--help`, from `kaos_lib.cli.build_parser`), the version line, and each channel's install command (from its public
 `release.json`). Never edit `docs/generated/`; it is not committed.
