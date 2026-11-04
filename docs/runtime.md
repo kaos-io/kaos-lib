@@ -3,33 +3,33 @@
 ```python
 from kaos_lib import runtime
 ctx = runtime.context()    # frozen dataclass, read from the environment; missing values are None
-runtime.run_id()           # $KUBECORE_RUN_ID, or None
+runtime.run_id()           # $KAOS_RUN_ID, or None
 runtime.usable_cpus()      # the cores to size worker pools by (see "A shared Slurm node" below)
 ```
 
 | field | variables (first non-empty wins) |
 | --- | --- |
-| `run_id` | `KUBECORE_RUN_ID` |
-| `workflow` | `KUBECORE_WORKFLOW_NAME` |
-| `app` | `KUBECORE_APP`, else `<app>` of `outputs_repo` = `outputs-<app>` |
-| `project` | `KUBECORE_PROJECT` |
-| `step` | `KUBECORE_STEP`, `STEP_NAME` |
+| `run_id` | `KAOS_RUN_ID` |
+| `workflow` | `KAOS_WORKFLOW_NAME` |
+| `app` | `KAOS_APP`, else `<app>` of `outputs_repo` = `outputs-<app>` |
+| `project` | `KAOS_PROJECT` |
+| `step` | `KAOS_STEP`, `STEP_NAME` |
 | `outputs_repo` | `OUTPUTS_REPO`, `CHECKPOINT_BUCKET` |
 | `lakefs_endpoint` | `LAKEFS_ENDPOINT`, `LAKEFS_URL` |
 | `mlflow_uri` | `MLFLOW_TRACKING_URI` |
-| `dataset_ref` | `KUBECORE_DATASET_REF`, `DATASET`, `DATASET_REPO@DATASET_REF` |
-| `dataset_commit` | `KUBECORE_DATASET_COMMIT`, `DATASET_COMMIT` |
+| `dataset_ref` | `KAOS_DATASET_REF`, `DATASET`, `DATASET_REPO@DATASET_REF` |
+| `dataset_commit` | `KAOS_DATASET_COMMIT`, `DATASET_COMMIT` |
 | `support` | the `kaos_lib.support` verdict for `$KAOS_LIB_SUPPORT` |
-| `slot` | `KUBECORE_SLOT_GPUS`, `KUBECORE_SLOT_CPUS`, `KUBECORE_SLOT_MEM_GIB`, `KUBECORE_SLOT_SHARED` (a `Slot`, or None) |
+| `slot` | `KAOS_SLOT_GPUS`, `KAOS_SLOT_CPUS`, `KAOS_SLOT_MEM_GIB`, `KAOS_SLOT_SHARED` (a `Slot`, or None) |
 
 Every step gets the run id, workflow name, results repository and endpoints; a value the step does not have is
-`None` (`KUBECORE_APP`, `KUBECORE_PROJECT` and `KUBECORE_STEP` are not set yet; in a Slurm job the step comes from
+`None` (`KAOS_APP`, `KAOS_PROJECT` and `KAOS_STEP` are not set yet; in a Slurm job the step comes from
 `STEP_NAME`).
 
 ## A shared Slurm node
 
 On Slurm, steps of one project can share a node: each gets one slot, a GPU with its cores and its memory share
-(the runner sets `KUBECORE_SLOT_*`, so `context().slot` is a `Slot(gpus, cpus, mem_gib, shared)`). The GPU is
+(the runner sets `KAOS_SLOT_*`, so `context().slot` is a `Slot(gpus, cpus, mem_gib, shared)`). The GPU is
 already the only one the step sees. Cores and memory are not hidden: `os.cpu_count()` still counts every core of
 the node, and a step that uses more memory than its share is stopped. Size data loaders and caches by the slot:
 

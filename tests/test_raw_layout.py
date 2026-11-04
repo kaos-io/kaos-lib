@@ -64,7 +64,7 @@ def test_raw_uses_staged_dir_whole_and_prefix(repo, fake, client, tmp_path, monk
     (staged / "sub").mkdir(parents=True)
     (staged / "sub" / "b.txt").write_text("B")
     (staged / ".kaos-ready").write_text("")
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    monkeypatch.setenv("KAOS_STAGED_DIR", str(staged))
     assert datasets.materialize(repo, client=client) == staged
     assert datasets.materialize(repo, client=client, prefix="sub") == staged / "sub/"
     assert gets(fake) == []                                               # nothing downloaded
@@ -108,7 +108,7 @@ def test_raw_skeleton_is_a_readme_validates_nothing_publishes_as_is(fake, client
 def test_pulled_copy_pushes_back_without_its_marker(repo, fake, client, tmp_path):
     """A folder made by pull carries the cache marker; pushing it unchanged has nothing to publish."""
     out = datasets.materialize(repo, tmp_path / "copy", client=client)
-    assert (out / ".kubecore-dataset.json").is_file()
+    assert (out / ".kaos-dataset.json").is_file()
     with pytest.raises(DatasetError, match="nothing to publish"):
         datasets.publish_tree(out, "my-repo", "unchanged", client=client)
     (out / "new.txt").write_bytes(b"N")

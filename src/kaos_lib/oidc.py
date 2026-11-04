@@ -34,7 +34,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import http.server
-import os
 import secrets
 import sys
 import threading
@@ -45,12 +44,14 @@ from typing import Optional
 
 import requests
 
+from . import _env
+
 CALLBACK_PATH = "/callback"
 
 # How long to wait for the user to finish signing in. The clock starts when the
 # browser opens, and the user still has to read the login page, type a password
 # and clear 2FA, so this must budget a human, not a machine.
-LOGIN_TIMEOUT = int(os.environ.get("KUBECORE_ML_LOGIN_TIMEOUT", "180"))
+LOGIN_TIMEOUT = int(_env.get("ML_LOGIN_TIMEOUT", default="180"))
 
 
 class LoginError(RuntimeError):

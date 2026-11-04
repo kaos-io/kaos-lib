@@ -182,15 +182,15 @@ def test_create_dataset_follows_the_kaos_lake_ui_flow(fake, client):
 
 def test_storage_prefix_falls_back_to_env_then_errors(fake, client, monkeypatch):
     fake.storage_prefix = None
-    with pytest.raises(DatasetError, match="KUBECORE_STORAGE_NAMESPACE_BASE"):
+    with pytest.raises(DatasetError, match="KAOS_STORAGE_NAMESPACE_BASE"):
         datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
     assert "dataset-cats" not in fake.repos
-    monkeypatch.setenv("KUBECORE_STORAGE_NAMESPACE_BASE", "gs://other/lake/")
+    monkeypatch.setenv("KAOS_STORAGE_NAMESPACE_BASE", "gs://other/lake/")
     datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
     assert re.fullmatch(r"gs://other/lake/dataset-cats-[0-9a-f]{8}", fake.repos["dataset-cats"]["ns"])
 
 
 def test_published_storage_prefix_wins_over_env(fake, client, monkeypatch):
-    monkeypatch.setenv("KUBECORE_STORAGE_NAMESPACE_BASE", "gs://other/lake")
+    monkeypatch.setenv("KAOS_STORAGE_NAMESPACE_BASE", "gs://other/lake")
     datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
     assert re.fullmatch(r"gs://bucket/lakefs/dataset-cats-[0-9a-f]{8}", fake.repos["dataset-cats"]["ns"])

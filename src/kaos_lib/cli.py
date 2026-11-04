@@ -447,7 +447,7 @@ def build_parser() -> argparse.ArgumentParser:
     def add(parent, name, func, help_, url=True):
         sp = parent.add_parser(name, help=help_, description=help_)
         if url:
-            sp.add_argument("--url", help="lakeFS URL (default: LAKEFS_ENDPOINT or .kubecore/dataset-config.yaml)")
+            sp.add_argument("--url", help="lakeFS URL (default: LAKEFS_ENDPOINT or .kaos/dataset-config.yaml)")
         sp.set_defaults(func=func)
         return sp
 
@@ -525,7 +525,7 @@ def main(argv: Optional[list] = None) -> int:
         return EXIT_USER_ERROR
     except requests.exceptions.ConnectionError as exc:
         print(f"ERROR: cannot reach lakeFS ({exc.__class__.__name__}). Check --url / "
-              ".kubecore/dataset-config.yaml and your network.", file=sys.stderr)
+              ".kaos/dataset-config.yaml and your network.", file=sys.stderr)
         return EXIT_USER_ERROR
 
 

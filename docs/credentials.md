@@ -10,5 +10,5 @@ One chain, and no secrets in the package.
 Another project's lakeFS gets its own chain (`credentials.resolve_peer`), without step 1; see
 [Datasets shared with your project](shared-datasets.md).
 
-The lakeFS URL comes from `--url`, `LAKEFS_ENDPOINT`/`LAKEFS_URL`, or `.kubecore/dataset-config.yaml`
+The lakeFS URL comes from `--url`, `LAKEFS_ENDPOINT`/`LAKEFS_URL`, or `.kaos/dataset-config.yaml`
 (present in every app repository, with the sign-in settings).

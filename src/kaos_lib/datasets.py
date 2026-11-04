@@ -9,7 +9,6 @@ organisation shares with this one (F-12): read-only, from the owner's lakeFS.
 from __future__ import annotations
 
 import datetime as dt
-import os
 import pathlib
 import re
 import secrets
@@ -17,6 +16,7 @@ import tempfile
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
+from . import _env
 from . import lock as _lock
 from .errors import DatasetError, LakeFSError, NotFoundError
 from .lakefs import LakeFS
@@ -28,7 +28,7 @@ LATEST = "latest"
 LABEL_KIND, LABEL_TEMPLATE, LABEL_DESCRIPTION = "kaos.kind", "kaos.template", "kaos.description"
 LABEL_DEFAULT, LABEL_LOCATION, LABEL_SHARED = "kaos.default", "kaos.location", "kaos.shared_with"
 NO_TEMPLATE = "none"   # create_dataset(layout="none"): an empty repository
-STORAGE_BASE_ENV = "KUBECORE_STORAGE_NAMESPACE_BASE"
+STORAGE_BASE_ENV = "KAOS_STORAGE_NAMESPACE_BASE"
 
 _NAME_RE = re.compile(r"^[a-z0-9-]{3,48}$")
 _VERSION_RE = re.compile(r"^v[1-9][0-9]*$")
@@ -298,7 +298,7 @@ def _storage_namespace(c: LakeFS, repo: str) -> str:
     New for every creation: lakeFS keeps a deleted repository's storage and refuses to create over it, so a
     namespace derived from the name alone could be used once, and delete + recreate of a name failed.
     """
-    base = c.storage_namespace_prefix() or os.environ.get(STORAGE_BASE_ENV)
+    base = c.storage_namespace_prefix() or _env.get("STORAGE_NAMESPACE_BASE")
     if not base:
         raise DatasetError(f"cannot choose storage for {repo}: kaos-lake did not publish a storage prefix. "
                            f"Set {STORAGE_BASE_ENV} (e.g. gs://bucket/lakefs).")

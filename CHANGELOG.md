@@ -6,6 +6,16 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 
 ## 0.4.0 (unreleased)
 
+### Changed
+- Platform names are `kaos`: the variables a step reads are `KAOS_<X>` (`RUN_ID`, `WORKFLOW_NAME`, `STEP`, `APP`,
+  `PROJECT`, `DATASET_REF`, `DATASET_COMMIT`, `DATASET_CONFIG`, `CACHE_DIR`, `STAGED_DIR`,
+  `SLOT_GPUS`, `SLOT_CPUS`, `SLOT_MEM_GIB`, `SLOT_SHARED`, `STORAGE_NAMESPACE_BASE`, `ML_HOME`, `ML_LOGIN_TIMEOUT`,
+  `ML_OIDC_ISSUER`, `ML_OIDC_CLIENT_ID`, `ML_OIDC_PROJECT_ID`), the app config is `.kaos/dataset-config.yaml`, and a
+  pulled dataset's marker is `.kaos-dataset.json` (never uploaded). Messages and docs use these names.
+- Nothing breaks: each `KAOS_<X>` falls back to the older `KUBECORE_<X>` (the new name wins when both are set),
+  `.kubecore/dataset-config.yaml` is still found when there is no `.kaos/` one, and a copy marked
+  `.kubecore-dataset.json` is still recognised and not uploaded. The older spellings are deprecated aliases.
+
 PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,
 user-definable layouts.
 

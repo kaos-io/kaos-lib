@@ -2,7 +2,7 @@
 
 Each ML app writes its results to its own lakeFS repository `outputs-<app>`, on `main`, **one commit per step per
 run**, under `<kind>/<experiment>/<run>/` (`kind` is `checkpoints` by default). In a pipeline step the repository name is in
-`$CHECKPOINT_BUCKET` and the run id in `$KUBECORE_RUN_ID`.
+`$CHECKPOINT_BUCKET` and the run id in `$KAOS_RUN_ID`.
 
 ```python
 from kaos_lib import outputs

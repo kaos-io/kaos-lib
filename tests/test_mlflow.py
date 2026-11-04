@@ -30,7 +30,7 @@ def session_token(**claims):
 def laptop(monkeypatch):
     """A laptop inside an app clone: lakeFS URL and login settings known, ``kaosctl login`` done."""
     monkeypatch.setenv("LAKEFS_ENDPOINT", LAKEFS)
-    monkeypatch.setenv("KUBECORE_ML_OIDC_PROJECT_ID", "321")
+    monkeypatch.setenv("KAOS_ML_OIDC_PROJECT_ID", "321")
 
     def login(token):
         credentials.save_session(LAKEFS, token)

@@ -1,6 +1,6 @@
 """Per-app config discovery. Nothing about an instance is hardcoded.
 
-The platform writes ``.kubecore/dataset-config.yaml`` into every app repo
+The platform writes ``.kaos/dataset-config.yaml`` into every app repo
 (lakefsUrl, repo, oidcIssuer, oidcClientId, oidcProjectId, ...). Precedence for
 every value: explicit argument > environment variable > this file (searched
 upward from the start dir and the CWD).
@@ -14,9 +14,11 @@ from typing import Optional
 
 import yaml
 
+from . import _env
 from .errors import ConfigError
 
-CONFIG_RELPATH = pathlib.Path(".kubecore") / "dataset-config.yaml"
+CONFIG_RELPATH = pathlib.Path(".kaos") / "dataset-config.yaml"
+LEGACY_CONFIG_RELPATH = pathlib.Path(".kubecore") / "dataset-config.yaml"  # app repos created before the rename
 ENDPOINT_ENVS = ("LAKEFS_ENDPOINT", "LAKEFS_URL")  # LAKEFS_ENDPOINT is what steps/HPC get
 
 
@@ -28,8 +30,9 @@ def _find_config(start: Optional[pathlib.Path]) -> Optional[pathlib.Path]:
         cur = root if root.is_dir() else root.parent
         while cur not in seen:
             seen.add(cur)
-            if (cur / CONFIG_RELPATH).is_file():
-                return cur / CONFIG_RELPATH
+            for relpath in (CONFIG_RELPATH, LEGACY_CONFIG_RELPATH):
+                if (cur / relpath).is_file():
+                    return cur / relpath
             if cur.parent == cur:
                 break
             cur = cur.parent
@@ -39,7 +42,7 @@ def _find_config(start: Optional[pathlib.Path]) -> Optional[pathlib.Path]:
 @lru_cache(maxsize=8)
 def load_config(start: Optional[str] = None) -> dict:
     """Load the per-app config, or ``{}`` when there is none or it is unreadable."""
-    override = os.environ.get("KUBECORE_DATASET_CONFIG")
+    override = _env.get("DATASET_CONFIG")
     path = pathlib.Path(override) if override else _find_config(pathlib.Path(start) if start else None)
     if not path or not path.is_file():
         return {}
@@ -62,12 +65,12 @@ def resolve_endpoint(explicit: Optional[str] = None, start: Optional[str] = None
     if not url:
         raise ConfigError(
             "cannot determine the lakeFS URL. Run inside your app clone (it carries "
-            ".kubecore/dataset-config.yaml), pass --url, or set LAKEFS_ENDPOINT.")
+            ".kaos/dataset-config.yaml), pass --url, or set LAKEFS_ENDPOINT.")
     return url.rstrip("/")
 
 
 def oidc_settings(start: Optional[str] = None) -> tuple:
     """(issuer, client_id, audience_project_id) for the browser login; any may be None."""
-    return (os.environ.get("KUBECORE_ML_OIDC_ISSUER") or config_value("oidcIssuer", start),
-            os.environ.get("KUBECORE_ML_OIDC_CLIENT_ID") or config_value("oidcClientId", start),
-            os.environ.get("KUBECORE_ML_OIDC_PROJECT_ID") or config_value("oidcProjectId", start))
+    return (_env.get("ML_OIDC_ISSUER") or config_value("oidcIssuer", start),
+            _env.get("ML_OIDC_CLIENT_ID") or config_value("oidcClientId", start),
+            _env.get("ML_OIDC_PROJECT_ID") or config_value("oidcProjectId", start))

@@ -1,30 +1,32 @@
 """Where a step runs: the run, app, endpoints and dataset the platform injected, read from the environment only.
 
-Nothing here is hardcoded (PRD kaos#1147 section 3.5): when the platform changes what it injects, an older
+Nothing here is hardcoded: when the platform changes what it injects, an older
 kaos-lib keeps reading the names below. Every field is None when its variables are unset or empty; ``context()``
 never raises.
 
 =================  ==============================================  ==========================================
 field              variables (first non-empty wins)                set today by
 =================  ==============================================  ==========================================
-run_id             KUBECORE_RUN_ID                                 the enhancer, every step (``workflow.name``)
-workflow           KUBECORE_WORKFLOW_NAME                          the enhancer, every step (names the MLflow run)
-app                KUBECORE_APP, else derived from outputs_repo    outputs_repo ``outputs-<app>``
-project            KUBECORE_PROJECT                                not injected yet
-step               KUBECORE_STEP, STEP_NAME                        STEP_NAME: Slurm submit pod and job
+run_id             KAOS_RUN_ID                                     the enhancer, every step (``workflow.name``)
+workflow           KAOS_WORKFLOW_NAME                              the enhancer, every step (names the MLflow run)
+app                KAOS_APP, else derived from outputs_repo        outputs_repo ``outputs-<app>``
+project            KAOS_PROJECT                                    not injected yet
+step               KAOS_STEP, STEP_NAME                            STEP_NAME: Slurm submit pod and job
 outputs_repo       OUTPUTS_REPO, CHECKPOINT_BUCKET                 CHECKPOINT_BUCKET every step; OUTPUTS_REPO HPC
 lakefs_endpoint    LAKEFS_ENDPOINT, LAKEFS_URL                     the enhancer (in-cluster); public URL on HPC
 mlflow_uri         MLFLOW_TRACKING_URI                             the enhancer (in-cluster); public URL on HPC
-dataset_ref        KUBECORE_DATASET_REF, DATASET,                  steps set KUBECORE_DATASET_REF; DATASET and
+dataset_ref        KAOS_DATASET_REF, DATASET,                      steps set KAOS_DATASET_REF; DATASET and
                    DATASET_REPO + "@" + DATASET_REF                DATASET_REPO/DATASET_REF in Slurm jobs
-dataset_commit     KUBECORE_DATASET_COMMIT, DATASET_COMMIT         steps / Slurm job
+dataset_commit     KAOS_DATASET_COMMIT, DATASET_COMMIT             steps / Slurm job
 support            verdict of kaos_lib.support.check against       the platform (``KAOS_LIB_SUPPORT``)
                    KAOS_LIB_SUPPORT
-slot               KUBECORE_SLOT_GPUS, KUBECORE_SLOT_CPUS,         the Slurm runner, on a shared node
-                   KUBECORE_SLOT_MEM_GIB, KUBECORE_SLOT_SHARED     (PRD-HPC-1609); None elsewhere
+slot               KAOS_SLOT_GPUS, KAOS_SLOT_CPUS,                 the Slurm runner, on a shared node;
+                   KAOS_SLOT_MEM_GIB, KAOS_SLOT_SHARED             None elsewhere
 =================  ==============================================  ==========================================
 
-On a shared Slurm node (PRD-HPC-1609) a step gets one slot: its GPUs, its cores and its memory share
+Every ``KAOS_<X>`` name is also read as ``KUBECORE_<X>`` when it is not set (steps started before the rename).
+
+On a shared Slurm node a step gets one slot: its GPUs, its cores and its memory share
 (``slot``). ``usable_cpus()`` is the number of cores a step should size its worker pools by: the slot's,
 else the CPUs this process may run on, else the machine's.
 """
@@ -34,31 +36,33 @@ import os
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
+from kaos_lib._env import names as _names
+
 ENV = {
-    "run_id": ("KUBECORE_RUN_ID",),
-    "workflow": ("KUBECORE_WORKFLOW_NAME",),
-    "app": ("KUBECORE_APP",),
-    "project": ("KUBECORE_PROJECT",),
-    "step": ("KUBECORE_STEP", "STEP_NAME"),
+    "run_id": _names("RUN_ID"),
+    "workflow": _names("WORKFLOW_NAME"),
+    "app": _names("APP"),
+    "project": _names("PROJECT"),
+    "step": _names("STEP") + ("STEP_NAME",),
     "outputs_repo": ("OUTPUTS_REPO", "CHECKPOINT_BUCKET"),
     "lakefs_endpoint": ("LAKEFS_ENDPOINT", "LAKEFS_URL"),
     "mlflow_uri": ("MLFLOW_TRACKING_URI",),
-    "dataset_ref": ("KUBECORE_DATASET_REF", "DATASET"),
-    "dataset_commit": ("KUBECORE_DATASET_COMMIT", "DATASET_COMMIT"),
+    "dataset_ref": _names("DATASET_REF") + ("DATASET",),
+    "dataset_commit": _names("DATASET_COMMIT") + ("DATASET_COMMIT",),
 }
 
 
 @dataclass(frozen=True)
 class Slot:
-    """This step's share of a shared Slurm node (PRD-HPC-1609): what it may use, not the whole node."""
+    """This step's share of a shared Slurm node: what it may use, not the whole node."""
     gpus: Optional[int] = None
     cpus: Optional[int] = None
     mem_gib: Optional[int] = None
     shared: bool = False
 
 
-SLOT_ENV = {"gpus": "KUBECORE_SLOT_GPUS", "cpus": "KUBECORE_SLOT_CPUS", "mem_gib": "KUBECORE_SLOT_MEM_GIB",
-            "shared": "KUBECORE_SLOT_SHARED"}
+SLOT_ENV = {"gpus": _names("SLOT_GPUS"), "cpus": _names("SLOT_CPUS"), "mem_gib": _names("SLOT_MEM_GIB"),
+            "shared": _names("SLOT_SHARED")}
 
 
 @dataclass(frozen=True)
@@ -99,8 +103,8 @@ def _support(environ: Mapping) -> Optional[str]:
     return support.check(__version__, raw)["verdict"] if raw else None
 
 
-def _int(environ: Mapping, name: str) -> Optional[int]:
-    value = (environ.get(name) or "").strip()
+def _int(environ: Mapping, names: tuple) -> Optional[int]:
+    value = _first(environ, names) or ""
     try:
         return int(value) if value else None
     except ValueError:
@@ -112,7 +116,7 @@ def _slot(environ: Mapping) -> Optional[Slot]:
     values = {k: _int(environ, v) for k, v in SLOT_ENV.items() if k != "shared"}
     if not any(v is not None for v in values.values()):
         return None
-    return Slot(**values, shared=(environ.get(SLOT_ENV["shared"]) or "").strip() == "1")
+    return Slot(**values, shared=_first(environ, SLOT_ENV["shared"]) == "1")
 
 
 def usable_cpus(environ: Optional[Mapping] = None) -> int:
@@ -140,5 +144,5 @@ def context(environ: Optional[Mapping] = None) -> Context:
 
 
 def run_id(environ: Optional[Mapping] = None) -> Optional[str]:
-    """The platform's run id (``$KUBECORE_RUN_ID``), or None outside a pipeline run."""
+    """The platform's run id (``$KAOS_RUN_ID``), or None outside a pipeline run."""
     return _first(os.environ if environ is None else environ, ENV["run_id"])
