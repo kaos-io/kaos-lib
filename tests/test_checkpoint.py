@@ -142,5 +142,15 @@ def test_end_to_end_through_a_shell_that_ignores_the_signal(tmp_path):
 
 
 def _children(pid):
-    out = subprocess.run(["pgrep", "-g", str(os.getpgid(pid))], capture_output=True, text=True).stdout.split()
-    return [int(x) for x in out if int(x) != pid]
+    """The other processes of pid's process group, read from /proc (no procps in the CI image)."""
+    group, found = os.getpgid(pid), []
+    for entry in pathlib.Path("/proc").iterdir():
+        if not entry.name.isdigit() or int(entry.name) == pid:
+            continue
+        try:
+            fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+        except OSError:
+            continue
+        if int(fields[2]) == group:      # after the command: state, ppid, pgrp
+            found.append(int(entry.name))
+    return found
