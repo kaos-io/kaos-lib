@@ -31,18 +31,6 @@ def clean_env(tmp_path, monkeypatch):
     peers.clear_cache()
     lock.reset()
     monkeypatch.setattr(mlflow, "_source", mlflow.TokenSource())
-    _reset_stop_signal()
-    yield
-    _reset_stop_signal()
-
-
-def _reset_stop_signal():
-    """No run writer from one test stays registered for the stop signal in the next."""
-    import signal
-    from kaos_lib import outputs
-    outputs._WATCHED.clear()
-    outputs._HANDLER.update(pid=None, previous=None, stopping=False)
-    signal.signal(outputs.STOP_SIGNAL, signal.SIG_DFL)
 
 
 @pytest.fixture

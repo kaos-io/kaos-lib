@@ -92,6 +92,7 @@ nav:
   - Guides:
       - Datasets: datasets.md
       - Outputs: outputs.md
+      - Long runs on HPC (Slurm): checkpoint.md
       - MLflow: mlflow.md
       - Data lock: data-lock.md
       - Datasets shared with your project: shared-datasets.md

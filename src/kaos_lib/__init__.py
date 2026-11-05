@@ -8,6 +8,7 @@ Public API:
     kaos_lib.mlflow    mlflow(), token(); the MLflow request-auth provider ``zitadel`` (extra kaos-lib[mlflow])
     kaos_lib.runtime   context(), run_id(), usable_cpus(): what the platform injected, from the environment
     kaos_lib.lock      DataLock, record, write, load, replay: the commits a run read (data.lock.json)
+    kaos_lib.checkpoint  stop_requested, is_resume, resume_path, save: continue before an HPC wall time
 """
 __version__ = "0.4.0"
 
