@@ -1,51 +1,41 @@
-"""Checkpoints for long runs: save regularly, verify on load, continue after any interruption.
+"""Checkpoints for long runs: one folder, kept safe by the platform, whatever framework you use.
 
-Register how your step saves and loads its state once, after the model is built, and call ``tick()`` at the safe
-points of your loop (the end of a batch or an epoch)::
+Four ways, simplest first (all work the same on every backend)::
 
     from kaos_lib import checkpoint
 
-    model = build_model()
-    checkpoint.register(save=lambda path: save_state(model, path),    # writes into the folder it is given, and
-                        load=lambda path: load_state(model, path))    # returns the progress: an int or a dict
-    for epoch in range(first_epoch, epochs):
-        train_one_epoch(model)
-        checkpoint.tick()
+    # 1. Point any framework at the folder; the platform saves it, verifies it and restores it when the step continues.
+    YOLO("yolo11n.pt").train(project=str(checkpoint.dir()), name="run", exist_ok=True)
 
-``save(path)`` writes everything needed to continue into the empty folder ``path`` and returns the progress it
-reached: an int (``epoch``) or a dict (``{"epoch": 3, "step": 1200}``, most significant counter first). ``load(path)``
-restores from such a folder. ``checkpoint(save=..., load=...)`` is the same call as ``checkpoint.register(...)``.
+    # 2. Or save and load your own state in a few lines.
+    state = checkpoint.load("state", default={"epoch": 0})
+    for epoch in range(state["epoch"], epochs):
+        train_one_epoch(); checkpoint.save({"epoch": epoch + 1})
 
-What the library does with them:
+    # 3. Stop cleanly when the platform asks (a reclaimed node, a drain, the wall time).
+    if checkpoint.stop_requested():
+        checkpoint.save({"epoch": epoch + 1}); checkpoint.exit_for_restart()
 
-* **Resume.** If the platform continues the step from an earlier checkpoint, ``register`` loads the newest
-  checkpoint that verifies and returns its progress (None on a first run).
-* **The checkpoint folder.** The platform gives every step a folder, ``checkpoint.checkpoint_dir()``
-  (``$KAOS_CHECKPOINT_DIR``), saves it every few minutes and before the wall time, and restores its newest verified
-  copy there when the step continues. Registered saves are written into it; a step that never calls this library
-  can simply point its framework at the folder.
-* **Periodic checkpoints.** ``tick()`` saves every N minutes. N follows the measured save time so saving stays near
-  10 % of the run time (never less than 5 or more than 60 minutes); ``checkpoint_every=`` sets minutes yourself and
-  ``checkpoint_every=False`` turns periodic saving off.
-* **Stop signal.** When the platform asks the step to stop before its wall time, the next ``tick()`` saves and ends
-  the step with exit code 85 so it continues in a new job.
-* **Safe writes.** A checkpoint is written to a temporary folder, listed in a manifest (sha256 and size of every
-  file, progress, time) and only then moved into place. Loading skips a checkpoint whose files do not match its
-  manifest and takes the previous one. The last two checkpoints are kept.
+    # 4. Ultralytics, PyTorch Lightning and Hugging Face are hooked automatically (no code, see kaos_lib.frameworks).
 
-The older calls still work: ``stop_requested()``, ``save(save_fn)`` (saves and ends the step if a stop was
-requested), ``is_resume()`` and ``resume_path()``.
+``dir()`` is the platform's ``$KAOS_CHECKPOINT_DIR`` (a fresh temporary folder on your own machine, where nothing is
+restored). ``save(obj, name)`` writes bytes, JSON-able data (dict, list, numbers, text) or any picklable object
+atomically into it; ``load(name, default)`` reads it back; ``progress(n)`` optionally tells the platform how far you
+are (an int, or a dict such as ``{"epoch": 3, "step": 1200}``, most significant counter first) so it can stop a
+continuation that gets nowhere. ``stop_requested()`` becomes true on SIGTERM or SIGUSR1.
 
-Where no stop signal arrives and nothing is handed over (for example on your project's own machines), ``tick()``
-still writes periodic checkpoints into the output folder; the same code runs everywhere.
+Python standard library only; no framework code. ``load`` unpickles what ``save`` pickled: only use it on your own folder.
 
-Python standard library only; no framework code.
+Advanced and older calls, kept working: ``register(save=, load=)`` + ``tick()`` (periodic, versioned, checksum-verified
+checkpoints of custom state with progress), ``save(save_fn)`` (save and end the step once a stop was requested),
+``is_resume()`` and ``resume_path()``.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import pickle
 import pathlib
 import shutil
 import signal
@@ -99,7 +89,7 @@ def hooks_enabled() -> bool:
 def _on_terminate(signum, frame) -> None:
     """SIGTERM (a node being drained, a spot node reclaimed, a pod evicted): record it as a stop request when
     something is going to save at a safe point; otherwise behave exactly as without the library."""
-    if _reg is None:
+    if _reg is None and not _state.get("polled"):        # nobody saves or even looks: as without the library
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         os.kill(os.getpid(), signal.SIGTERM)
         return
@@ -125,7 +115,9 @@ def activate() -> bool:
 
 
 def stop_requested() -> bool:
-    """True once the platform asked the step to stop before its wall time."""
+    """True once the platform asked the step to stop (SIGTERM or SIGUSR1: a reclaimed or drained node, the wall
+    time of an HPC job). Check it at a safe point, save, then ``exit_for_restart()``."""
+    _state["polled"] = True                    # a loop that looks is a loop that will save: SIGTERM is then a request
     return _state["requested"]
 
 
@@ -356,13 +348,115 @@ def _end_step(final: pathlib.Path) -> None:
     raise SystemExit(CONTINUE_EXIT_CODE)
 
 
-def save(save_fn: Optional[Callable[[pathlib.Path], Any]] = None) -> bool:
-    """Save the checkpoint and end the step, if a stop was requested; otherwise do nothing and return False.
+_MISSING = object()
+_temp_dir: Optional[pathlib.Path] = None
+PROGRESS_FILE = "kaos-progress.json"
+_EXTENSIONS = (".json", ".pkl", ".bin")
 
-    ``save_fn(path)`` writes the checkpoint into ``path``, an empty folder (default: the function given to
-    ``register``). What it wrote replaces ``<output folder>/checkpoint`` in one rename, then the step exits with
-    ``CONTINUE_EXIT_CODE``. If ``save_fn`` raises or writes nothing, no checkpoint is left and the error propagates.
-    """
+
+def dir() -> pathlib.Path:  # noqa: A001 - the documented name
+    """The checkpoint folder: ``$KAOS_CHECKPOINT_DIR`` on the platform, else a temporary folder for this process
+    (created on first use, so a run on your own machine starts fresh). Point any framework's checkpoint or output
+    directory at it; whatever is in it is kept safe and restored when the step continues."""
+    global _temp_dir
+    env = os.environ.get(CHECKPOINT_DIR_ENV)
+    if env:
+        path = pathlib.Path(env)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    if _temp_dir is None or not _temp_dir.is_dir():
+        _temp_dir = pathlib.Path(tempfile.mkdtemp(prefix="kaos-checkpoint-"))
+    return _temp_dir
+
+
+def _atomic_write(path: pathlib.Path, data: bytes) -> None:
+    """Write ``data`` so that ``path`` is either the old content or the new, never half: temp file, fsync, rename."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _encode(obj: Any) -> Tuple[str, bytes]:
+    if isinstance(obj, (bytes, bytearray, memoryview)):
+        return ".bin", bytes(obj)
+    try:
+        return ".json", json.dumps(obj, sort_keys=True).encode()
+    except (TypeError, ValueError):
+        return ".pkl", pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def _write_state(obj: Any, name: str) -> pathlib.Path:
+    if not name or "/" in name or name.startswith("."):
+        raise ValueError("name must be a plain file name, got %r" % name)
+    ext, data = _encode(obj)
+    folder = dir()
+    target = folder / (name + ext)
+    _atomic_write(target, data)
+    for other in _EXTENSIONS:                   # one format per name: a newer save of another kind replaces it
+        if other != ext:
+            try:
+                (folder / (name + other)).unlink()
+            except OSError:
+                pass
+    return target
+
+
+def save(obj: Any = _MISSING, name: str = "state") -> Any:
+    """Save ``obj`` as ``name`` in the checkpoint folder, atomically, and return its path.
+
+    ``obj`` may be bytes, anything JSON can hold (dict, list, numbers, text) or any picklable object. Called with
+    a function instead (``save(save_fn)``, the older form) or with nothing (after ``register``), it saves and ends
+    the step once a stop was requested, as before."""
+    if obj is _MISSING or (callable(obj) and not isinstance(obj, type) and name == "state"):
+        return _save_and_end(None if obj is _MISSING else obj)
+    return _write_state(obj, name)
+
+
+def load(name: str = "state", default: Any = None) -> Any:
+    """What ``save(obj, name)`` stored in the checkpoint folder (the newest file of that name), else ``default``
+    (a first run, or nothing saved yet). A file that cannot be read is skipped with a message, not trusted."""
+    folder = dir()
+    found = sorted((folder / (name + ext) for ext in _EXTENSIONS if (folder / (name + ext)).is_file()),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    for path in found:
+        try:
+            raw = path.read_bytes()
+            if path.suffix == ".json":
+                return json.loads(raw.decode())
+            return pickle.loads(raw) if path.suffix == ".pkl" else raw
+        except Exception as exc:
+            print("kaos-lib: cannot read %s (%s)" % (path, exc), file=sys.stderr, flush=True)
+    return default
+
+
+def progress(value: Any) -> None:
+    """Tell the platform how far the step is (an int, or a dict such as ``{"epoch": 3, "step": 1200}``, most
+    significant counter first). Optional: without it, any change in the folder counts as progress."""
+    values = progress_values(value)
+    if not values:
+        raise ValueError("progress needs a number or a dict of numbers")
+    body = json.dumps({"values": values, "text": progress_text(value)}).encode()
+    _atomic_write(dir() / PROGRESS_FILE, body)
+
+
+def exit_for_restart() -> None:
+    """End the step so it is continued: exit code 85. Call it after ``save`` when ``stop_requested()`` is true."""
+    sys.stdout.flush()
+    raise SystemExit(CONTINUE_EXIT_CODE)
+
+
+def _save_and_end(save_fn: Optional[Callable[[pathlib.Path], Any]]) -> bool:
     if not stop_requested():
         return False
     if save_fn is None:

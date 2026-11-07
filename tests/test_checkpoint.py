@@ -18,6 +18,7 @@ SRC = pathlib.Path(checkpoint.__file__)
 @pytest.fixture(autouse=True)
 def clean(tmp_path, monkeypatch):
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
     checkpoint._reg = None
     monkeypatch.setenv(checkpoint.OUTPUT_DIR_ENV, str(tmp_path / "output"))
     monkeypatch.delenv(checkpoint.RESUME_PATH_ENV, raising=False)
@@ -25,6 +26,7 @@ def clean(tmp_path, monkeypatch):
     signal.signal(checkpoint.STOP_SIGNAL, checkpoint._on_stop_signal)
     yield
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
     checkpoint._reg = None
     checkpoint._clock = __import__("time").monotonic
 

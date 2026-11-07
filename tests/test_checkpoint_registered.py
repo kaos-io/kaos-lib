@@ -21,6 +21,7 @@ class Clock:
 @pytest.fixture(autouse=True)
 def clean(tmp_path, monkeypatch):
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
     checkpoint._reg = None
     clock = Clock()
     monkeypatch.setattr(checkpoint, "_clock", clock)
@@ -30,6 +31,7 @@ def clean(tmp_path, monkeypatch):
     signal.signal(checkpoint.STOP_SIGNAL, checkpoint._on_stop_signal)
     yield clock
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
     checkpoint._reg = None
 
 
@@ -258,6 +260,7 @@ def test_a_flat_checkpoint_from_save_fn_resumes_with_its_manifest(tmp_path, monk
     flat = tmp_path / "output" / "checkpoint"
     monkeypatch.setenv(checkpoint.RESUME_PATH_ENV, str(flat))
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
     m = Model()
     assert checkpoint.register(save=m.save, load=m.load) == 6 and m.epoch == 6
 

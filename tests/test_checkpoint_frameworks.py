@@ -97,6 +97,7 @@ def rig(tmp_path, monkeypatch):
     clock = Clock()
     monkeypatch.setattr(checkpoint, "_clock", clock)
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
     checkpoint._reg = None
     saved_path, saved_patched = list(sys.meta_path), dict(frameworks._patched)
     frameworks._patched.clear()
@@ -105,6 +106,7 @@ def rig(tmp_path, monkeypatch):
     frameworks._patched.clear()
     frameworks._patched.update(saved_patched)
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
     checkpoint._reg = None
     for name in [m for m in sys.modules if m.split(".")[0] in ("ultralytics", "pytorch_lightning", "transformers")]:
         del sys.modules[name]
