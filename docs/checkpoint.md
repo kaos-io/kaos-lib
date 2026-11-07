@@ -1,56 +1,79 @@
-# Long runs on HPC (Slurm): save and continue
+# Long runs on HPC (Slurm): checkpoints that survive interruptions
 
-A job on HPC (Slurm) has a wall time. A step that needs longer can save its progress before the wall time and
-continue in a new job from what it saved. You write the saving and loading; KAOS sends the signal, uploads the
-checkpoint and starts the next job.
+A job on HPC (Slurm) can be interrupted: it reaches its wall time, the node fails, the site does maintenance, or the
+job is pre-empted. A step that saves its progress continues in a new job from the last good checkpoint instead of
+starting over. You decide what a checkpoint contains; the platform keeps it safe and brings it back.
 
-## 1. Declare the step resumable
+## 1. The checkpoint folder (no library needed)
 
-In `pipeline.py`:
+Every step gets a folder in the environment variable `KAOS_CHECKPOINT_DIR`. The platform saves a copy of it every
+few minutes and shortly before the wall time, and puts the newest verified copy back into that folder when the step
+continues. Point your framework at it:
 
 ```python
-train = step("model-training", gpu=True, hpc_time_limit="12h", resumable=True)
+import os
+ckpt = os.environ.get("KAOS_CHECKPOINT_DIR", "runs/checkpoints")     # your own default elsewhere
+
+# Ultralytics: YOLO(...).train(project=ckpt, name="run", exist_ok=True, resume=os.path.exists(f"{ckpt}/run/weights/last.pt"))
+# PyTorch Lightning: ModelCheckpoint(dirpath=ckpt); trainer.fit(model, ckpt_path="last")
+# Hugging Face: TrainingArguments(output_dir=ckpt); trainer.train(resume_from_checkpoint=True)
+# Plain PyTorch: torch.save(state, f"{ckpt}/last.pt") and torch.load it at start if it exists
 ```
 
-The stop signal arrives 10 minutes before the wall time. If saving and uploading your checkpoint takes longer, ask
-for it earlier: `resumable="20m"`.
+On a continued step the folder already holds the earlier files, so code that resumes "if the file exists" works
+unchanged. A step that writes nothing there is simply re-run from the start if the node fails (up to twice).
 
-## 2. Save at a safe point, resume from the checkpoint
+## 2. Or register save and load
+
+If you want a progress value, a checked checkpoint, or a framework-free save, tell the library how to save and
+load:
 
 ```python
 from kaos_lib import checkpoint
 
-state = load_state(checkpoint.resume_path()) if checkpoint.is_resume() else fresh_state()
-for epoch in range(state.epoch, epochs):
-    train_one_epoch(state)
-    if checkpoint.stop_requested():                       # the end of an epoch or a batch
-        checkpoint.save(lambda path: save_state(state, path))
+model = build_model()
+checkpoint.register(save=lambda path: save_state(model, path),    # writes into `path`, returns the progress
+                    load=lambda path: load_state(model, path))
+for epoch in range(first_epoch, epochs):
+    train_one_epoch(model)
+    checkpoint.tick()                                             # a safe point: end of a batch or an epoch
 ```
 
-- `stop_requested()` turns true when the stop signal arrives. Check it where your state is consistent, at the end
-  of an epoch or a batch.
-- `save(save_fn)` calls `save_fn` with an empty folder. Write everything you need to resume into it. It then
-  becomes `checkpoint/` in the step's output folder in one step, and the step ends so it can continue.
-- `is_resume()` and `resume_path()` tell a continued step where its checkpoint is.
+- `save(path)` writes everything needed to continue into the empty folder `path` and returns the progress it
+  reached: an int (`epoch`) or a dict (`{"epoch": 3, "step": 1200}`, most significant counter first).
+- `load(path)` restores from such a folder. `register` calls it for you when the step continues, and returns the
+  progress that was loaded (`None` on a first run).
+- `tick()` writes a checkpoint every N minutes. N follows the measured save time so saving stays near 10 % of the run
+  time (between 5 and 60 minutes). `checkpoint_every=20` sets minutes yourself; `checkpoint_every=False` turns
+  periodic saving off. When the platform asks the step to stop before the wall time, the next `tick()` saves and
+  ends the step so it continues.
+- Every checkpoint is written to a temporary folder and moved into place when complete, with a manifest of file
+  checksums. On load, a checkpoint whose files do not match is skipped and the previous one is used. The last two
+  are kept.
 
-`save_state` and `load_state` are yours: save whatever your framework needs (weights, optimiser, epoch, random
-state).
+`checkpoint(save=..., load=...)` is the same call as `checkpoint.register(...)`. The earlier calls
+`stop_requested()`, `save(save_fn)`, `is_resume()` and `resume_path()` keep working.
 
-## What happens
+## When the platform continues a step
 
-1. The stop signal arrives (10 minutes, or your lead time, before the wall time).
-2. At your next check, `save` writes the checkpoint and ends the step.
-3. The checkpoint is uploaded with the step's outputs, before the job ends.
-4. The step continues in a new job; `is_resume()` is true there. A continued run waits in the queue again, and its
-   time counts against your budget.
+| the job ended with | a step with a checkpoint | a step without one |
+|---|---|---|
+| wall time reached | continues from the newest checkpoint | ends: "wall time reached" |
+| node failure, maintenance, pre-emption | continues from the newest checkpoint | re-runs from the start, at most twice |
+| killed as idle (no GPU work, no log output) | continues from the newest checkpoint | ends: idle |
+| an error in your own code (non-zero exit) | ends: failed | ends: failed |
 
-On your project's own machines there is no stop signal and nothing to resume from: `stop_requested()` and
-`is_resume()` stay false, so the same code runs everywhere.
+A continued run waits in the queue again and its time counts against your budget. A continuation that does not get
+past the previous checkpoint's progress (the progress you return, or any change in the folder) ends with the reason
+`NoProgress` instead of repeating the same hours.
+
+On your project's own machines there is no platform folder and nothing to resume from: `register` and `tick()` write
+into `output/checkpoint` and the same code runs everywhere.
 
 ## If it isn't there
 
 | symptom | fix |
 |---|---|
-| the step ends at its wall time without saving | declare it `resumable=`, and check `stop_requested()` often enough to save before the wall time |
-| the checkpoint does not finish uploading | ask for an earlier signal: `resumable="20m"` |
-| a continued step starts from scratch | load from `checkpoint.resume_path()` when `checkpoint.is_resume()` is true |
+| a continued step starts from scratch | load from the folder when files exist; or use `register(load=...)` |
+| `NoProgress` | the step restarted without loading, or saved the same state: check that `load` restores your counters |
+| the checkpoint is large and saving is slow | `checkpoint_every=30`, or save less (weights only, skip the optimiser) |
