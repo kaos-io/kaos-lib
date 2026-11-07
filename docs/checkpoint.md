@@ -1,56 +1,91 @@
-# Long runs on HPC (Slurm): save and continue
+# Long runs: checkpoints that survive interruptions
 
-A job on HPC (Slurm) has a wall time. A step that needs longer can save its progress before the wall time and
-continue in a new job from what it saved. You write the saving and loading; KAOS sends the signal, uploads the
-checkpoint and starts the next job.
+A step can be interrupted: a spot or preemptible node is reclaimed, a node fails or is drained, or an HPC (Slurm) job
+reaches its wall time. A step that keeps its progress in the **checkpoint folder** continues from it instead of
+starting over. The platform saves the folder every few minutes, checks it, and puts the newest good copy back when the
+step continues. You decide what goes in it. The same code works on Kubernetes nodes and on HPC.
 
-## 1. Declare the step resumable
+A step that writes nothing there is simply run again from the start after a node failure or pre-emption (up to twice).
+Outputs are published only when a run succeeds, so a re-run never leaves half a result.
 
-In `pipeline.py`:
+## 1. Point your framework at the folder
 
-```python
-train = step("model-training", gpu=True, hpc_time_limit="12h", resumable=True)
-```
-
-The stop signal arrives 10 minutes before the wall time. If saving and uploading your checkpoint takes longer, ask
-for it earlier: `resumable="20m"`.
-
-## 2. Save at a safe point, resume from the checkpoint
+`checkpoint.dir()` is the folder (the platform sets `KAOS_CHECKPOINT_DIR`; on your own machine it is a fresh
+temporary folder). Give it to any framework's own checkpoint or output directory:
 
 ```python
 from kaos_lib import checkpoint
-
-state = load_state(checkpoint.resume_path()) if checkpoint.is_resume() else fresh_state()
-for epoch in range(state.epoch, epochs):
-    train_one_epoch(state)
-    if checkpoint.stop_requested():                       # the end of an epoch or a batch
-        checkpoint.save(lambda path: save_state(state, path))
+YOLO("yolo11n.pt").train(data="data.yaml", project=str(checkpoint.dir()), name="run", exist_ok=True)   # Ultralytics
+trainer = pl.Trainer(callbacks=[ModelCheckpoint(dirpath=checkpoint.dir(), save_last=True)])             # Lightning
+args = TrainingArguments(output_dir=str(checkpoint.dir()), save_steps=500)                              # Hugging Face
 ```
 
-- `stop_requested()` turns true when the stop signal arrives. Check it where your state is consistent, at the end
-  of an epoch or a batch.
-- `save(save_fn)` calls `save_fn` with an empty folder. Write everything you need to resume into it. It then
-  becomes `checkpoint/` in the step's output folder in one step, and the step ends so it can continue.
-- `is_resume()` and `resume_path()` tell a continued step where its checkpoint is.
+On a continued step the folder already holds the earlier files, so code that resumes "if the file exists" (Keras,
+orbax, your own) works unchanged.
 
-`save_state` and `load_state` are yours: save whatever your framework needs (weights, optimiser, epoch, random
-state).
+## 2. Save and load your own state
 
-## What happens
+For a custom loop, three lines each way. `save` writes bytes, JSON-able data (dict, list, numbers, text) or any
+picklable object atomically; `load` returns it, or the default on a first run:
 
-1. The stop signal arrives (10 minutes, or your lead time, before the wall time).
-2. At your next check, `save` writes the checkpoint and ends the step.
-3. The checkpoint is uploaded with the step's outputs, before the job ends.
-4. The step continues in a new job; `is_resume()` is true there. A continued run waits in the queue again, and its
-   time counts against your budget.
+```python
+state = checkpoint.load("state", default={"epoch": 0})              # first run: the default; a continued step: where it stopped
+for epoch in range(state["epoch"], epochs):
+    train_one_epoch(); checkpoint.save({"epoch": epoch + 1})        # a different name keeps separate state: save(x, name="model")
+```
 
-On your project's own machines there is no stop signal and nothing to resume from: `stop_requested()` and
-`is_resume()` stay false, so the same code runs everywhere.
+`load` unpickles what `save` pickled: only use it on your own folder.
+
+`checkpoint.progress(n)` is optional: it tells the platform how far you are (an int, or a dict such as
+`{"epoch": 3, "step": 1200}`, most significant counter first). A continuation that gets no further than the checkpoint
+it started from ends with the reason `NoProgress` instead of repeating the same hours. Without it, any change in the
+folder counts as progress.
+
+## 3. Stop cleanly
+
+`checkpoint.stop_requested()` becomes true on SIGTERM or SIGUSR1: a reclaimed or drained node, or the wall time of an
+HPC job. Check it at a safe point (the end of a batch or an epoch), save, and end the step so it is continued:
+
+```python
+if checkpoint.stop_requested():
+    checkpoint.save({"epoch": epoch + 1}); checkpoint.exit_for_restart()    # exit code 85: "saved, continue me"
+```
+
+Nothing changes for a step that never calls `stop_requested()`: SIGTERM ends it as before.
+
+## 4. Or let the library hook your framework
+
+When `kaos_lib` is imported in a step that has the checkpoint folder, it attaches to the framework you use, with no code
+from you. It only touches a framework your step already imported, and `kaos_lib` depends on none of them.
+
+| framework | saved into the folder | on a continued step |
+|---|---|---|
+| Ultralytics (YOLO) | `last.pt` at the end of an epoch | resumes with the same total epochs, in the same MLflow run |
+| PyTorch Lightning | a full Lightning checkpoint | `fit` continues from it (`ckpt_path`) |
+| Hugging Face `Trainer` | the Trainer's `checkpoint-*` | `train` resumes from it (`resume_from_checkpoint`) |
+
+Saving happens every few minutes (about 10 % of the run time at most, between 5 and 60 minutes) and at the next safe
+point after a stop request, when the step then ends with exit code 85. A run you already told to resume
+(`resume=...`, `ckpt_path=...`, `resume_from_checkpoint=...`) is left alone. Turn the hooks off with the environment
+variable `KAOS_CHECKPOINT_HOOKS=0`.
+
+## What the platform does when a step ends
+
+| the run ended with | a step that kept a checkpoint | a step that did not |
+|---|---|---|
+| node failure, maintenance, pre-emption, reclaimed spot node | continues from the newest good checkpoint | re-runs from the start, at most twice |
+| wall time reached (HPC) | continues from the newest good checkpoint | ends: "wall time reached" |
+| killed as idle (no GPU work, no log output) | continues from the newest good checkpoint | ends: idle |
+| an error in your own code (non-zero exit) | ends: failed | ends: failed |
+
+A continued run waits in the queue again and its time counts against your budget. A checkpoint is used only when it
+verifies; if the newest does not, the previous one is. `resumable=False` on the step turns continuing off.
 
 ## If it isn't there
 
 | symptom | fix |
 |---|---|
-| the step ends at its wall time without saving | declare it `resumable=`, and check `stop_requested()` often enough to save before the wall time |
-| the checkpoint does not finish uploading | ask for an earlier signal: `resumable="20m"` |
-| a continued step starts from scratch | load from `checkpoint.resume_path()` when `checkpoint.is_resume()` is true |
+| a continued step starts from scratch | your code must read the folder: point the framework at `checkpoint.dir()`, or use `load` |
+| `NoProgress` | the step restarted without loading, or saved the same state: check that you load what you saved |
+| saving is slow or the checkpoint is large | save less (weights only), or save less often |
+| the hooks did nothing | `KAOS_CHECKPOINT_HOOKS` must not be 0; framework versions the hooks do not know are left alone, with a message in the log |

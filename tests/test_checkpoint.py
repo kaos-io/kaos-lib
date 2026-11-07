@@ -18,11 +18,17 @@ SRC = pathlib.Path(checkpoint.__file__)
 @pytest.fixture(autouse=True)
 def clean(tmp_path, monkeypatch):
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
+    checkpoint._reg = None
     monkeypatch.setenv(checkpoint.OUTPUT_DIR_ENV, str(tmp_path / "output"))
     monkeypatch.delenv(checkpoint.RESUME_PATH_ENV, raising=False)
+    monkeypatch.delenv(checkpoint.CHECKPOINT_DIR_ENV, raising=False)
     signal.signal(checkpoint.STOP_SIGNAL, checkpoint._on_stop_signal)
     yield
     checkpoint._state["requested"] = False
+    checkpoint._state.pop("polled", None)
+    checkpoint._reg = None
+    checkpoint._clock = __import__("time").monotonic
 
 
 def write(name, data):
@@ -79,7 +85,7 @@ def test_a_newer_checkpoint_replaces_the_previous_one(tmp_path):
     os.kill(os.getpid(), checkpoint.STOP_SIGNAL)
     with pytest.raises(SystemExit):
         checkpoint.save(write("state.pt", b"new"))
-    assert sorted(p.name for p in old.iterdir()) == ["state.pt"]
+    assert sorted(p.name for p in old.iterdir()) == ["manifest.json", "state.pt"]
     assert (old / "state.pt").read_bytes() == b"new"
     assert [p.name for p in (tmp_path / "output").iterdir()] == ["checkpoint"]
 

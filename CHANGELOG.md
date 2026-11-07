@@ -10,11 +10,14 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Added
-- `kaos_lib.checkpoint`: save and continue before an HPC (Slurm) wall time. Importing it installs a handler that only
-  records the stop signal; `stop_requested()`, `is_resume()`, `resume_path()` and `save(save_fn)`, which writes the
-  step's own checkpoint atomically into `<output folder>/checkpoint` and ends the step with exit code 85 so the
-  platform continues it. Does nothing where there is no signal and nothing to resume from. Python standard library
-  only (PRD-HPC-1461 D-44 as amended 2026-11-05).
+- `kaos_lib.checkpoint`: checkpoints that survive interruptions, the same on Kubernetes and HPC. `dir()` is the
+  platform's checkpoint folder (`KAOS_CHECKPOINT_DIR`; a fresh temporary folder off the platform): point any framework
+  at it. `save(obj, name)` / `load(name, default)` keep your own state atomically (bytes, JSON-able data or pickles),
+  `progress(n)` feeds the no-progress guard, `stop_requested()` is true on SIGTERM and SIGUSR1 and `exit_for_restart()`
+  ends the step with exit code 85. Ultralytics, PyTorch Lightning and Hugging Face `Trainer` are hooked automatically
+  when the step imports them (`KAOS_CHECKPOINT_HOOKS=0` turns it off). Also `register(save=, load=)` + `tick()`:
+  periodic, versioned, checksum-verified checkpoints of custom state. The earlier `save(save_fn)`, `is_resume()` and
+  `resume_path()` still work. Python standard library only (PRD-HPC-1461 D-44, D-74 to D-76).
 - `kaos_lib.runtime`: `context().slot`, a step's share of a shared Slurm node (`Slot(gpus, cpus, mem_gib,
   shared)` from `KUBECORE_SLOT_*`, PRD-HPC-1609), and `usable_cpus()`: the cores to size worker pools by (the
   slot's, else the process's CPU binding, else the machine's).

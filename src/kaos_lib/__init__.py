@@ -8,10 +8,17 @@ Public API:
     kaos_lib.mlflow    mlflow(), token(); the MLflow request-auth provider ``zitadel`` (extra kaos-lib[mlflow])
     kaos_lib.runtime   context(), run_id(), usable_cpus(): what the platform injected, from the environment
     kaos_lib.lock      DataLock, record, write, load, replay: the commits a run read (data.lock.json)
-    kaos_lib.checkpoint  stop_requested, is_resume, resume_path, save: continue before an HPC wall time
+    kaos_lib.checkpoint  dir, save, load, progress, stop_requested, exit_for_restart: checkpoints that survive interruptions
 """
 __version__ = "0.4.0"
 
 from . import support as _support  # noqa: E402
 
 _support.at_step_start(__version__)   # pipeline steps only ($KAOS_LIB_SUPPORT): log, MLflow tag, stop if unsupported
+
+import os as _os  # noqa: E402
+
+if _os.environ.get("KAOS_CHECKPOINT_DIR"):          # the platform's checkpoint folder: stop signals and framework hooks
+    from . import checkpoint as _checkpoint  # noqa: E402
+
+    _checkpoint.activate()
