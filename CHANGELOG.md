@@ -16,8 +16,10 @@ user-definable layouts.
   adaptive periodic checkpoints (about 10 % overhead, `checkpoint_every=` to set or `False` to turn off), writes
   that are atomic with a sha256 manifest, and loading that skips a checkpoint that does not verify for the previous
   one. A stop signal before the wall time makes the next `tick()` save and end the step with exit code 85. The
-  earlier `stop_requested()`, `save(save_fn)`, `is_resume()` and `resume_path()` still work. Python standard
-  library only (PRD-HPC-1461 D-44, D-74, D-75).
+  earlier `stop_requested()`, `save(save_fn)`, `is_resume()` and `resume_path()` still work. Where
+  `KAOS_CHECKPOINT_DIR` is set, importing `kaos_lib` also hooks Ultralytics, PyTorch Lightning and the Hugging Face
+  `Trainer` automatically (only if the step imported them; `KAOS_CHECKPOINT_HOOKS=0` turns it off), and SIGTERM
+  counts as a stop request when a save is armed. Python standard library only (PRD-HPC-1461 D-44, D-74 to D-76).
 - `kaos_lib.runtime`: `context().slot`, a step's share of a shared Slurm node (`Slot(gpus, cpus, mem_gib,
   shared)` from `KUBECORE_SLOT_*`, PRD-HPC-1609), and `usable_cpus()`: the cores to size worker pools by (the
   slot's, else the process's CPU binding, else the machine's).

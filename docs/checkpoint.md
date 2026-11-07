@@ -4,29 +4,34 @@ A job on HPC (Slurm) can be interrupted: it reaches its wall time, the node fail
 job is pre-empted. A step that saves its progress continues in a new job from the last good checkpoint instead of
 starting over. You decide what a checkpoint contains; the platform keeps it safe and brings it back.
 
-## 1. The checkpoint folder (no library needed)
+## 1. It works without code
 
-Every step gets a folder in the environment variable `KAOS_CHECKPOINT_DIR`. The platform saves a copy of it every
-few minutes and shortly before the wall time, and puts the newest verified copy back into that folder when the step
-continues. Point your framework at it:
+Every step gets a checkpoint folder in the environment variable `KAOS_CHECKPOINT_DIR`. The platform saves a copy of
+it every few minutes and when the step is asked to stop, and puts the newest verified copy back when the step
+continues. When `kaos_lib` is imported in a step that has this folder, it hooks the training framework you use,
+with nothing to call:
 
-```python
-import os
-ckpt = os.environ.get("KAOS_CHECKPOINT_DIR", "runs/checkpoints")     # your own default elsewhere
+| framework | what is saved | on a continued step |
+|---|---|---|
+| Ultralytics (YOLO) | `last.pt` at the end of an epoch | resumes with the same total epochs, in the same MLflow run |
+| PyTorch Lightning | a full Lightning checkpoint | `fit` continues from it (`ckpt_path`) |
+| Hugging Face `Trainer` | the Trainer's `checkpoint-*` | `train` resumes from it (`resume_from_checkpoint`) |
+| anything else, plain PyTorch | see section 2 | see section 2 |
 
-# Ultralytics: YOLO(...).train(project=ckpt, name="run", exist_ok=True, resume=os.path.exists(f"{ckpt}/run/weights/last.pt"))
-# PyTorch Lightning: ModelCheckpoint(dirpath=ckpt); trainer.fit(model, ckpt_path="last")
-# Hugging Face: TrainingArguments(output_dir=ckpt); trainer.train(resume_from_checkpoint=True)
-# Plain PyTorch: torch.save(state, f"{ckpt}/last.pt") and torch.load it at start if it exists
-```
+- The hooks attach only to a framework your step already imported. `kaos_lib` never imports one and depends on none.
+- Saving happens every few minutes (about 10 % of the run time at most; 5 to 60 minutes), and right away at the next
+  safe point (end of an epoch or a batch) when the step is told to stop: a pre-empted or reclaimed node, a drain, or
+  the wall time of an HPC job. The step then ends with exit code 85 so it is continued rather than counted as done.
+- A run you already told to resume (`resume=...`, `ckpt_path=...`, `resume_from_checkpoint=...`) is left alone.
+- Turn the hooks off with the environment variable `KAOS_CHECKPOINT_HOOKS=0`. Your own framework checkpoints in the
+  folder keep working: you can also point your framework at `KAOS_CHECKPOINT_DIR` yourself and resume "if the file
+  exists", and the platform will keep it safe the same way.
 
-On a continued step the folder already holds the earlier files, so code that resumes "if the file exists" works
-unchanged. A step that writes nothing there is simply re-run from the start if the node fails (up to twice).
+On your own machine `KAOS_CHECKPOINT_DIR` is not set and none of this happens.
 
-## 2. Or register save and load
+## 2. Your own state: register save and load
 
-If you want a progress value, a checked checkpoint, or a framework-free save, tell the library how to save and
-load:
+For plain PyTorch, or anything the hooks do not cover, tell the library how to save and load:
 
 ```python
 from kaos_lib import checkpoint
@@ -51,6 +56,7 @@ for epoch in range(first_epoch, epochs):
   checksums. On load, a checkpoint whose files do not match is skipped and the previous one is used. The last two
   are kept.
 
+A step that registers its own functions is not also hooked automatically.
 `checkpoint(save=..., load=...)` is the same call as `checkpoint.register(...)`. The earlier calls
 `stop_requested()`, `save(save_fn)`, `is_resume()` and `resume_path()` keep working.
 
@@ -74,6 +80,7 @@ into `output/checkpoint` and the same code runs everywhere.
 
 | symptom | fix |
 |---|---|
-| a continued step starts from scratch | load from the folder when files exist; or use `register(load=...)` |
+| a continued step starts from scratch | your code resumes only if you pass the folder to the framework: use the automatic hooks, or `register(load=...)` |
+| the hooks did nothing | the step must import the framework before or after `kaos_lib`, and `KAOS_CHECKPOINT_HOOKS` must not be 0; unknown framework versions are left alone with a message in the log |
 | `NoProgress` | the step restarted without loading, or saved the same state: check that `load` restores your counters |
 | the checkpoint is large and saving is slow | `checkpoint_every=30`, or save less (weights only, skip the optimiser) |

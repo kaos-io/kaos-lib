@@ -61,6 +61,7 @@ CONTINUE_EXIT_CODE = 85            # "saved, continue me"
 OUTPUT_DIR_ENV = "KAOS_OUTPUT_DIR"
 RESUME_PATH_ENV = "KAOS_RESUME_PATH"
 CHECKPOINT_DIR_ENV = "KAOS_CHECKPOINT_DIR"  # the folder the platform keeps safe and restores on a continuation
+HOOKS_ENV = "KAOS_CHECKPOINT_HOOKS"        # set to 0 to turn the automatic framework hooks off
 DEFAULT_OUTPUT_DIR = "/work/output"
 CHECKPOINT_DIR = "checkpoint"
 MANIFEST_NAME = "manifest.json"
@@ -88,6 +89,41 @@ def _install() -> None:
 _install()
 
 
+def hooks_enabled() -> bool:
+    """True when the platform set ``KAOS_CHECKPOINT_DIR`` and ``KAOS_CHECKPOINT_HOOKS`` is not 0/false/off."""
+    if not os.environ.get(CHECKPOINT_DIR_ENV):
+        return False
+    return os.environ.get(HOOKS_ENV, "1").strip().lower() not in ("0", "false", "off", "no")
+
+
+def _on_terminate(signum, frame) -> None:
+    """SIGTERM (a node being drained, a spot node reclaimed, a pod evicted): record it as a stop request when
+    something is going to save at a safe point; otherwise behave exactly as without the library."""
+    if _reg is None:
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGTERM)
+        return
+    _state["requested"] = True
+
+
+def activate() -> bool:
+    """Called when ``kaos_lib`` is imported. Where the platform set ``KAOS_CHECKPOINT_DIR`` (and hooks are not
+    turned off) it makes SIGTERM a stop request too and attaches the framework hooks (see ``kaos_lib.frameworks``);
+    those touch a framework only if the step imports it. Returns whether it activated. Never raises."""
+    if not hooks_enabled():
+        return False
+    try:
+        if threading.current_thread() is threading.main_thread() and \
+                signal.getsignal(signal.SIGTERM) in (signal.SIG_DFL, None):
+            signal.signal(signal.SIGTERM, _on_terminate)
+        from . import frameworks
+        frameworks.install()
+    except Exception as exc:                    # the hooks must never break an import
+        print("kaos-lib: checkpoint hooks not attached: %s" % exc, file=sys.stderr, flush=True)
+        return False
+    return True
+
+
 def stop_requested() -> bool:
     """True once the platform asked the step to stop before its wall time."""
     return _state["requested"]
@@ -98,6 +134,9 @@ def resume_path() -> Optional[pathlib.Path]:
     path = os.environ.get(RESUME_PATH_ENV)
     if path and pathlib.Path(path).is_dir():
         return pathlib.Path(path)
+    folder = os.environ.get(CHECKPOINT_DIR_ENV)
+    if folder and pathlib.Path(folder).is_dir() and candidates(pathlib.Path(folder)):
+        return pathlib.Path(folder)          # the platform restored an earlier copy into the folder
     return None
 
 
@@ -341,6 +380,7 @@ class _Registration:
         self.save, self.load, self.every = save_fn, load_fn, every
         self.last_save_at = _clock()
         self.save_seconds: List[float] = []
+        self.framework = False
 
     def interval_seconds(self) -> Optional[float]:
         """Seconds between periodic checkpoints: yours, or ten times the slowest save so far, kept in bounds."""
@@ -354,6 +394,35 @@ class _Registration:
 
 
 _reg: Optional[_Registration] = None
+
+
+def attach(save: Callable[[pathlib.Path], Any], every: Any = None) -> Optional[_Registration]:
+    """For the framework hooks: arm ``tick()`` with a framework's own save, unless the step registered its own
+    save and load (then the step's wins and None is returned)."""
+    global _reg
+    if _reg is not None and not _reg.framework:
+        return None
+    _reg = _Registration(save, lambda path: None, every)
+    _reg.framework = True
+    return _reg
+
+
+def is_due() -> bool:
+    """True when a periodic checkpoint is due (for hooks that save from a framework callback)."""
+    if _reg is None:
+        return False
+    interval = _reg.interval_seconds()
+    return interval is not None and _clock() - _reg.last_save_at >= interval
+
+
+def save_now() -> pathlib.Path:
+    """Write a checkpoint with the registered save now; if a stop was requested, end the step (exit 85) after it."""
+    if _reg is None:
+        raise RuntimeError("checkpoint.save_now() needs checkpoint.register(save=..., load=...) first")
+    folder = _save_registered()
+    if stop_requested():
+        _end_step(folder)
+    return folder
 
 
 def _save_registered() -> pathlib.Path:

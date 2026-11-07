@@ -15,3 +15,10 @@ __version__ = "0.4.0"
 from . import support as _support  # noqa: E402
 
 _support.at_step_start(__version__)   # pipeline steps only ($KAOS_LIB_SUPPORT): log, MLflow tag, stop if unsupported
+
+import os as _os  # noqa: E402
+
+if _os.environ.get("KAOS_CHECKPOINT_DIR"):          # the platform's checkpoint folder: stop signals and framework hooks
+    from . import checkpoint as _checkpoint  # noqa: E402
+
+    _checkpoint.activate()
