@@ -22,6 +22,12 @@ user-definable layouts.
   shared)` from `KUBECORE_SLOT_*`, PRD-HPC-1609), and `usable_cpus()`: the cores to size worker pools by (the
   slot's, else the process's CPU binding, else the machine's).
 
+### Fixed
+- A step continued from its checkpoint no longer loses the framework's MLflow parameter logging: the continuation
+  logs into the same run, and parameters that changed since the first attempt are logged as `resume.<name>` instead of
+  MLflow rejecting the whole batch ("Changing param values is not allowed"; seen with Ultralytics, and the same for
+  Lightning's `MLFlowLogger` and Hugging Face's `MLflowCallback`).
+
 ### Changed
 - The docs and docstrings say Slurm, not MeluXina: Slurm is the kind of machine, MeluXina is today's provider.
   No API or environment variable changes.
