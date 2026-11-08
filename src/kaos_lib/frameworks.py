@@ -9,6 +9,8 @@ imports a framework, and kaos-lib depends on none of them. Each hook does two th
   point, after which the step ends so it can continue elsewhere.
 * **Resume.** When training starts and the folder holds a checkpoint that verifies, training continues from it
   (same total epochs/steps) instead of starting over. A run you already told to resume is left alone.
+* **MLflow on resume.** A continuation logs into the same MLflow run; parameters that differ from the first attempt
+  (checkpoint path, temporary files) are logged as ``resume.<name>`` instead of failing the framework's MLflow setup.
 
 Plain PyTorch and anything else: register your own functions with ``kaos_lib.checkpoint.register(save=, load=)``.
 """
@@ -212,6 +214,52 @@ def _hf_attach(trainer) -> None:
     trainer.add_callback(KaosCheckpoint())
 
 
+# ------------------------------------------------------------------------------------------------ MLflow on resume
+
+CLASH_MESSAGE = "Changing param values is not allowed"
+RESUME_PARAM_PREFIX = "resume."
+
+
+def _patch_mlflow_client(module) -> None:
+    """Make a continued run able to log its parameters into the run it continues.
+
+    MLflow refuses to change a parameter that a run already holds, and a continuation in the same run does
+    change some (Ultralytics: ``model``, ``data`` and ``resume`` now point at the checkpoint and this attempt's
+    temporary files). Ultralytics' callback, Lightning's ``MLFlowLogger`` and Hugging Face's ``MLflowCallback``
+    all log through ``MlflowClient.log_batch``, which then rejects the whole batch. When that exact clash
+    happens, the batch is retried: new parameters as they are, unchanged ones skipped, changed ones under
+    ``resume.<name>`` (first attempt's value stays under ``<name>``). Metrics and tags in the batch always go through.
+    """
+    client_cls = module.MlflowClient
+    original = client_cls.log_batch
+
+    @functools.wraps(original)
+    def log_batch(self, run_id, metrics=(), params=(), tags=(), *args, **kwargs):
+        try:
+            return original(self, run_id, metrics, params, tags, *args, **kwargs)
+        except Exception as exc:
+            if not params or CLASH_MESSAGE not in str(exc):
+                raise
+            kept = _resume_params(self.get_run(run_id).data.params, params)
+        return original(self, run_id, metrics, kept, tags, *args, **kwargs)
+
+    client_cls.log_batch = log_batch
+
+
+def _resume_params(existing: Dict[str, str], params) -> list:
+    """The parameters of a clashing batch that can be logged: new ones, and changed ones renamed ``resume.<name>``."""
+    kept = []
+    for param in params:
+        key, value = param.key, str(param.value)
+        if key not in existing:
+            kept.append(param)
+        elif existing[key] != value:
+            renamed = RESUME_PARAM_PREFIX + key
+            if renamed not in existing or existing[renamed] == value:
+                kept.append(type(param)(renamed, value))
+    return kept
+
+
 # ------------------------------------------------------------------------------------------------ import hook
 
 WATCHED: Dict[str, Callable] = {
@@ -219,6 +267,7 @@ WATCHED: Dict[str, Callable] = {
     "pytorch_lightning.trainer.trainer": _patch_lightning,
     "lightning.pytorch.trainer.trainer": _patch_lightning,
     "transformers.trainer": _patch_transformers,
+    "mlflow.tracking.client": _patch_mlflow_client,
 }
 
 

@@ -69,6 +69,12 @@ point after a stop request, when the step then ends with exit code 85. A run you
 (`resume=...`, `ckpt_path=...`, `resume_from_checkpoint=...`) is left alone. Turn the hooks off with the environment
 variable `KAOS_CHECKPOINT_HOOKS=0`.
 
+A continued step logs into the MLflow run it continues. MLflow does not let a run's parameter change, and a continuation
+changes some (the model path now points at the checkpoint, the data file is this attempt's copy). Where a framework's
+MLflow logging (Ultralytics, Lightning `MLFlowLogger`, Hugging Face `MLflowCallback`) meets that, the parameter is
+logged as `resume.<name>` (for example `resume.model`) and the first attempt's value stays under `<name>`; new
+parameters are logged as usual. Metrics keep the framework's own step numbers, which continue from the checkpoint.
+
 ## What the platform does when a step ends
 
 | the run ended with | a step that kept a checkpoint | a step that did not |
