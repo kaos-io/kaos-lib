@@ -23,6 +23,10 @@ user-definable layouts.
   slot's, else the process's CPU binding, else the machine's).
 
 ### Fixed
+- An Ultralytics run continued from its checkpoint keeps its `best.pt`: the hook saves it with `last.pt` and puts it back
+  in the run directory on the continuation. Before, a new job started with an empty run directory and Ultralytics
+  (which writes `best.pt` only when an epoch beats the fitness restored from `last.pt`) ended with no `best.pt`, so
+  the step's best checkpoint was empty for everything after it (PRD-HPC-1461 AC-13).
 - A step continued from its checkpoint no longer loses the framework's MLflow parameter logging: the continuation
   logs into the same run, and parameters that changed since the first attempt are logged as `resume.<name>` instead of
   MLflow rejecting the whole batch ("Changing param values is not allowed"; seen with Ultralytics, and the same for
