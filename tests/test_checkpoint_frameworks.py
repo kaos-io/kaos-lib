@@ -22,6 +22,7 @@ class BaseTrainer:
         self.callbacks = {}
         self.epoch = 0
         self.last = pathlib.Path(self.args.get("save_dir", ".")) / "last.pt"
+        self.best = pathlib.Path(self.args.get("save_dir", ".")) / "best.pt"
     def add_callback(self, event, fn):
         self.callbacks.setdefault(event, []).append(fn)
     def train(self, epochs):
@@ -308,3 +309,52 @@ def test_an_unknown_framework_version_is_left_alone(rig, capsys):
     del mod.Trainer
     frameworks._apply("transformers.trainer", mod)                 # no Trainer: warns, never raises
     assert "checkpoint hooks not attached" in capsys.readouterr().err
+
+
+def test_ultralytics_saves_best_pt_with_last_pt_when_it_exists(rig, tmp_path):
+    folder, _ = rig
+    checkpoint.activate()
+    t = ultra_trainer(tmp_path)
+    t.best.write_bytes(b"best-weights")
+    os.kill(os.getpid(), signal.SIGUSR1)
+    with pytest.raises(SystemExit):
+        t.train(5)
+    [name] = ckpts(folder)
+    assert (folder / name / "best.pt").read_bytes() == b"best-weights"
+    assert checkpoint.verify(folder / name) == (True, "")
+
+
+def test_ultralytics_saves_no_best_pt_before_one_exists(rig, tmp_path):
+    folder, _ = rig
+    checkpoint.activate()
+    t = ultra_trainer(tmp_path)
+    os.kill(os.getpid(), signal.SIGUSR1)
+    with pytest.raises(SystemExit):
+        t.train(5)
+    [name] = ckpts(folder)
+    assert not (folder / name / "best.pt").exists()
+
+
+def test_ultralytics_restores_best_pt_on_a_continuation_that_starts_on_an_empty_run_dir(rig, tmp_path):
+    """Ultralytics only writes best.pt when an epoch beats the fitness it restored from last.pt: a run that peaked
+    before the interruption (and a new job has an empty run dir) must get its best.pt back (PRD-HPC-1461 AC-13)."""
+    folder, _ = rig
+    seed(folder, "ckpt-000003", **{"last.pt": b"weights-7", "best.pt": b"best-4"})
+    checkpoint.activate()
+    t = ultra_trainer(tmp_path)
+    assert t.best.read_bytes() == b"best-4"
+
+
+def test_ultralytics_restore_does_not_overwrite_a_best_pt_already_in_the_run_dir(rig, tmp_path):
+    folder, _ = rig
+    seed(folder, "ckpt-000003", **{"last.pt": b"weights-7", "best.pt": b"best-4"})
+    (tmp_path / "best.pt").write_bytes(b"newer")
+    checkpoint.activate()
+    assert ultra_trainer(tmp_path).best.read_bytes() == b"newer"
+
+
+def test_ultralytics_restore_does_nothing_when_the_folder_has_last_pt_only(rig, tmp_path):
+    folder, _ = rig
+    seed(folder, "ckpt-000003", **{"last.pt": b"weights-7"})
+    checkpoint.activate()
+    assert not ultra_trainer(tmp_path).best.exists()

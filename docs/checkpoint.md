@@ -60,7 +60,7 @@ from you. It only touches a framework your step already imported, and `kaos_lib`
 
 | framework | saved into the folder | on a continued step |
 |---|---|---|
-| Ultralytics (YOLO) | `last.pt` at the end of an epoch | resumes with the same total epochs, in the same MLflow run |
+| Ultralytics (YOLO) | `last.pt` at the end of an epoch, and `best.pt` once one exists | resumes with the same total epochs, in the same MLflow run; `best.pt` is put back in the run directory (a new job starts with an empty one) |
 | PyTorch Lightning | a full Lightning checkpoint | `fit` continues from it (`ckpt_path`) |
 | Hugging Face `Trainer` | the Trainer's `checkpoint-*` | `train` resumes from it (`resume_from_checkpoint`) |
 

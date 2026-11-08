@@ -108,14 +108,32 @@ def _mlflow_run_id() -> Optional[str]:
         return None
 
 
+def _ultra_restore_best(trainer) -> None:
+    """Put the folder's best.pt back where Ultralytics keeps it. A continuation starts on an empty run directory
+    and Ultralytics only writes best.pt when an epoch beats the best fitness it restored from last.pt, so without
+    this a run that peaked before the interruption ends with no best.pt at all."""
+    last = _newest("last.pt")
+    target = getattr(trainer, "best", None)
+    best = last.parent / "best.pt" if last is not None else None
+    if best is None or target is None or not best.exists() or pathlib.Path(target).exists():
+        return
+    pathlib.Path(target).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(best), str(target))
+    print("kaos-lib: restored best.pt from %s" % best, file=sys.stderr, flush=True)
+
+
 def _ultra_attach(trainer) -> None:
     def save(path: pathlib.Path):
         shutil.copy2(str(trainer.last), str(path / "last.pt"))
+        best = getattr(trainer, "best", None)
+        if best is not None and pathlib.Path(best).exists():    # the best weights are not inside last.pt
+            shutil.copy2(str(best), str(path / "best.pt"))
         (path / ULTRA_RUN_FILE).write_text(json.dumps({"mlflow_run_id": _mlflow_run_id()}))
         return {"epoch": int(trainer.epoch) + 1}
 
     if checkpoint.attach(save) is None:
         return
+    _ultra_restore_best(trainer)
     # on_model_save fires after the trainer wrote last.pt at the end of an epoch: the safe point.
     trainer.add_callback("on_model_save", lambda t: checkpoint.tick())
 
