@@ -71,6 +71,14 @@ it was judged on.
 | `--pipeline FILE` | the pipeline file in the folder (default `pipeline.py`) |
 | `--from-report FILE` | show a saved JSON report as text or markdown |
 | `--expect-ruleset VERSION` | refuse to run unless the rule set is exactly this version |
+| `--schema` | print what `step()` accepts (argument names, types, allowed values, docs and links) as JSON, with the rule set version, and stop. Editors read it for suggestions and hover text |
+| `--graph` | print your pipeline's steps and what each one needs as JSON, read from the file without running it, and stop. Editors draw it. A step built in a loop or a condition is marked `dynamic` |
+
+## In your editor
+
+The VS Code extension in `editors/vscode` of the kaos-lib repository shows the findings in the file as you save,
+suggests `step()` arguments and values from `kaosctl lint --schema`, and draws the step graph from
+`kaosctl lint --graph`. See its README.
 
 ## The report
 

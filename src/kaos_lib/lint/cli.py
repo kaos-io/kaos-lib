@@ -11,10 +11,12 @@ import sys
 from typing import Optional
 
 from . import render
+from .graph import graph_json
 from .catalogue import CatalogueError, default_catalogue, empty_catalogue, read_context, read_file
 from .constants import PIPELINE_FILE, RULESET_VERSION
 from .engine import MissingPipeline, lint_project
 from .model import Report
+from .schema import schema_json
 
 EXIT_OK, EXIT_USAGE, EXIT_ERRORS = 0, 1, 2   # as kaosctl: 1 = cannot run, 2 = the thing checked is invalid
 
@@ -39,6 +41,12 @@ def add_arguments(sp: argparse.ArgumentParser) -> None:
                     help="write the catalogue read from --context to FILE and stop (no linting)")
     sp.add_argument("--from-report", metavar="FILE",
                     help="render a JSON report you saved earlier instead of linting (text or markdown output)")
+    sp.add_argument("--schema", action="store_true",
+                    help="print what step() accepts (names, types, allowed values, docs, links) as JSON, versioned "
+                         "with the rule set, and stop: editors read it for completion and hover text")
+    sp.add_argument("--graph", action="store_true",
+                    help="print the pipeline's steps and their dependencies as JSON, read from the file without "
+                         "running it, and stop: editors draw it")
     sp.add_argument("--expect-ruleset", metavar="VERSION",
                     help="refuse to run unless the rule set is exactly this version")
     sp.add_argument("--file-link-base", metavar="URL", help="markdown output: link each file:line under this URL")
@@ -68,6 +76,12 @@ def run(args) -> int:
               f"different rule sets are never mixed: install the matching kaos-lib.", file=sys.stderr)
         return EXIT_USAGE
     try:
+        if args.schema:
+            _emit(args, schema_json())
+            return EXIT_OK
+        if args.graph:
+            _emit(args, graph_json(args.path, args.pipeline))
+            return EXIT_OK
         if args.export_catalogue:
             pathlib.Path(args.export_catalogue).write_text(_catalogue(args).to_json(), encoding="utf-8")
             return EXIT_OK

@@ -1,0 +1,130 @@
+{
+  "name": "kaos-pipeline",
+  "displayName": "KAOS Pipelines",
+  "description": "Autocomplete, checks and a step graph for KAOS ML pipelines (pipeline.py).",
+  "version": "0.1.0",
+  "publisher": "kaos-io",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Other"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "workspaceContains:.kaos/compat.yaml",
+    "workspaceContains:.kubecore/dataset-config.yaml",
+    "workspaceContains:pipeline.py"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Checks and the step graph read your files without running them. Sign-in needs a trusted folder.",
+      "restrictedConfigurations": [
+        "kaos.contextFile"
+      ]
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "kaos.checkPipeline",
+        "title": "Check pipeline",
+        "category": "KAOS"
+      },
+      {
+        "command": "kaos.showStepGraph",
+        "title": "Show step graph",
+        "category": "KAOS"
+      },
+      {
+        "command": "kaos.signIn",
+        "title": "Sign in",
+        "category": "KAOS"
+      },
+      {
+        "command": "kaos.showAccount",
+        "title": "Show sign-in status",
+        "category": "KAOS"
+      },
+      {
+        "command": "kaos.reloadSchema",
+        "title": "Reload step suggestions",
+        "category": "KAOS"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "kaos.checkPipeline",
+          "when": "kaos.active"
+        },
+        {
+          "command": "kaos.showStepGraph",
+          "when": "kaos.active"
+        },
+        {
+          "command": "kaos.signIn",
+          "when": "kaos.active"
+        },
+        {
+          "command": "kaos.showAccount",
+          "when": "kaos.active"
+        },
+        {
+          "command": "kaos.reloadSchema",
+          "when": "kaos.active"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "KAOS",
+      "properties": {
+        "kaos.kaosctlPath": {
+          "type": "string",
+          "default": "kaosctl",
+          "scope": "machine",
+          "markdownDescription": "The `kaosctl` command to run. Leave it as `kaosctl` to use the one on your PATH, or give the full path. This setting is only read from your user settings, never from a project folder."
+        },
+        "kaos.contextFile": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Your project's platform context file (`pipeline-context.yaml`), passed to the check as `--context`. With it, the checks that need your compute classes and HPC (Slurm) limits run; without it they are reported as skipped. A relative path is read from the project folder."
+        },
+        "kaos.checkDelayMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 200,
+          "maximum": 30000,
+          "description": "How long to wait after a save or a change before the check runs, in milliseconds."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "schema:bundle": "kaosctl lint --schema --output resources/step-schema.json",
+    "test": "npm run compile && node --test \"out/test/*.test.js\"",
+    "package": "npm run compile && mkdir -p dist && vsce package --no-dependencies --out dist/kaos-pipeline.vsix",
+    "vscode:prepublish": "npm run compile",
+    "test:integration": "npm run compile && node out/test/integration/runTests.js"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.6",
+    "@types/vscode": "1.90.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "3.2.1",
+    "typescript": "5.6.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kaos-io/kaos-lib.git",
+    "directory": "editors/vscode"
+  }
+}
