@@ -10,6 +10,12 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Added
+- `kaosctl lint --schema` and `kaosctl lint --graph`, and the VS Code extension in `editors/vscode` (PRD novelcore/kaos#1682
+  F-05, F-19, F-20). `--schema` prints what `step()` accepts (argument names, types, allowed values, docs, links, the
+  arguments that were renamed) as JSON versioned with the rule set; `--graph` prints the pipeline's steps and
+  dependencies as JSON, read from the file without running it. The extension shows the linter's findings in the editor,
+  suggests step arguments and values, offers the `walltime=` to `hpc_time_limit=` fix, draws the step graph and signs in
+  with `kaosctl login`. It is built as a local `.vsix` and is not published. No rule changed, so the rule set stays `1.1.0`.
 - The pipeline linter judges whether a step can continue from evidence, not from a guess (PRD novelcore/kaos#1682, rule
   set `1.1.0`). A step is resumable when `pipeline.py` says so, when the platform recorded that a continuation of it loaded
   its checkpoint and got past it (`hpc.resumableSteps` in the project's platform context, read by `--context`), or when its

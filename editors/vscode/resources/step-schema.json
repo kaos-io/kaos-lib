@@ -1,0 +1,464 @@
+{
+  "schema_version": 1,
+  "ruleset_version": "1.1.0",
+  "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
+  "authoring_modules": [
+    "kubecore.authoring"
+  ],
+  "step": {
+    "function": "step",
+    "parameters": [
+      {
+        "name": "name",
+        "position": 0,
+        "type": "str",
+        "required": true,
+        "default": null,
+        "gpu_only": false,
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+        "doc": "The step's name. It becomes the step's template in the pipeline, its `steps/<folder>` (hyphens as underscores) and its image, so use lowercase letters, digits and hyphens, with no hyphen at the start or end, for example `model-evaluation`. Every step needs its own name.",
+        "snippet": "\"${1:step-name}\"",
+        "values": [],
+        "links": [
+          {
+            "title": "L-E05",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
+          },
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          }
+        ]
+      },
+      {
+        "name": "reads",
+        "position": 1,
+        "type": "list[str]",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "The config sections the step reads (the files and folders of `config/`, for example `\"train\"`). A section that does not exist is refused when the pipeline is rendered.",
+        "snippet": "[\"${1:train}\"]",
+        "values": [],
+        "links": [
+          {
+            "title": "L-E05",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
+          }
+        ]
+      },
+      {
+        "name": "gpu",
+        "position": 2,
+        "type": "bool",
+        "required": false,
+        "default": "False",
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "Run the step on a GPU. Only GPU steps can run on the HPC (Slurm) site, so `hpc_time_limit` and `resumable` need `gpu=True`.",
+        "snippet": "True",
+        "values": [
+          {
+            "insert": "True",
+            "label": "True",
+            "doc": "The step gets one GPU."
+          },
+          {
+            "insert": "False",
+            "label": "False",
+            "doc": "A CPU step (the default)."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          },
+          {
+            "title": "L-W01",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
+          },
+          {
+            "title": "L-W02",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
+          }
+        ]
+      },
+      {
+        "name": "needs",
+        "position": 3,
+        "type": "list[step]",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "The steps that must finish first. Give the step variables (`needs=[prepare]`), not their names, and define each step above the steps that need it.",
+        "snippet": "[${1:previous_step}]",
+        "values": [],
+        "links": [
+          {
+            "title": "L-E05",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
+          }
+        ]
+      },
+      {
+        "name": "outputs",
+        "position": 4,
+        "type": "list[str]",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "The names of the values this step passes on. Every step that lists this step in `needs` receives them as inputs.",
+        "snippet": "[\"${1:metrics}\"]",
+        "values": [],
+        "links": []
+      },
+      {
+        "name": "when",
+        "position": 5,
+        "type": "str",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "A condition: the step runs only when it is true. A step that needs a conditional step is still started when the conditional step is skipped.",
+        "snippet": "\"${1:condition}\"",
+        "values": [],
+        "links": []
+      },
+      {
+        "name": "disk",
+        "position": 6,
+        "type": "str",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": "^[0-9]+(Ki|Mi|Gi|Ti|K|M|G|T)?$",
+        "doc": "Scratch disk the step asks for, as a quantity: digits and an optional Ki, Mi, Gi, Ti, K, M, G or T, for example `\"20Gi\"`. Set it for steps that need more than the platform's default.",
+        "snippet": "\"${1:20Gi}\"",
+        "values": [
+          {
+            "insert": "\"20Gi\"",
+            "label": "\"20Gi\"",
+            "doc": "20 gibibytes."
+          },
+          {
+            "insert": "\"50Gi\"",
+            "label": "\"50Gi\"",
+            "doc": "50 gibibytes."
+          },
+          {
+            "insert": "\"200Gi\"",
+            "label": "\"200Gi\"",
+            "doc": "200 gibibytes."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          }
+        ]
+      },
+      {
+        "name": "hpc_time_limit",
+        "position": 7,
+        "type": "str",
+        "required": false,
+        "default": null,
+        "gpu_only": true,
+        "pattern": "^[0-9]+[mh]?$",
+        "doc": "The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). Only for `gpu=True` steps. Without it the platform uses 4 hours. A step with a limit above 4 hours should be resumable.",
+        "snippet": "\"${1:12h}\"",
+        "values": [
+          {
+            "insert": "\"90m\"",
+            "label": "\"90m\"",
+            "doc": "90 minutes."
+          },
+          {
+            "insert": "\"4h\"",
+            "label": "\"4h\"",
+            "doc": "4 hours."
+          },
+          {
+            "insert": "\"12h\"",
+            "label": "\"12h\"",
+            "doc": "12 hours."
+          },
+          {
+            "insert": "\"24h\"",
+            "label": "\"24h\"",
+            "doc": "24 hours."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E01",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
+          },
+          {
+            "title": "L-E02",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
+          },
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          },
+          {
+            "title": "L-W01",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
+          },
+          {
+            "title": "L-I02",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I02.html"
+          }
+        ]
+      },
+      {
+        "name": "resumable",
+        "position": 8,
+        "type": "bool|str",
+        "required": false,
+        "default": null,
+        "gpu_only": true,
+        "pattern": "^[0-9]+[mh]?$",
+        "doc": "Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save 10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says the step never continues. Only for `gpu=True` steps; save with `kaos_lib.checkpoint`.",
+        "snippet": "True",
+        "values": [
+          {
+            "insert": "True",
+            "label": "True",
+            "doc": "Resumable: the step saves a checkpoint 10 minutes before its time limit."
+          },
+          {
+            "insert": "False",
+            "label": "False",
+            "doc": "Not resumable: the step is never continued from a checkpoint."
+          },
+          {
+            "insert": "\"20m\"",
+            "label": "\"20m\"",
+            "doc": "Resumable, told to save 20 minutes before its time limit."
+          },
+          {
+            "insert": "\"1h\"",
+            "label": "\"1h\"",
+            "doc": "Resumable, told to save 1 hour before its time limit."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E01",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
+          },
+          {
+            "title": "L-E02",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
+          },
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          },
+          {
+            "title": "L-W01",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
+          },
+          {
+            "title": "L-W05",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W05.html"
+          }
+        ]
+      },
+      {
+        "name": "checkpoint_every",
+        "position": 9,
+        "type": "bool|str|int",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": "^[0-9]+[mh]?$",
+        "doc": "How often the platform copies the step's checkpoint folder (`KAOS_CHECKPOINT_DIR`): minutes such as `\"20m\"`, `\"1h\"` or `20`. `False` turns the copies off. GPU steps copy every 10 minutes by default.",
+        "snippet": "\"${1:20m}\"",
+        "values": [
+          {
+            "insert": "\"20m\"",
+            "label": "\"20m\"",
+            "doc": "Copy every 20 minutes."
+          },
+          {
+            "insert": "\"1h\"",
+            "label": "\"1h\"",
+            "doc": "Copy every hour."
+          },
+          {
+            "insert": "False",
+            "label": "False",
+            "doc": "Do not copy the checkpoint folder."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          }
+        ]
+      },
+      {
+        "name": "idle_timeout",
+        "position": 10,
+        "type": "bool|str|int",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": "^[0-9]+[mh]?$",
+        "doc": "How long a GPU step may show no GPU use and no new log line before the platform ends it as idle: minutes such as `\"40m\"`, `\"1h\"` or `40`. The default is 20 minutes. `0` (or `False`) turns the idle limit off, so a hung step keeps its GPU until its time limit.",
+        "snippet": "\"${1:40m}\"",
+        "values": [
+          {
+            "insert": "\"40m\"",
+            "label": "\"40m\"",
+            "doc": "Allow 40 minutes without GPU use or log lines."
+          },
+          {
+            "insert": "\"1h\"",
+            "label": "\"1h\"",
+            "doc": "Allow one hour without GPU use or log lines."
+          },
+          {
+            "insert": "0",
+            "label": "0",
+            "doc": "Never end the step as idle."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          },
+          {
+            "title": "L-W02",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
+          }
+        ]
+      }
+    ],
+    "renamed_arguments": {
+      "walltime": "hpc_time_limit"
+    }
+  },
+  "pipeline": {
+    "function": "pipeline",
+    "doc": "`with pipeline(\"name\") as p:` opens a pipeline; every `step(...)` call inside it adds a step. The check reads these calls without running your code."
+  },
+  "rules": [
+    {
+      "id": "L-E00",
+      "name": "NotAnalysable",
+      "level": "error",
+      "fix": "Fix the file so it can be read, then run the check again.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E00.html"
+    },
+    {
+      "id": "L-E01",
+      "name": "TooLongNotResumable",
+      "level": "error",
+      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set hpc_time_limit to the longest run or less.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
+    },
+    {
+      "id": "L-E02",
+      "name": "TooLongBeyondContinuations",
+      "level": "error",
+      "fix": "Shorten hpc_time_limit, or split the work into steps that each fit within the runs allowed.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
+    },
+    {
+      "id": "L-E03",
+      "name": "UnknownClass",
+      "level": "error",
+      "fix": "Pin one of the classes your project offers (the step's class dropdown lists them), or remove the pin.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E03.html"
+    },
+    {
+      "id": "L-E04",
+      "name": "ClientIdentity",
+      "level": "error",
+      "fix": "Remove it: the platform chooses the account every step runs as and places the pod. Use step(...) arguments and compute classes instead.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E04.html"
+    },
+    {
+      "id": "L-E05",
+      "name": "DependencyOrProducer",
+      "level": "error",
+      "fix": "Define each step before the steps that need it, pass the step variables in needs=[...], give each step a unique lowercase name, and read only sections that exist in config/.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
+    },
+    {
+      "id": "L-E06",
+      "name": "RefusedArgument",
+      "level": "error",
+      "fix": "Fix the argument as the message says; step() raises on it when the pipeline is rendered.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+    },
+    {
+      "id": "L-I01",
+      "name": "NodeSharing",
+      "level": "info",
+      "fix": "Nothing to fix. Set hpc_time_limit, for example hpc_time_limit='4h', to let the step share a node.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
+    },
+    {
+      "id": "L-I02",
+      "name": "LearnedLimits",
+      "level": "info",
+      "fix": "Nothing to fix. A limit of 2 hours or more is kept exactly as you set it.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I02.html"
+    },
+    {
+      "id": "L-I03",
+      "name": "Schedules",
+      "level": "info",
+      "fix": "Nothing to fix.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I03.html"
+    },
+    {
+      "id": "L-W01",
+      "name": "LongGpuStepNotResumable",
+      "level": "warning",
+      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten hpc_time_limit.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
+    },
+    {
+      "id": "L-W02",
+      "name": "IdleTimeoutOff",
+      "level": "warning",
+      "fix": "Remove idle_timeout=0 to keep the default (a step with no GPU use and no new log line for 20 minutes is ended), or raise it, for example idle_timeout='40m'.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
+    },
+    {
+      "id": "L-W03",
+      "name": "UnpinnedDataset",
+      "level": "warning",
+      "fix": "Pin a version: use <dataset>@v1 (a released version) instead of @latest, so a run always reads the same data.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W03.html"
+    },
+    {
+      "id": "L-W04",
+      "name": "NoMlflowOrModelNotRegistered",
+      "level": "warning",
+      "fix": "Log the run to MLflow in the training step (kaos_lib.mlflow.mlflow()) and register the model you keep. This check is a heuristic: it searches the step's code.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W04.html"
+    },
+    {
+      "id": "L-W05",
+      "name": "DeclaredResumableDidNotResume",
+      "level": "warning",
+      "fix": "Make the step load its checkpoint and continue from it: save into $KAOS_CHECKPOINT_DIR (or with kaos_lib.checkpoint) and load it when the step starts, so a continuation gets past the checkpoint it started from.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W05.html"
+    }
+  ]
+}

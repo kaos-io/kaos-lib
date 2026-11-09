@@ -1,0 +1,91 @@
+{
+  "graph_version": 1,
+  "ruleset_version": "1.1.0",
+  "file": "pipeline.py",
+  "pipelines": [
+    {
+      "name": "demo",
+      "line": 3,
+      "nodes": [
+        {
+          "id": "s0",
+          "name": "prepare",
+          "variable": "prepare",
+          "line": 4,
+          "range": {
+            "start": {
+              "line": 4,
+              "column": 15
+            },
+            "end": {
+              "line": 4,
+              "column": 43
+            }
+          },
+          "dynamic": false,
+          "gpu": false,
+          "hpc_time_limit": null,
+          "resumable": null,
+          "disk": "20Gi"
+        },
+        {
+          "id": "s1",
+          "name": "train",
+          "variable": "train",
+          "line": 5,
+          "range": {
+            "start": {
+              "line": 5,
+              "column": 13
+            },
+            "end": {
+              "line": 5,
+              "column": 85
+            }
+          },
+          "dynamic": false,
+          "gpu": true,
+          "hpc_time_limit": null,
+          "resumable": null,
+          "disk": null
+        },
+        {
+          "id": "s2",
+          "name": "evaluate",
+          "variable": null,
+          "line": 6,
+          "range": {
+            "start": {
+              "line": 6,
+              "column": 5
+            },
+            "end": {
+              "line": 6,
+              "column": 45
+            }
+          },
+          "dynamic": false,
+          "gpu": false,
+          "hpc_time_limit": null,
+          "resumable": null,
+          "disk": null
+        }
+      ],
+      "edges": [
+        {
+          "from": "s0",
+          "to": "s1"
+        },
+        {
+          "from": "s0",
+          "to": "s2"
+        },
+        {
+          "from": "s1",
+          "to": "s2"
+        }
+      ],
+      "unresolved": []
+    }
+  ]
+}

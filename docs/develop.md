@@ -36,6 +36,8 @@ registry, a request to a local HTTP server, and a lock round trip through a file
 | `channel.py` | release channel of the install (PEP 610), the platform's recommended spec (`upgrade`) |
 | `cli.py` | the `kaosctl` command (and the deprecated `kubecore` alias) |
 | `lint/` | the pipeline linter: `engine.py` runs the rules of `rules_errors.py`, `rules_warnings.py`, `rules_infos.py` over what `pipeline_reader.py` / `project_reader.py` read, with the facts of `catalogue.py`; `model.py` (report), `render.py`, `cli.py`; `standalone.py` runs it without importing the rest of kaos-lib (PR gate). Static: never runs client code. Standard library + PyYAML only |
+| `lint/schema.py`, `lint/graph.py` | `kaosctl lint --schema` (what `step()` accepts, for editors) and `--graph` (the step DAG); the extension's bundled copy of the schema is `editors/vscode/resources/step-schema.json`, kept equal by `tests/test_lint_schema.py` |
+| `editors/vscode/` | the VS Code extension (TypeScript, no runtime dependencies): `npm test`, `npm run package`; see its README |
 | `kubecore/` | the deprecated `kubecore` import shim (0.3.x and 0.4.x) |
 
 ## The documentation site

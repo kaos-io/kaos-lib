@@ -1,0 +1,111 @@
+{
+  "ruleset_version": "1.1.0",
+  "catalogue": {
+    "source": "built-in default",
+    "classes": null,
+    "hpc": {
+      "laneMaxMinutes": 2880,
+      "defaultLimitMinutes": 240
+    },
+    "maxContinuations": 5,
+    "resumableSteps": null
+  },
+  "summary": {
+    "errors": 1,
+    "warnings": 2,
+    "infos": 1,
+    "skipped": 2
+  },
+  "findings": [
+    {
+      "rule": "L-W03",
+      "name": "UnpinnedDataset",
+      "level": "warning",
+      "file": "config/dataset.yaml",
+      "range": {
+        "start": {
+          "line": 1,
+          "column": 10
+        },
+        "end": {
+          "line": 1,
+          "column": 23
+        }
+      },
+      "message": "The dataset 'demo@latest' follows the newest data: two runs of the same code can read different data.",
+      "fix": "Pin a version: use <dataset>@v1 (a released version) instead of @latest, so a run always reads the same data.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W03.html"
+    },
+    {
+      "rule": "L-I01",
+      "name": "NodeSharing",
+      "level": "info",
+      "file": "pipeline.py",
+      "range": {
+        "start": {
+          "line": 5,
+          "column": 13
+        },
+        "end": {
+          "line": 5,
+          "column": 85
+        }
+      },
+      "message": "Step 'train' declares no time limit, so it cannot be offered as a guest on a node another job already holds on the HPC (Slurm) site.",
+      "fix": "Nothing to fix. Set hpc_time_limit, for example hpc_time_limit='4h', to let the step share a node.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
+    },
+    {
+      "rule": "L-E06",
+      "name": "RefusedArgument",
+      "level": "error",
+      "file": "pipeline.py",
+      "range": {
+        "start": {
+          "line": 5,
+          "column": 54
+        },
+        "end": {
+          "line": 5,
+          "column": 68
+        }
+      },
+      "message": "step() has no argument 'walltime', so the render fails.",
+      "fix": "Use hpc_time_limit for the HPC (Slurm) time limit.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+    },
+    {
+      "rule": "L-W02",
+      "name": "IdleTimeoutOff",
+      "level": "warning",
+      "file": "pipeline.py",
+      "range": {
+        "start": {
+          "line": 5,
+          "column": 83
+        },
+        "end": {
+          "line": 5,
+          "column": 84
+        }
+      },
+      "message": "Step 'train' turns the idle limit off. A hung step keeps its GPU, and its budget, until the time limit.",
+      "fix": "Remove idle_timeout=0 to keep the default (a step with no GPU use and no new log line for 20 minutes is ended), or raise it, for example idle_timeout='40m'.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
+    }
+  ],
+  "skipped": [
+    {
+      "rule": "L-E03",
+      "name": "UnknownClass",
+      "reason": "the catalogue has no list of compute classes (give --context, the project's platform context)",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E03.html"
+    },
+    {
+      "rule": "L-I03",
+      "name": "Schedules",
+      "reason": "pipelines cannot declare a schedule yet, so there is nothing to check",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I03.html"
+    }
+  ]
+}
