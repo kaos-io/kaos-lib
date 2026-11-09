@@ -2,7 +2,7 @@
 
 Generated from the code's docstrings on every build. The guides show how the pieces fit:
 [Datasets](datasets.md), [Outputs](outputs.md), [MLflow](mlflow.md), [Run context](runtime.md) and
-[Data lock](data-lock.md).
+[Data lock](data-lock.md) and [Long runs](checkpoint.md).
 
 ::: kaos_lib.datasets
 
@@ -11,6 +11,8 @@ Generated from the code's docstrings on every build. The guides show how the pie
 ::: kaos_lib.layouts
 
 ::: kaos_lib.runtime
+
+::: kaos_lib.checkpoint
 
 ::: kaos_lib.lock
 

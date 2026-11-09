@@ -3,7 +3,7 @@
 A step can be interrupted: a spot or preemptible node is reclaimed, a node fails or is drained, or an HPC (Slurm) job
 reaches its wall time. A step that keeps its progress in the **checkpoint folder** continues from it instead of
 starting over. The platform saves the folder every few minutes, checks it, and puts the newest good copy back when the
-step continues. You decide what goes in it. The same code works on Kubernetes nodes and on HPC.
+step continues. You decide what goes in it. The same code works on the platform's own nodes and on HPC.
 
 A step that writes nothing there is simply run again from the start after a node failure or pre-emption (up to twice).
 Outputs are published only when a run succeeds, so a re-run never leaves half a result.
@@ -80,12 +80,31 @@ parameters are logged as usual. Metrics keep the framework's own step numbers, w
 | the run ended with | a step that kept a checkpoint | a step that did not |
 |---|---|---|
 | node failure, maintenance, pre-emption, reclaimed spot node | continues from the newest good checkpoint | re-runs from the start, at most twice |
-| wall time reached (HPC) | continues from the newest good checkpoint | ends: "wall time reached" |
-| killed as idle (no GPU work, no log output) | continues from the newest good checkpoint | ends: idle |
+| wall time reached (HPC) | continues from the newest good checkpoint | ends: "wall time reached" (a step that asked for longer than the class allows is refused before it starts, see below) |
+| ended as idle (no GPU work and no log output for 20 minutes; `idle_timeout="40m"` on a GPU step raises it, `idle_timeout=0` turns it off) | continues from the newest good checkpoint | ends: idle |
 | an error in your own code (non-zero exit) | ends: failed | ends: failed |
 
 A continued run waits in the queue again and its time counts against your budget. A checkpoint is used only when it
 verifies; if the newest does not, the previous one is. `resumable=False` on the step turns continuing off.
+
+## Declare it in the pipeline, or let the platform learn it
+
+On HPC (Slurm) a step can say how it wants to be stopped: `resumable="3m"` on the step (a lead time such as `"3m"` or
+`"1h"`) asks for the stop signal that long before the time limit, so a large checkpoint has time to be written.
+`resumable=True` takes the default lead (10 minutes). Only GPU steps can declare it. You do not have to declare it: once a continuation of the step has loaded
+its checkpoint and made progress, the platform treats that step as resumable from then on and keeps it that way.
+The pipeline templates ([hera](https://novelcore.github.io/hera-pipeline-template/),
+[yolo](https://novelcore.github.io/yolo-pipelines-template/)) show the declaration in context.
+
+A step that asks for more time than the longest run the HPC class allows is handled before it is submitted:
+
+| the step | what happens |
+|---|---|
+| resumable, and fits in the allowed number of continuations | runs as capped attempts, each at most the class's longest run, one after the other, each continuing from the last checkpoint |
+| resumable, but needs more attempts than allowed | refused, with the longest time it can ask for |
+| not resumable | refused (`TooLongNotResumable`) rather than cut at the limit: make it resumable (write into `checkpoint.dir()`) or shorten it |
+
+You never name a queue or a QoS: the time limit and the lane a step runs in are chosen by the platform.
 
 ## If it isn't there
 

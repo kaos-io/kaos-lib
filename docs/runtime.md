@@ -4,7 +4,7 @@
 from kaos_lib import runtime
 ctx = runtime.context()    # frozen dataclass, read from the environment; missing values are None
 runtime.run_id()           # $KUBECORE_RUN_ID, or None
-runtime.usable_cpus()      # the cores to size worker pools by (see "A shared Slurm node" below)
+runtime.usable_cpus()      # the cores to size worker pools by (see "A shared HPC node" below)
 ```
 
 | field | variables (first non-empty wins) |
@@ -23,12 +23,12 @@ runtime.usable_cpus()      # the cores to size worker pools by (see "A shared Sl
 | `slot` | `KUBECORE_SLOT_GPUS`, `KUBECORE_SLOT_CPUS`, `KUBECORE_SLOT_MEM_GIB`, `KUBECORE_SLOT_SHARED` (a `Slot`, or None) |
 
 Every step gets the run id, workflow name, results repository and endpoints; a value the step does not have is
-`None` (`KUBECORE_APP`, `KUBECORE_PROJECT` and `KUBECORE_STEP` are not set yet; in a Slurm job the step comes from
+`None` (`KUBECORE_APP`, `KUBECORE_PROJECT` and `KUBECORE_STEP` are not set yet; in an HPC (Slurm) job the step comes from
 `STEP_NAME`).
 
-## A shared Slurm node
+## A shared HPC node
 
-On Slurm, steps of one project can share a node: each gets one slot, a GPU with its cores and its memory share
+On HPC (Slurm), steps of one project can share a node: each gets one slot, a GPU with its cores and its memory share
 (the runner sets `KUBECORE_SLOT_*`, so `context().slot` is a `Slot(gpus, cpus, mem_gib, shared)`). The GPU is
 already the only one the step sees. Cores and memory are not hidden: `os.cpu_count()` still counts every core of
 the node, and a step that uses more memory than its share is stopped. Size data loaders and caches by the slot:

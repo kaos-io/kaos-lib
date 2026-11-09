@@ -1,7 +1,7 @@
-"""The other projects of the organisation whose shared datasets this project can read (F-12).
+"""The other projects of the organisation whose shared datasets this project can read.
 
 The own kaos-lake serves them at ``GET /kaos/v1/peers``:
-``{"project": "<own>", "peers": [{"project", "endpoint", "url"}]}``. ``endpoint`` is the in-cluster address,
+``{"project": "<own>", "peers": [{"project", "endpoint", "url"}]}``. ``endpoint`` is the address on the platform's own network,
 ``url`` the public one. A peer serves what it shares with the caller at ``GET /kaos/v1/shared``:
 ``{"owner": "<peer>", "datasets": [{name, description, location, latest, versions: [{tag, commit}]}]}``.
 """
@@ -92,17 +92,17 @@ def peer(client, owner: str) -> Peer:
 
 
 def in_cluster(base_url: str) -> bool:
-    """True when ``base_url`` is an in-cluster Service address (``*.svc`` or ``*.svc.cluster.local``)."""
+    """True when ``base_url`` is an address on the platform's own network (``*.svc`` or ``*.svc.cluster.local``)."""
     host = (urlsplit(base_url).hostname or "").lower()
     return host.endswith(".svc") or host.endswith(".svc.cluster.local")
 
 
 def base_for(own_base_url: str, p: Peer) -> str:
-    """The peer's lakeFS address seen from the caller: its endpoint in the cluster, else its public URL."""
+    """The peer's lakeFS address seen from the caller: its endpoint on the platform's network, else its public URL."""
     base = (p.endpoint or p.url) if in_cluster(own_base_url) else p.url
     if not base:
         raise DatasetError(f"project {p.project}'s lakeFS has no public URL, so it cannot be read from outside "
-                           "the cluster. Read it from a pipeline step, or ask the platform team.")
+                           "the platform. Read it from a pipeline step, or ask the platform team.")
     return base.rstrip("/")
 
 

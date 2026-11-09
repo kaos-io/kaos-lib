@@ -29,6 +29,9 @@ registry, a request to a local HTTP server, and a lock round trip through a file
 | `layouts/` | layouts: sources, spec and schema subset (`spec.py`), skeletons (`render.py`), rules (`rules.py`), the yolo hook (`yolo.py`), the cache (`local.py`), the files shared with kaos-lake (`shared/`) |
 | `formats/` | the 0.3 `get_format` API over layouts |
 | `outputs.py` | `outputs-<app>` writes |
+| `checkpoint.py` | checkpoints that survive interruptions: `dir`, `save`, `load`, `progress`, `stop_requested`, `exit_for_restart`, `register` + `tick` |
+| `frameworks.py` | the automatic checkpoint hooks for Ultralytics, PyTorch Lightning and Hugging Face (`best.pt` kept on a continuation, `resume.<name>` MLflow parameters) |
+| `errors.py` | the exception classes (`KaosLibError` and its subclasses) |
 | `support.py` | the support window: `release.json` checks for steps and the CLI |
 | `channel.py` | release channel of the install (PEP 610), the platform's recommended spec (`upgrade`) |
 | `cli.py` | the `kaosctl` command (and the deprecated `kubecore` alias) |
