@@ -46,6 +46,11 @@ The command is `kaosctl`. `kaos-cli` and `kubecore` still work as deprecated ali
 be removed in the next release. Coming from the old `kubecore` package? See
 [Formerly kubecore](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/formerly-kubecore.html).
 
+## Check your pipeline
+
+`kaosctl lint` reads `pipeline.py` and the files around it and reports problems before you open a pull request. It
+never runs your code and needs no login: see the [guide](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html).
+
 ## Contributing
 
 ```bash
