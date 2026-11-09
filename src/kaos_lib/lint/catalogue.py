@@ -13,7 +13,8 @@ from typing import Optional
 
 import yaml
 
-from .constants import DEFAULT_LANE_MAX_MINUTES, DEFAULT_LIMIT_MINUTES, DEFAULT_MAX_CONTINUATIONS, MAX_FILE_BYTES
+from .constants import (DEFAULT_LANE_MAX_MINUTES, DEFAULT_LIMIT_MINUTES, DEFAULT_MAX_CONTINUATIONS, MAX_FILE_BYTES,
+                        MAX_REASON_CHARS)
 
 SOURCE_DEFAULT = "built-in default"
 SOURCE_CONTEXT = "platform context"
@@ -33,6 +34,22 @@ class HpcFacts:
 
 
 @dataclass(frozen=True)
+class StepEvidence:
+    """What the platform recorded about one step of the app: did a continuation load its checkpoint and get past it.
+
+    verified False carries the platform's reason in words (for example "NoProgress: ..."). Only the step's name, the
+    verdict, when it was recorded and that reason are kept: nothing about the jobs themselves.
+    """
+    name: str
+    verified: bool
+    since: str = ""
+    reason: str = ""
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "verified": self.verified, "since": self.since, "reason": self.reason}
+
+
+@dataclass(frozen=True)
 class Catalogue:
     """Facts for the rules that need them. None means unknown: the rules that need it are skipped."""
     source: str
@@ -40,12 +57,19 @@ class Catalogue:
     hpc: Optional[HpcFacts] = None             # None: unknown, or the project has no HPC (Slurm) site
     max_continuations: Optional[int] = None
     hpc_note: str = ""                         # why hpc is None, for the skipped-rule message
+    steps: Optional[tuple] = None              # StepEvidence per step the platform has evidence for; None: none given
+
+    def evidence(self, step_name) -> Optional[StepEvidence]:
+        """The platform's evidence for the step, or None (no evidence is never read as "not resumable")."""
+        return next((e for e in self.steps or () if e.name == step_name), None)
 
     def to_dict(self) -> dict:
         hpc = None if self.hpc is None else {"laneMaxMinutes": self.hpc.lane_max_minutes,
                                              "defaultLimitMinutes": self.hpc.default_limit_minutes}
         return {"source": self.source, "classes": None if self.classes is None else sorted(self.classes),
-                "hpc": hpc, "maxContinuations": self.max_continuations}
+                "hpc": hpc, "maxContinuations": self.max_continuations,
+                "resumableSteps": None if self.steps is None else [e.to_dict() for e in
+                                                                   sorted(self.steps, key=lambda e: e.name)]}
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2) + "\n"
@@ -77,15 +101,49 @@ def from_dict(d: dict, source: str = SOURCE_FILE) -> Catalogue:
     cont = d.get("maxContinuations")
     if cont is not None and not (isinstance(cont, int) and cont >= 0):
         raise CatalogueError("catalogue 'maxContinuations' must be a non-negative integer or null")
-    return Catalogue(source, None if classes is None else tuple(classes), facts, cont,
-                     "" if facts else "the catalogue lists no HPC (Slurm) site")
+    # An exported catalogue keeps where its facts came from, so a report reads the same whether it was made from the
+    # context or from the file written from it.
+    named = d.get("source") if isinstance(d.get("source"), str) and d.get("source") else source
+    return Catalogue(named, None if classes is None else tuple(classes), facts, cont,
+                     "" if facts else "the catalogue lists no HPC (Slurm) site",
+                     _evidence(d.get("resumableSteps"), CatalogueError))
+
+
+def _evidence(raw, error) -> Optional[tuple]:
+    """StepEvidence from a `resumableSteps` list: [{name, verified, since, reason}]. None when no list is given.
+
+    Entries that are not shaped so are an error in a catalogue file (it is machine-written) and are ignored in a
+    context (a bad entry must not stop a pull request check). One entry per step: the latest `since` wins.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        if error is CatalogueError:
+            raise CatalogueError("catalogue 'resumableSteps' must be a list or null")
+        return None
+    best = {}
+    for item in raw:
+        ok = isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"] \
+            and isinstance(item.get("verified"), bool)
+        if not ok:
+            if error is CatalogueError:
+                raise CatalogueError("each catalogue 'resumableSteps' entry needs a 'name' and a boolean 'verified'")
+            continue
+        since = item.get("since")
+        reason = item.get("reason")
+        e = StepEvidence(item["name"], item["verified"], since if isinstance(since, str) else "",
+                         reason[:MAX_REASON_CHARS] if isinstance(reason, str) else "")
+        if e.name not in best or e.since >= best[e.name].since:
+            best[e.name] = e
+    return tuple(best[n] for n in sorted(best))
 
 
 def from_context(ctx: dict) -> Catalogue:
     """The catalogue a project's platform context (pipeline-context.yaml) carries.
 
-    Reads only computeClasses.all, hpc.enabled, hpc.limits.maxTimeLimitMinutes and hpc.classes[]; it needs nothing
-    else and keeps none of the rest. A context with no `hpc` block gets the built-in default lane; one that says the
+    Reads only computeClasses.all, hpc.enabled, hpc.limits.maxTimeLimitMinutes, hpc.classes[] and
+    hpc.resumableSteps[] (the platform's evidence per step: name, verified, since, reason); it needs nothing else and
+    keeps none of the rest. A context with no `hpc` block gets the built-in default lane; one that says the
     project has no HPC (Slurm) site gets none (the HPC rules are skipped).
     """
     if not isinstance(ctx, dict):
@@ -93,8 +151,9 @@ def from_context(ctx: dict) -> Catalogue:
     names = [c["name"] for c in ((ctx.get("computeClasses") or {}).get("all") or [])
              if isinstance(c, dict) and isinstance(c.get("name"), str)]
     hpc = ctx.get("hpc")
-    facts, note = HpcFacts(DEFAULT_LANE_MAX_MINUTES), ""
+    facts, note, steps = HpcFacts(DEFAULT_LANE_MAX_MINUTES), "", None
     if isinstance(hpc, dict):
+        steps = _evidence(hpc.get("resumableSteps"), ValueError)
         if hpc.get("enabled") is True:
             hpc_classes = [c for c in (hpc.get("classes") or []) if isinstance(c, dict)]
             names += [c["name"] for c in hpc_classes if isinstance(c.get("name"), str)]
@@ -102,7 +161,7 @@ def from_context(ctx: dict) -> Catalogue:
         else:
             facts, note = None, "the project has no HPC (Slurm) site"
     return Catalogue(SOURCE_CONTEXT, tuple(sorted(set(names))) if names else None, facts,
-                     DEFAULT_MAX_CONTINUATIONS, note)
+                     DEFAULT_MAX_CONTINUATIONS, note, steps)
 
 
 def _lane_max(hpc: dict, classes: list) -> int:

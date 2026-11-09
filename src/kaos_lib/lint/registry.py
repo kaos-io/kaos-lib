@@ -20,8 +20,16 @@ from .project_reader import DatasetDefault, StepSource, read_step_source
 REQUIRES_CLASSES, REQUIRES_HPC, REQUIRES_CONTINUATIONS = "classes", "hpc", "continuations"
 _TIME = re.compile(TIME_PATTERN)
 
-# Step resumability as the rules see it.
-DECLARED, OFF, VERIFIED, NOT_RESUMABLE, UNKNOWN_STATE = "declared", "off", "verified", "none", "unknown"
+# Step resumability as the rules see it. Evidence decides, never a guess:
+#   DECLARED      resumable=True or a lead time in pipeline.py
+#   OFF           resumable=False
+#   VERIFIED      unset; the platform recorded that a continuation loaded its checkpoint and got past it
+#   NOT_VERIFIED  unset; the platform recorded that a continuation did not (for example NoProgress)
+#   STATIC        unset, no platform evidence; the step's code uses checkpoints (KAOS_CHECKPOINT_DIR, save_state or
+#                 load_state, kaos_lib.checkpoint, a hooked framework)
+#   UNKNOWN_STATE no evidence of any kind: the not-resumable rules stay silent
+DECLARED, OFF, VERIFIED, NOT_VERIFIED, STATIC, UNKNOWN_STATE = \
+    "declared", "off", "verified", "not-verified", "static", "unknown"
 
 
 @dataclass
@@ -88,9 +96,16 @@ class LintContext:
             self._sources[name] = read_step_source(self.root, name)
         return self._sources[name]
 
+    def evidence(self, step: Step):
+        """The platform's StepEvidence for the step, or None."""
+        return None if step.name is UNKNOWN else self.catalogue.evidence(step.name)
+
     def resumable(self, step: Step) -> str:
-        """DECLARED (resumable=True or a lead time), OFF (resumable=False), VERIFIED (unset, but the step's code
-        uses checkpoints), NOT_RESUMABLE (unset and no checkpoint use found) or UNKNOWN_STATE (cannot tell)."""
+        """One of DECLARED, OFF, VERIFIED, NOT_VERIFIED, STATIC or UNKNOWN_STATE (see above).
+
+        A declaration in pipeline.py decides first. Then what the platform recorded for the step beats what its code
+        suggests: a step whose continuation made no progress is not resumable whatever it imports.
+        """
         value = step.value("resumable", None)
         if value is UNKNOWN or step.opaque:
             return UNKNOWN_STATE
@@ -98,10 +113,11 @@ class LintContext:
             return OFF
         if value is not None:
             return DECLARED
+        recorded = self.evidence(step)
+        if recorded is not None:
+            return VERIFIED if recorded.verified else NOT_VERIFIED
         source = self.step_source(step)
-        if source is None or not source.found:
-            return UNKNOWN_STATE
-        return VERIFIED if source.uses_checkpoint else NOT_RESUMABLE
+        return STATIC if source is not None and source.found and source.uses_checkpoint else UNKNOWN_STATE
 
 
 def parse_minutes(value) -> Optional[int]:

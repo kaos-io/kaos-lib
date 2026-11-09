@@ -7,7 +7,7 @@ rule-set version bump, never a literal buried in a rule.
 # The rule-set version: every report carries it, the PR gate and `kaosctl lint` must agree on it. Bump the major
 # for a rule removed or a level raised, the minor for a rule added or a message-only change that needs a note,
 # the patch for a fix that changes no finding on valid input.
-RULESET_VERSION = "1.0.0"
+RULESET_VERSION = "1.1.0"
 
 # Where a rule's page lives. The site is a plain public bucket, so every link names its .html file.
 DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
@@ -16,6 +16,7 @@ DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
 MAX_FILE_BYTES = 1024 * 1024          # one file read by the linter
 MAX_STEP_FILES = 300                  # Python files read per step folder
 MAX_STEP_BYTES = 4 * 1024 * 1024      # all step source read, together
+MAX_REASON_CHARS = 300                # the platform's reason for a step's evidence, as the platform bounds it
 
 PIPELINE_FILE = "pipeline.py"
 CONFIG_DIR = "config"
@@ -49,3 +50,6 @@ DEFAULT_LIMIT_MINUTES = 4 * 60           # the limit of a GPU step that sets non
 
 # Frameworks the library hooks for checkpoints when the step imports them.
 CHECKPOINT_FRAMEWORKS = ("ultralytics", "pytorch_lightning", "lightning", "transformers")
+# Static evidence that a step's code keeps checkpoints: the folder the platform restores, or the state functions.
+CHECKPOINT_DIR_ENV = "KAOS_CHECKPOINT_DIR"
+CHECKPOINT_STATE_NAMES = ("save_state", "load_state")
