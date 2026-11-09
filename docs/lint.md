@@ -47,7 +47,7 @@ A check that cannot run is listed under "skipped" in the report. A skipped check
 
 | option | what it does |
 |---|---|
-| `--format text\|json\|markdown` | the output form (default `text`) |
+| `--format text\|json\|markdown\|status` | the output form (default `text`); `status` is one line, for a commit status |
 | `--output FILE` | write the report to a file |
 | `--pipeline FILE` | the pipeline file in the folder (default `pipeline.py`) |
 | `--from-report FILE` | show a saved JSON report as text or markdown |

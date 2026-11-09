@@ -23,8 +23,9 @@ def add_arguments(sp: argparse.ArgumentParser) -> None:
     """Add the lint options to a parser (`kaosctl lint` and the standalone entry share them)."""
     sp.add_argument("path", nargs="?", default=".", help="your app folder (default: the current folder)")
     sp.add_argument("--pipeline", default=PIPELINE_FILE, help=f"the pipeline file in that folder (default {PIPELINE_FILE})")
-    sp.add_argument("--format", choices=("text", "json", "markdown"), default="text",
-                    help="text for a terminal (default), json for tools, markdown for a pull request comment")
+    sp.add_argument("--format", choices=("text", "json", "markdown", "status"), default="text",
+                    help="text for a terminal (default), json for tools, markdown for a pull request comment, "
+                         "status for a one-line summary (a commit status text)")
     sp.add_argument("--output", metavar="FILE", help="write the report to FILE instead of the screen")
     facts = sp.add_mutually_exclusive_group()
     facts.add_argument("--context", metavar="FILE",
@@ -81,7 +82,8 @@ def run(args) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_USAGE
     _emit(args, {"json": report.to_json, "markdown": lambda: render.markdown(report, args.file_link_base),
-                 "text": lambda: render.text(report)}[args.format]())
+                 "text": lambda: render.text(report),
+                 "status": lambda: render.status_description(report) + "\n"}[args.format]())
     return EXIT_ERRORS if report.errors else EXIT_OK
 
 
