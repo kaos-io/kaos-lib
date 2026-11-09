@@ -16,7 +16,7 @@ from .model import ERROR, Finding, Report, Skipped, Span
 from .pipeline_reader import read_pipeline
 from .project_reader import config_sections, dataset_default
 from .registry import (REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, RULES, Hit, LintContext, Rule)
-from .source import TooLarge, parse_python, read_text
+from .source import TooLarge, buffer_source, parse_python, read_text
 
 NOT_ANALYSABLE = Rule("L-E00", "NotAnalysable", ERROR, "Fix the file so it can be read, then run the check again.",
                       lambda ctx: ())
@@ -49,11 +49,13 @@ def _not_analysable(message: str, file: str = PIPELINE_FILE, span: Span = Span(1
     return _finding(NOT_ANALYSABLE, Hit(file, span, message))
 
 
-def lint_project(root, catalogue: Optional[Catalogue] = None, pipeline_file: str = PIPELINE_FILE) -> Report:
+def lint_project(root, catalogue: Optional[Catalogue] = None, pipeline_file: str = PIPELINE_FILE,
+                 pipeline_text: Optional[str] = None) -> Report:
     """Lint the pipeline at `root/pipeline_file` and the files around it.
 
     Static: nothing of the repository is imported or run. Returns a Report; a file that cannot be read or parsed
-    becomes an L-E00 error finding rather than an exception.
+    becomes an L-E00 error finding rather than an exception. `pipeline_text`, when given, is used as the content of
+    the pipeline file instead of the file on disk (an editor's unsaved buffer); everything else is read from disk.
     """
     root = pathlib.Path(root)
     if not root.is_dir():
@@ -61,7 +63,8 @@ def lint_project(root, catalogue: Optional[Catalogue] = None, pipeline_file: str
     catalogue = catalogue or default_catalogue()
     report = Report(RULESET_VERSION, catalogue.to_dict())
     try:
-        src = read_text(root, root / pipeline_file, pipeline_file)
+        src = read_text(root, root / pipeline_file, pipeline_file) if pipeline_text is None \
+            else buffer_source(pipeline_text, pipeline_file)
     except TooLarge:
         report.findings.append(_not_analysable(
             f"{pipeline_file} is larger than {MAX_FILE_BYTES // 1024} KiB, more than the check reads. Split the "

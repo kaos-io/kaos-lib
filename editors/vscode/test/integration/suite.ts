@@ -44,6 +44,14 @@ const kaosChecks: Record<string, () => Promise<void>> = {
     assert.ok(editor.document.getText().includes('hpc_time_limit="12h"'));
     assert.ok(!editor.document.getText().includes("walltime"));
   },
+  async should_lint_unsaved_text_without_a_save() {
+    const doc = await pipelineDoc();
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(doc.uri, new vscode.Position(doc.lineCount, 0), '\n    step("zz", disk="20 GB")\n');
+    await vscode.workspace.applyEdit(edit);
+    assert.ok(doc.isDirty, "the buffer is unsaved");
+    await until("a finding for the unsaved line", () => vscode.languages.getDiagnostics(doc.uri).find((x) => /disk='20 GB'/.test(x.message)));
+  },
   async should_complete_values_from_the_schema_after_resumable_equals() {
     const doc = await pipelineDoc();
     const edit = new vscode.WorkspaceEdit();

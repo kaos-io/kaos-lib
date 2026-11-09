@@ -10,6 +10,9 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Added
+- `kaosctl lint --stdin-path pipeline.py` reads the pipeline text from standard input (an editor's unsaved buffer) and the rest
+  from disk; it works with `--graph` too. Static as before. The VS Code extension (0.1.1) uses it to check as you type, and
+  prints the skipped rules once instead of on every check (they are in the status bar tooltip).
 - `kaosctl lint --schema` and `kaosctl lint --graph`, and the VS Code extension in `editors/vscode` (PRD novelcore/kaos#1682
   F-05, F-19, F-20). `--schema` prints what `step()` accepts (argument names, types, allowed values, docs, links, the
   arguments that were renamed) as JSON versioned with the rule set; `--graph` prints the pipeline's steps and

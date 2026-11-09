@@ -58,3 +58,11 @@ export function statusText(report: Report): string {
   const base = `KAOS: ${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}`;
   return skipped > 0 ? `${base}, ${skipped} skipped` : base;
 }
+
+/**
+ * The skipped-rule lines to print now: all of them when they differ from what was printed last (`previous`, the
+ * lines joined by newlines), none when they are the same. Keeps the output panel quiet on repeated checks.
+ */
+export function skippedToPrint(previous: string, skipped: string[]): string[] {
+  return skipped.join("\n") === previous ? [] : skipped;
+}

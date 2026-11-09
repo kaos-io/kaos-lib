@@ -76,3 +76,10 @@ def parse_python(src: SourceFile) -> Optional[ast.AST]:
     except (SyntaxError, ValueError, RecursionError, MemoryError):
         src.tree = None
     return src.tree
+
+
+def buffer_source(text: str, rel: str) -> SourceFile:
+    """A SourceFile for text that is not on disk yet (an editor's unsaved buffer), under the same size limit."""
+    if len(text.encode("utf-8")) > MAX_FILE_BYTES:
+        raise TooLarge(rel)
+    return SourceFile(rel, text)

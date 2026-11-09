@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Debouncer } from "../src/debounce";
-import { checkArgs, explainFailure, producedReport, run } from "../src/runner";
+import { checkArgs, explainFailure, graphArgs, producedReport, run } from "../src/runner";
 
 test("should_build_the_check_arguments_with_and_without_a_context_file", () => {
   assert.deepEqual(checkArgs(undefined), ["lint", "--format", "json"]);
   assert.deepEqual(checkArgs("/p/ctx.yaml"), ["lint", "--context", "/p/ctx.yaml", "--format", "json"]);
+});
+
+test("should_pass_the_unsaved_text_through_standard_input", async () => {
+  const r = await run(process.execPath, ["-e", "process.stdin.pipe(process.stdout)"], process.cwd(), 10_000, "unsaved \u00e9 text");
+  assert.equal(r.stdout, "unsaved \u00e9 text");
+});
+
+test("should_add_stdin_path_only_when_checking_a_buffer", () => {
+  assert.deepEqual(checkArgs(undefined, true), ["lint", "--format", "json", "--stdin-path", "pipeline.py"]);
+  assert.deepEqual(graphArgs(), ["lint", "--graph"]);
+  assert.deepEqual(graphArgs(true), ["lint", "--graph", "--stdin-path", "pipeline.py"]);
 });
 
 test("should_return_stdout_and_exit_code_zero", async () => {
