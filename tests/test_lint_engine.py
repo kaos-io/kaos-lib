@@ -121,7 +121,7 @@ def test_the_context_may_be_a_configmap(tmp_path):
 
 def test_the_catalogue_follows_the_project_limit_for_l_e01(tmp_path):
     cat = from_context(__import__("yaml").safe_load(CONTEXT))   # 600 minutes
-    files = repo('    t = step("t", gpu=True, hpc_time_limit="12h")\n', {"t": "x = 1\n"})
+    files = repo('    t = step("t", gpu=True, hpc_time_limit="12h", resumable=False)\n', {"t": "x = 1\n"})
     assert [f.rule for f in lint(tmp_path, files, cat).findings if f.rule == "L-E01"] == ["L-E01"]
 
 

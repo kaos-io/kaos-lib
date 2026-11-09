@@ -13,8 +13,8 @@ from .constants import (COMPUTE_CLASS_KEYS, DISK_PATTERN, IDENTITY_NAMES, POD_PA
                         STEP_NAME_PATTERN, TIME_PATTERN)
 from .model import ERROR
 from .pipeline_reader import UNKNOWN, literal
-from .registry import (DECLARED, NOT_RESUMABLE, OFF, REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC,
-                       UNKNOWN_STATE, VERIFIED, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes,
+from .registry import (DECLARED, NOT_VERIFIED, OFF, REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, STATIC,
+                       VERIFIED, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes,
                        rule, runs_needed)
 
 _STEP_NAME, _DISK, _TIME = re.compile(STEP_NAME_PATTERN), re.compile(DISK_PATTERN), re.compile(TIME_PATTERN)
@@ -33,10 +33,11 @@ def too_long_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     lane = ctx.catalogue.hpc.lane_max_minutes
     for step in gpu_steps(ctx):
         limit = parse_minutes(step.value("hpc_time_limit", None))
-        if limit is None or limit <= lane or ctx.resumable(step) not in (OFF, NOT_RESUMABLE):
+        state = ctx.resumable(step)
+        if limit is None or limit <= lane or state not in (OFF, NOT_VERIFIED):
             continue
-        how = "is set not resumable" if ctx.resumable(step) == OFF else "is not declared resumable and its code " \
-            "shows no checkpoint use"
+        how = "is set not resumable" if state == OFF else "is not declared resumable and the platform recorded " \
+            f"that its last continuation did not resume ({ctx.evidence(step).reason or 'no reason given'})"
         yield Hit(ctx.file, ctx.span(step.node("hpc_time_limit")),
                   f"{_step_label(step)} asks for a time limit of {pretty_minutes(limit)}, but the longest run on "
                   f"the HPC (Slurm) site is {pretty_minutes(lane)}, and the step {how}, so it would be cut off. "
@@ -50,7 +51,7 @@ def too_long_beyond_continuations(ctx: LintContext) -> Iterable[Hit]:
     lane, cap = ctx.catalogue.hpc.lane_max_minutes, ctx.catalogue.max_continuations
     for step in gpu_steps(ctx):
         limit = parse_minutes(step.value("hpc_time_limit", None))
-        if limit is None or ctx.resumable(step) not in (DECLARED, VERIFIED):
+        if limit is None or ctx.resumable(step) not in (DECLARED, VERIFIED, STATIC):
             continue
         runs = runs_needed(limit, lane)
         if runs > cap + 1:

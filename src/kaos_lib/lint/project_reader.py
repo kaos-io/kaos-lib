@@ -14,7 +14,8 @@ from typing import Optional
 
 import yaml
 
-from .constants import CHECKPOINT_FRAMEWORKS, CONFIG_DIR, MAX_FILE_BYTES, MAX_STEP_BYTES, MAX_STEP_FILES, STEPS_DIR
+from .constants import (CHECKPOINT_DIR_ENV, CHECKPOINT_FRAMEWORKS, CHECKPOINT_STATE_NAMES, CONFIG_DIR, MAX_FILE_BYTES,
+                        MAX_STEP_BYTES, MAX_STEP_FILES, STEPS_DIR)
 from .model import Span
 from .source import SourceFile, TooLarge, inside, parse_python, read_text
 
@@ -26,7 +27,8 @@ PLATFORM_SECTION = "platform"   # the platform-owned group: not a section a step
 class StepSource:
     """What the Python files of one step folder do. `found` is False when the folder does not exist."""
     found: bool = False
-    uses_checkpoint: bool = False      # kaos_lib.checkpoint, or a framework the library hooks automatically
+    uses_checkpoint: bool = False      # static evidence: kaos_lib.checkpoint, KAOS_CHECKPOINT_DIR, save_state/load_state,
+                                       # or a framework the library hooks automatically
     uses_mlflow: bool = False
     registers_model: bool = False
     latest_refs: list = field(default_factory=list)   # (file, Span) of a string holding `@latest`
@@ -106,13 +108,17 @@ def _scan_python(src: SourceFile, out: StepSource) -> None:
             out.uses_mlflow |= "mlflow" in m.lower()
         if isinstance(n, ast.Name) and "mlflow" in n.id.lower():
             out.uses_mlflow = True
+        if isinstance(n, ast.Name):
+            out.uses_checkpoint |= n.id in CHECKPOINT_STATE_NAMES
         if isinstance(n, ast.Attribute):
+            out.uses_checkpoint |= n.attr in CHECKPOINT_STATE_NAMES
             out.uses_mlflow |= "mlflow" in n.attr.lower()
             out.registers_model |= "register_model" in n.attr or "registered_model" in n.attr
         if isinstance(n, ast.keyword) and n.arg and "registered_model" in n.arg:
             out.registers_model = True
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docstrings:
             out.uses_mlflow |= "mlflow" in n.value.lower()
+            out.uses_checkpoint |= CHECKPOINT_DIR_ENV in n.value
             out.registers_model |= n.value.startswith("models:/")
             if LATEST_REF.search(n.value):
                 out.latest_refs.append((src.rel, src.span(n)))

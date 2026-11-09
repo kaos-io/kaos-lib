@@ -9,7 +9,7 @@ from __future__ import annotations
 import pathlib
 
 from kaos_lib.lint import Catalogue, default_catalogue
-from kaos_lib.lint.catalogue import HpcFacts
+from kaos_lib.lint.catalogue import HpcFacts, StepEvidence
 
 HEADER = "from kubecore.authoring import pipeline, step\n\nwith pipeline(\"p\") as p:\n"
 
@@ -49,6 +49,16 @@ def with_classes(*names: str) -> Catalogue:
     return Catalogue(d.source, tuple(names), d.hpc, d.max_continuations)
 
 
+NO_PROGRESS = "NoProgress: the continuation's newest checkpoint is not past the one it started from"
+
+
+def with_evidence(*steps: tuple) -> Catalogue:
+    """The default catalogue plus the platform's evidence: (name, verified[, reason]) per step."""
+    d = default_catalogue()
+    return Catalogue(d.source, d.classes, d.hpc, d.max_continuations, d.hpc_note,
+                     tuple(StepEvidence(n, v, "2026-11-09T12:00:00Z", r[0] if r else "") for n, v, *r in steps))
+
+
 def with_lane(minutes: int, cap: int = 5) -> Catalogue:
     return Catalogue("catalogue file", None, HpcFacts(minutes), cap)
 
@@ -58,7 +68,7 @@ CASES = {
     "L-E01": (
         repo('    t = step("train-x", gpu=True, hpc_time_limit="72h", reads=["train"])\n', {"train-x": PLAIN_STEP}),
         repo('    t = step("train-x", gpu=True, hpc_time_limit="24h", reads=["train"])\n', {"train-x": PLAIN_STEP}),
-        None, (4, "3 days")),
+        with_evidence(("train-x", False, NO_PROGRESS)), (4, "3 days")),
     "L-E02": (
         repo('    t = step("train-x", gpu=True, hpc_time_limit="400h", resumable=True, reads=["train"])\n',
              {"train-x": CHECKPOINT_STEP}),
@@ -84,7 +94,11 @@ CASES = {
     "L-W01": (
         repo('    t = step("work", gpu=True, hpc_time_limit="6h")\n', {"work": PLAIN_STEP}),
         repo('    t = step("work", gpu=True, hpc_time_limit="6h", resumable=True)\n', {"work": PLAIN_STEP}),
-        None, (4, "6 hours")),
+        with_evidence(("work", False, NO_PROGRESS)), (4, "6 hours")),
+    "L-W05": (
+        repo('    t = step("work", gpu=True, resumable=True)\n', {"work": CHECKPOINT_STEP}),
+        repo('    t = step("work", gpu=True)\n', {"work": CHECKPOINT_STEP}),
+        with_evidence(("work", False, NO_PROGRESS)), (4, "NoProgress")),
     "L-W02": (
         repo('    t = step("work", gpu=True, idle_timeout=0)\n'),
         repo('    t = step("work", gpu=True, idle_timeout="40m")\n'),

@@ -10,14 +10,21 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Added
+- The pipeline linter judges whether a step can continue from evidence, not from a guess (PRD novelcore/kaos#1682, rule
+  set `1.1.0`). A step is resumable when `pipeline.py` says so, when the platform recorded that a continuation of it loaded
+  its checkpoint and got past it (`hpc.resumableSteps` in the project's platform context, read by `--context`), or when its
+  code uses `KAOS_CHECKPOINT_DIR`, `save_state`/`load_state` or `kaos_lib.checkpoint`. With no evidence at all `L-E01` and
+  `L-W01` stay silent instead of guessing from imports. New warning `L-W05` (a step that declares `resumable=` but whose
+  continuation the platform saw make no progress). The report's `catalogue` lists `resumableSteps`, and an exported
+  catalogue keeps its `source`, so the gate and `kaosctl lint --context` print the same bytes.
 - `kaosctl lint` and `kaos_lib.lint`: the pipeline linter (PRD novelcore/kaos#1682 F-01, F-03, D-13). It reads your
   `pipeline.py`, the `config/` tree and your step folders and reports problems the platform would refuse or that
-  usually go wrong later: 7 errors (`L-E00` to `L-E06`), 4 warnings, 3 infos, each with the file range, a message, a fix
+  usually go wrong later: 7 errors (`L-E00` to `L-E06`), 5 warnings, 3 infos, each with the file range, a message, a fix
   and a link to its page in the docs. Static only: it parses your files and never imports or runs them, and needs no
   login and no network. Exit code 0 without errors, 2 with errors, 1 when it cannot run. `--format text|json|markdown`,
   `--context` (your project's platform context: the compute classes and HPC (Slurm) limits), `--catalogue`,
   `--export-catalogue`, `--from-report`, `--expect-ruleset`. A check that needs facts it does not have is reported as
-  skipped, never as passed. The report carries the rule-set version (`1.0.0`); reports of different versions are never
+  skipped, never as passed. The report carries the rule-set version (`1.0.0`, now `1.1.0`); reports of different versions are never
   mixed. Standard library and PyYAML only. The platform runs the same check on every pull request as the
   `pipeline-lint` status. Guide: `docs/lint.md`, one page per rule in `docs/lint/`.
 - `kaos_lib.checkpoint`: checkpoints that survive interruptions, the same on Kubernetes and HPC. `dir()` is the

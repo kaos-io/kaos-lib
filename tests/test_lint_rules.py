@@ -112,23 +112,24 @@ def test_should_not_flag_the_same_reserved_name_twice(tmp_path):
 
 
 def test_l_e01_does_not_fire_when_the_step_is_resumable_or_its_code_uses_checkpoints(tmp_path):
-    from lint_corpus import CHECKPOINT_STEP
+    from lint_corpus import CHECKPOINT_STEP, NO_PROGRESS, with_evidence
     body = '    t = step("work", gpu=True, hpc_time_limit="72h")\n'
-    assert messages(tmp_path / "a", body, {"work": "def f(): pass\n"}, rule="L-E01")
+    failing = with_evidence(("work", False, NO_PROGRESS))
+    assert messages(tmp_path / "a", body, {"work": "def f(): pass\n"}, failing, rule="L-E01")
     assert not messages(tmp_path / "b", body, {"work": CHECKPOINT_STEP}, rule="L-E01")
     assert not messages(tmp_path / "c", '    t = step("work", gpu=True, hpc_time_limit="72h", resumable=True)\n',
-                        {"work": "def f(): pass\n"}, rule="L-E01")
+                        {"work": "def f(): pass\n"}, failing, rule="L-E01")
 
 
 def test_l_e01_follows_the_catalogues_lane_maximum(tmp_path):
     from lint_corpus import with_lane
-    body = '    t = step("work", gpu=True, hpc_time_limit="72h")\n'
+    body = '    t = step("work", gpu=True, hpc_time_limit="72h", resumable=False)\n'
     assert not messages(tmp_path / "a", body, {"work": "x = 1\n"}, with_lane(5 * 1440), rule="L-E01")
     assert messages(tmp_path / "b", body, {"work": "x = 1\n"}, with_lane(60), rule="L-E01")
 
 
 def test_w01_stays_quiet_when_l_e01_already_reports_the_step(tmp_path):
-    body = '    t = step("work", gpu=True, hpc_time_limit="72h")\n'
+    body = '    t = step("work", gpu=True, hpc_time_limit="72h", resumable=False)\n'
     assert not messages(tmp_path, body, {"work": "x = 1\n"}, rule="L-W01")
 
 
