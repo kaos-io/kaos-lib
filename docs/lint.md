@@ -71,6 +71,7 @@ it was judged on.
 | `--pipeline FILE` | the pipeline file in the folder (default `pipeline.py`) |
 | `--from-report FILE` | show a saved JSON report as text or markdown |
 | `--expect-ruleset VERSION` | refuse to run unless the rule set is exactly this version |
+| `--stdin-path FILE` | read the content of the pipeline file from standard input instead of from disk (FILE must be the pipeline file, `pipeline.py`); everything else is still read from disk. For editors that check unsaved text. The text is parsed, never run, and with the saved text the report is byte for byte the same as without the option |
 | `--schema` | print what `step()` accepts (argument names, types, allowed values, docs and links) as JSON, with the rule set version, and stop. Editors read it for suggestions and hover text |
 | `--graph` | print your pipeline's steps and what each one needs as JSON, read from the file without running it, and stop. Editors draw it. A step built in a loop or a condition is marked `dynamic` |
 

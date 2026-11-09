@@ -7,11 +7,11 @@ import * as vscode from "vscode";
 import { describeSession, isHttpsUrl, readIssuer, sessionFilePath } from "./auth";
 import { Debouncer } from "./debounce";
 import { DATASET_CONFIG_FILE, FolderReader, PIPELINE_FILE, detectKaosRepo } from "./detect";
-import { MappedDiagnostic, describeSkipped, mapReport, statusText } from "./diagnostics";
+import { MappedDiagnostic, describeSkipped, mapReport, skippedToPrint, statusText } from "./diagnostics";
 import { renderGraphHtml } from "./graphHtml";
 import { quickFixesFor } from "./quickfix";
 import { Report, parseGraph, parseReport } from "./report";
-import { GRAPH_ARGS, LOGIN_ARGS, SCHEMA_ARGS, checkArgs, explainFailure, producedReport, run } from "./runner";
+import { LOGIN_ARGS, SCHEMA_ARGS, checkArgs, explainFailure, graphArgs, producedReport, run } from "./runner";
 import { Schema, SchemaChoice, chooseSchema, completionsFor, hoverFor } from "./schema";
 
 const DIAGNOSTIC_SOURCE = "KAOS";
@@ -26,6 +26,7 @@ class State {
   readonly status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   readonly debounce = new Debouncer();
   readonly folders = new Map<string, vscode.WorkspaceFolder>();   // KAOS folders by fsPath
+  readonly skippedShown = new Map<string, string>();               // skipped-rule lines last printed per folder
   readonly runIds = new Map<string, number>();                      // newest check per folder; older results are dropped
   schema: SchemaChoice | undefined;
   graphPanel: vscode.WebviewPanel | undefined;
@@ -146,8 +147,17 @@ function publish(state: State, folder: vscode.WorkspaceFolder, report: Report): 
     state.diagnostics.set(vscode.Uri.joinPath(folder.uri, file), list.map(toVsDiagnostic));
   }
   state.status.text = statusText(report);
-  state.status.tooltip = `Pipeline check, rule set ${report.ruleset_version}. Click to check again. Checks read your files as saved.`;
-  for (const line of describeSkipped(report.skipped)) { state.output.appendLine(line); }
+  const skipped = describeSkipped(report.skipped);
+  state.status.tooltip = [`Pipeline check, rule set ${report.ruleset_version}. Click to check again.`, ...skipped].join("\n");
+  // The skipped rules are in the tooltip every time; the output panel gets them only when they change.
+  for (const line of skippedToPrint(state.skippedShown.get(folder.uri.fsPath) ?? "", skipped)) { state.output.appendLine(line); }
+  state.skippedShown.set(folder.uri.fsPath, skipped.join("\n"));
+}
+
+/** The text of the folder's pipeline.py when it is open with unsaved changes, else undefined (the file on disk is used). */
+function dirtyPipelineText(folder: vscode.WorkspaceFolder): string | undefined {
+  const file = path.join(folder.uri.fsPath, PIPELINE_FILE);
+  return vscode.workspace.textDocuments.find((d) => d.isDirty && d.uri.fsPath === file)?.getText();
 }
 
 async function checkFolder(state: State, folder: vscode.WorkspaceFolder, announce: boolean): Promise<void> {
@@ -156,7 +166,8 @@ async function checkFolder(state: State, folder: vscode.WorkspaceFolder, announc
   const s = settings(folder);
   const ctxFile = s.contextFile ? path.resolve(folder.uri.fsPath, s.contextFile) : undefined;
   state.status.text = "$(sync~spin) KAOS: checking";
-  const r = await run(s.kaosctl, checkArgs(ctxFile), folder.uri.fsPath);
+  const buffer = dirtyPipelineText(folder);
+  const r = await run(s.kaosctl, checkArgs(ctxFile, buffer !== undefined), folder.uri.fsPath, undefined, buffer);
   if (state.runIds.get(folder.uri.fsPath) !== id) { return; }   // a newer check is running or finished
   if (!producedReport(r)) {
     const why = explainFailure(r);
@@ -174,8 +185,9 @@ async function checkFolder(state: State, folder: vscode.WorkspaceFolder, announc
       // The same JSON the pull request check produces, in full, for anyone who wants to compare or copy it.
       state.output.appendLine(r.stdout);
       state.output.show(true);
-      const unsaved = vscode.workspace.textDocuments.some((d) => d.isDirty && d.uri.fsPath.startsWith(folder.uri.fsPath + path.sep));
-      if (unsaved) { void vscode.window.showWarningMessage("KAOS checks your files as saved: unsaved changes are not included."); }
+      const pipelineFile = path.join(folder.uri.fsPath, PIPELINE_FILE);
+      const others = vscode.workspace.textDocuments.some((d) => d.isDirty && d.uri.fsPath !== pipelineFile && d.uri.fsPath.startsWith(folder.uri.fsPath + path.sep));
+      if (others) { void vscode.window.showWarningMessage("KAOS checks pipeline.py as you see it, and your other files as saved: unsaved changes in them are not included."); }
       const n = report.summary;
       void vscode.window.showInformationMessage(`KAOS check: ${n.errors} errors, ${n.warnings} warnings, ${n.infos} infos` +
         (n.skipped ? `, ${n.skipped} checks skipped (see the KAOS output)` : "") + `. Rule set ${report.ruleset_version}.`);
@@ -191,7 +203,8 @@ async function checkFolder(state: State, folder: vscode.WorkspaceFolder, announc
 async function refreshGraph(state: State, folder: vscode.WorkspaceFolder): Promise<void> {
   const panel = state.graphPanel;
   if (!panel) { return; }
-  const r = await run(settings(folder).kaosctl, GRAPH_ARGS, folder.uri.fsPath);
+  const buffer = dirtyPipelineText(folder);
+  const r = await run(settings(folder).kaosctl, graphArgs(buffer !== undefined), folder.uri.fsPath, undefined, buffer);
   if (r.code !== 0) {
     panel.webview.html = `<!DOCTYPE html><html><body><p>The step graph could not be drawn: ${escapeForText(r.code === null ? explainFailure(r) : r.stderr.trim() || explainFailure(r))}</p></body></html>`;
     return;
@@ -296,10 +309,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const watcher = vscode.workspace.createFileSystemWatcher("**/{pipeline.py,config/**,steps/**}");
   context.subscriptions.push(
     ...registerLanguageFeatures(state),
-    // The check reads files from disk, so it runs after a save. A change that is not unsaved (a revert, a formatter, a
-    // git checkout) also schedules one; both go through the same debounce so one edit gives one run.
+    // A save, a change to pipeline.py (the unsaved text is checked through stdin) and a file change on disk all go
+    // through the same debounce, so one edit gives one run. Other files are read as saved.
     vscode.workspace.onDidSaveTextDocument((d) => schedule(d.uri)),
-    vscode.workspace.onDidChangeTextDocument((e) => { if (!e.document.isDirty && e.contentChanges.length > 0) { schedule(e.document.uri); } }),
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      const isPipeline = path.basename(e.document.uri.fsPath) === PIPELINE_FILE;
+      if (e.contentChanges.length > 0 && (isPipeline || !e.document.isDirty)) { schedule(e.document.uri); }
+    }),
     watcher,
     watcher.onDidChange((u) => schedule(u)),
     vscode.commands.registerCommand("kaos.checkPipeline", async () => {

@@ -40,16 +40,17 @@ The extension reads your files; it never runs your pipeline or your step code.
 | --- | --- |
 | Suggestions | In `pipeline.py`, type inside `step(` and press `Ctrl+Space`. After `resumable=` it lists the allowed values. |
 | Hover docs | Hold the mouse over an argument name or its value. |
-| Findings | Save the file. Open the Problems view (`Ctrl+Shift+M`) to see all of them. |
+| Findings | Type or save. Open the Problems view (`Ctrl+Shift+M`) to see all of them. |
 | Quick fix | Put the cursor on a squiggle and press `Ctrl+.`. |
 | Check now | `Ctrl+Shift+P`, then **KAOS: Check pipeline**. The full JSON report is written to the **KAOS** output panel. |
 | Step graph | `Ctrl+Shift+P`, then **KAOS: Show step graph**. It refreshes when you save. |
 | Sign in | `Ctrl+Shift+P`, then **KAOS: Sign in**. Your browser opens; finish there. **KAOS: Show sign-in status** tells you whether a session exists. |
 
-The check reads files **as saved**. If you have unsaved changes the findings still describe the last save.
+The check follows what you type in `pipeline.py`, a moment after you stop typing, without saving. Your other files
+(`config/`, your step folders) are read as saved.
 
 A check that needs facts about your project (your compute classes, the HPC (Slurm) time limits) is shown as
-**skipped** until you give it your project's context file (see Settings). A skipped check is never a pass.
+**skipped** (listed in the status bar tooltip; the KAOS output panel prints them once) until you give it your project's context file (see Settings). A skipped check is never a pass.
 
 ## Settings
 
@@ -74,7 +75,7 @@ the folder asks for and waits for your confirmation. Sign-in needs a folder you 
 | No suggestions at all | Suggestions appear only inside a `step(` call in a file named `pipeline.py`. Open the **KAOS** output panel and check that the folder was recognised. |
 | Nothing happens in my folder | The folder is not recognised as a KAOS pipeline folder (see Install, step 4). |
 | "check did not run" in the status bar | Hover it for the reason; the **KAOS** output panel has the details. |
-| Findings never change | They follow your last save. Save the file. |
+| Findings do not change when you edit another file | Only `pipeline.py` is checked as you type; other files are read as saved. Save them. |
 | Sign-in does not open a browser | Run `kaosctl login` in a terminal in your app folder and read its message. |
 | "Not signed in" after signing in | The status only says whether a session exists on this machine. If a command still says you are not signed in, sign in again. |
 | The graph shows a dashed step | The step is created in a loop or a condition, so the file alone does not say where it goes. |

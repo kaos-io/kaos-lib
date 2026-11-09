@@ -15,9 +15,9 @@ export const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 
 /** Run `command args...` in `cwd`. Never rejects. */
-export function run(command: string, args: string[], cwd: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<RunResult> {
+export function run(command: string, args: string[], cwd: string, timeoutMs = DEFAULT_TIMEOUT_MS, input?: string): Promise<RunResult> {
   return new Promise((resolve) => {
-    execFile(command, args, { cwd, timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true, encoding: "utf8" },
+    const child = execFile(command, args, { cwd, timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true, encoding: "utf8" },
       (error, stdout, stderr) => {
         if (!error) { resolve({ code: 0, stdout, stderr }); return; }
         const e = error as NodeJS.ErrnoException & { code?: number | string; killed?: boolean };
@@ -25,15 +25,28 @@ export function run(command: string, args: string[], cwd: string, timeoutMs = DE
         const why = e.code === "ENOENT" ? `'${command}' was not found` : e.killed ? `'${command}' did not finish in time` : e.message;
         resolve({ code: null, stdout, stderr, startError: why });
       });
+    // Text for standard input (an unsaved buffer). An error here (the process ended early) is reported by execFile.
+    child.stdin?.on("error", () => undefined);
+    child.stdin?.end(input ?? "");
   });
 }
 
-/** The arguments of one check: `lint [--context FILE] --format json`, run in the folder (so no path argument). */
-export function checkArgs(contextFile: string | undefined): string[] {
-  return ["lint", ...(contextFile ? ["--context", contextFile] : []), "--format", "json"];
+/** The pipeline file the editor's unsaved text stands in for (kaosctl's default pipeline file). */
+export const PIPELINE_ARG = "pipeline.py";
+
+/**
+ * The arguments of one check: `lint [--context FILE] --format json [--stdin-path pipeline.py]`, run in the folder
+ * (so no path argument). With `fromStdin` the pipeline text is read from standard input (the unsaved buffer).
+ */
+export function checkArgs(contextFile: string | undefined, fromStdin = false): string[] {
+  return ["lint", ...(contextFile ? ["--context", contextFile] : []), "--format", "json",
+          ...(fromStdin ? ["--stdin-path", PIPELINE_ARG] : [])];
 }
 
-export const GRAPH_ARGS = ["lint", "--graph"];
+/** The arguments of the graph command, optionally reading the unsaved pipeline text from standard input. */
+export function graphArgs(fromStdin = false): string[] {
+  return ["lint", "--graph", ...(fromStdin ? ["--stdin-path", PIPELINE_ARG] : [])];
+}
 export const SCHEMA_ARGS = ["lint", "--schema"];
 export const LOGIN_ARGS = ["login"];
 

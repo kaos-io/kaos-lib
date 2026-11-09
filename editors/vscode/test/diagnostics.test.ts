@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeSkipped, mapFinding, mapReport, statusText } from "../src/diagnostics";
+import { skippedToPrint, describeSkipped, mapFinding, mapReport, statusText } from "../src/diagnostics";
 import { parseReport } from "../src/report";
 import { fixture } from "./helpers";
 
@@ -62,4 +62,12 @@ test("should_reject_a_report_that_is_not_the_contract", () => {
 
 test("should_map_the_same_report_to_the_same_diagnostics_each_time", () => {
   assert.deepEqual([...mapReport(report)], [...mapReport(parseReport(fixture("report.json")))]);
+});
+
+test("should_print_skipped_rules_once_and_again_only_when_they_change", () => {
+  const lines = describeSkipped(report.skipped);
+  assert.deepEqual(skippedToPrint("", lines), lines, "first time: print");
+  assert.deepEqual(skippedToPrint(lines.join("\n"), lines), [], "same as before: quiet");
+  assert.deepEqual(skippedToPrint(lines.join("\n"), lines.slice(1)), lines.slice(1), "changed: print the new set");
+  assert.deepEqual(skippedToPrint("", []), [], "nothing skipped: nothing to print");
 });

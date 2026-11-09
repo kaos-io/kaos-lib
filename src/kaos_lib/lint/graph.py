@@ -15,7 +15,7 @@ from typing import Optional
 from .constants import PIPELINE_FILE, RULESET_VERSION
 from .engine import MissingPipeline
 from .pipeline_reader import UNKNOWN, Block, PipelineFacts, Step, _callee, read_pipeline
-from .source import TooLarge, parse_python, read_text
+from .source import TooLarge, buffer_source, parse_python, read_text
 
 # The shape of this document. Bump when a field an editor reads changes meaning or goes away.
 GRAPH_VERSION = 1
@@ -72,7 +72,7 @@ def _block(facts: PipelineFacts, block: Block, start: int) -> dict:
             "unresolved": unresolved}
 
 
-def build_graph(root, pipeline_file: str = PIPELINE_FILE) -> dict:
+def build_graph(root, pipeline_file: str = PIPELINE_FILE, pipeline_text: Optional[str] = None) -> dict:
     """The graph of `root/pipeline_file`: one entry per `with pipeline(...)` block, each with nodes and edges.
 
     Raises MissingPipeline when the folder or the file is missing, unreadable, too large or not valid Python (the
@@ -82,7 +82,8 @@ def build_graph(root, pipeline_file: str = PIPELINE_FILE) -> dict:
     if not root.is_dir():
         raise MissingPipeline(f"{root} is not a folder")
     try:
-        src = read_text(root, root / pipeline_file, pipeline_file)
+        src = read_text(root, root / pipeline_file, pipeline_file) if pipeline_text is None \
+            else buffer_source(pipeline_text, pipeline_file)
     except TooLarge:
         raise MissingPipeline(f"{pipeline_file} is too large to read") from None
     if src is None:
@@ -96,6 +97,6 @@ def build_graph(root, pipeline_file: str = PIPELINE_FILE) -> dict:
     return {"graph_version": GRAPH_VERSION, "ruleset_version": RULESET_VERSION, "file": src.rel, "pipelines": blocks}
 
 
-def graph_json(root, pipeline_file: str = PIPELINE_FILE) -> str:
+def graph_json(root, pipeline_file: str = PIPELINE_FILE, pipeline_text: Optional[str] = None) -> str:
     """The graph as JSON text: two-space indent, fixed key order, a final newline."""
-    return json.dumps(build_graph(root, pipeline_file), indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(build_graph(root, pipeline_file, pipeline_text), indent=2, ensure_ascii=False) + "\n"

@@ -13,7 +13,7 @@ from typing import Optional
 from . import render
 from .graph import graph_json
 from .catalogue import CatalogueError, default_catalogue, empty_catalogue, read_context, read_file
-from .constants import PIPELINE_FILE, RULESET_VERSION
+from .constants import MAX_FILE_BYTES, PIPELINE_FILE, RULESET_VERSION
 from .engine import MissingPipeline, lint_project
 from .model import Report
 from .schema import schema_json
@@ -41,6 +41,10 @@ def add_arguments(sp: argparse.ArgumentParser) -> None:
                     help="write the catalogue read from --context to FILE and stop (no linting)")
     sp.add_argument("--from-report", metavar="FILE",
                     help="render a JSON report you saved earlier instead of linting (text or markdown output)")
+    sp.add_argument("--stdin-path", metavar="FILE",
+                    help="read the content of this file (it must be the pipeline file) from standard input instead of "
+                         "from disk, and everything else from disk: for editors checking unsaved text. The text is "
+                         "parsed, never run")
     sp.add_argument("--schema", action="store_true",
                     help="print what step() accepts (names, types, allowed values, docs, links) as JSON, versioned "
                          "with the rule set, and stop: editors read it for completion and hover text")
@@ -69,6 +73,16 @@ def _emit(args, body: str) -> None:
         sys.stdout.write(body)
 
 
+def _stdin_text(args) -> Optional[str]:
+    """The pipeline text from standard input for --stdin-path, or None. Refuses any other file name."""
+    if not args.stdin_path:
+        return None
+    if pathlib.PurePosixPath(args.stdin_path.replace("\\", "/")) != pathlib.PurePosixPath(args.pipeline):
+        raise ValueError(f"--stdin-path must name the pipeline file ({args.pipeline}), not {args.stdin_path}")
+    data = sys.stdin.buffer.read(MAX_FILE_BYTES + 1)
+    return data.decode("utf-8", errors="replace")
+
+
 def run(args) -> int:
     """Run the linter for parsed arguments. Exit 0: no errors; 2: errors found; 1: it could not run."""
     if args.expect_ruleset and args.expect_ruleset != RULESET_VERSION:
@@ -80,7 +94,7 @@ def run(args) -> int:
             _emit(args, schema_json())
             return EXIT_OK
         if args.graph:
-            _emit(args, graph_json(args.path, args.pipeline))
+            _emit(args, graph_json(args.path, args.pipeline, _stdin_text(args)))
             return EXIT_OK
         if args.export_catalogue:
             pathlib.Path(args.export_catalogue).write_text(_catalogue(args).to_json(), encoding="utf-8")
@@ -91,7 +105,7 @@ def run(args) -> int:
                 print("ERROR: the report was made by another rule set.", file=sys.stderr)
                 return EXIT_USAGE
         else:
-            report = lint_project(args.path, _catalogue(args), args.pipeline)
+            report = lint_project(args.path, _catalogue(args), args.pipeline, _stdin_text(args))
     except (CatalogueError, MissingPipeline, OSError, ValueError, KeyError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_USAGE
