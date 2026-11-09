@@ -1,0 +1,18 @@
+No usable container engine was found on this machine (kaosctl looked for docker and podman).
+kaosctl builds your step image with an engine that is already installed. It never installs one for you.
+
+What to install (free): Docker Engine
+  Official instructions: https://docs.docker.com/engine/install/
+  Command to run yourself (Docker's own install script; read it first at https://get.docker.com):
+      curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
+  Then let your user use it (log out and in afterwards):
+      sudo usermod -aG docker $USER
+
+Alternative (free, no background service): Podman
+  Official instructions: https://podman.io/docs/installation
+  Command to run yourself:
+      your distribution's package manager (the package is called podman)
+
+Docker Desktop also works if you already have it, but it needs a paid subscription for companies with more than 250 employees or more than 10 million US dollars of revenue.
+
+kaosctl did not run any of these commands. After installing, run `kaosctl build` again.

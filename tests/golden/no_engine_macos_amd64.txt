@@ -1,0 +1,19 @@
+No usable container engine was found on this machine (kaosctl looked for docker and podman).
+kaosctl builds your step image with an engine that is already installed. It never installs one for you.
+
+What to install (free): Colima
+  Official instructions: https://github.com/abiosoft/colima#installation
+  Commands to run yourself (Homebrew, https://brew.sh):
+      brew install colima docker
+      colima start
+
+Alternative (free): Podman
+  Official instructions: https://podman.io/docs/installation
+  Commands to run yourself:
+      brew install podman
+      podman machine init
+      podman machine start
+
+Docker Desktop also works if you already have it, but it needs a paid subscription for companies with more than 250 employees or more than 10 million US dollars of revenue.
+
+kaosctl did not run any of these commands. After installing, run `kaosctl build` again.

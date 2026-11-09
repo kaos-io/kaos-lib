@@ -17,7 +17,7 @@ pipeline.py:7: error L-E05 DependencyOrProducer: Step 'evaluate' needs 'train', 
     fix: Move the line that defines 'train' above this step.
     docs: .../lint/L-E05.html
 config/dataset.yaml:1:10: warning L-W03 UnpinnedDataset: The dataset 'dataset-default@latest' follows the newest data ...
-0 errors, 1 warning, 0 infos; 2 rules skipped. Rule set 1.1.0; facts from: built-in default.
+0 errors, 1 warning, 0 infos; 2 rules skipped. Rule set 1.2.0; facts from: built-in default.
 ```
 
 The exit code is `0` when there are no errors and `2` when there is at least one error. Warnings and infos never change
@@ -109,9 +109,21 @@ render and when a step is submitted.
 | warning | [L-W03 UnpinnedDataset](lint/L-W03.md) | a dataset reference that follows `@latest` |
 | warning | [L-W04 NoMlflowOrModelNotRegistered](lint/L-W04.md) | no MLflow logging, or no registered model |
 | warning | [L-W05 DeclaredResumableDidNotResume](lint/L-W05.md) | a step declared resumable restarted from zero on the platform |
+| error | [L-D01 MissingKaosLibArg](lint/L-D01.md) | a step uses kaos-lib but its Dockerfile has no `ARG KAOS_LIB_PACKAGE` |
+| error | [L-D02 KaosLibNotInstalled](lint/L-D02.md) | the step imports kaos_lib but nothing installs `${KAOS_LIB_PACKAGE}` |
+| error | [L-D03 WrongArchitecture](lint/L-D03.md) | a `FROM --platform=` other than linux/amd64 |
+| error | [L-D04 CopyOutsideContext](lint/L-D04.md) | a `COPY` source the build cannot read |
+| error, warning | [L-D05 StepContract](lint/L-D05.md) | no `app/entry.py` (error); no `python -m app.entry` entrypoint (warning) |
+| warning | [L-D06 HugeLayers](lint/L-D06.md) | `COPY . .`, baked-in data, pip without `--no-cache-dir`, apt without cleanup |
+| info | [L-D07 RootUser](lint/L-D07.md) | the image runs as root |
+| warning | [L-D08 NoCudaForGpuStep](lint/L-D08.md) | a GPU step whose image shows no CUDA support |
 | info | [L-I01 NodeSharing](lint/L-I01.md) | a GPU step with no limit cannot share a node |
 | info | [L-I02 LearnedLimits](lint/L-I02.md) | a short limit may be shortened further |
 | info | [L-I03 Schedules](lint/L-I03.md) | not active yet |
+
+The `L-D` rows are the **Dockerfile doctor**: they read each step's `Dockerfile` (never build it) and run in the same
+check, so the pull request check, `kaosctl lint` and `kaosctl build` print the same findings. See
+[Build a step image](build.md).
 
 ## Install
 

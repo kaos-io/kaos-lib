@@ -1,0 +1,1 @@
+ERROR: failed to solve: failed to prepare extraction snapshot "extract-1234-abcd sha256:aaaa": write /var/lib/docker/overlay2/l/XYZ: no space left on device

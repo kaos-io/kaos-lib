@@ -1,0 +1,14 @@
+Client: Docker Engine - Community
+ Version:    29.7.2
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  buildx: Docker Buildx (Docker Inc.)
+    Version:  v0.36.1
+    Path:     /usr/libexec/docker/cli-plugins/docker-buildx
+  compose: Docker Compose (Docker Inc.)
+    Version:  v5.4.0
+    Path:     /usr/libexec/docker/cli-plugins/docker-compose
+
+Server:
+failed to connect to the docker API at unix:///nonexistent/docker.sock; check if the path is correct and if the daemon is running: dial unix /nonexistent/docker.sock: connect: no such file or directory

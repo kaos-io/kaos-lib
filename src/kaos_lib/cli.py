@@ -8,6 +8,9 @@
     kaosctl run --lock <mlflow-run-id> -- <command>   run a command reading exactly the commits that run read
     kaosctl layout list|show|init|validate|publish   dataset layouts (built-in, installed, the project's)
     kaosctl lint [folder]             check pipeline.py and its config without running it (no login, no network)
+    kaosctl dev [folder]              a Python environment per step (no Docker, no cluster)
+    kaosctl step run <step>           run one step on this machine as the platform runs it
+    kaosctl build [step]              build a step image with the container engine you already have
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
 traceback. Every successful command prints the next useful step and a link.
@@ -27,6 +30,7 @@ import requests
 
 from . import __version__, channel, credentials, datasets, layouts, peers, support
 from .lint import cli as lint_cli
+from .studio import cli as studio_cli
 from .config import resolve_endpoint
 from .errors import AuthError, DatasetError, KaosLibError, UnsupportedVersion, ValidationFailed
 from .lakefs import LakeFS
@@ -518,6 +522,7 @@ def build_parser() -> argparse.ArgumentParser:
                                     "them; it needs no login and no network. Exit 0: no errors; 2: errors found.")
     lint_cli.add_arguments(sp)
     sp.set_defaults(func=lint_cli.run)
+    studio_cli.add_commands(sub)
     return p
 
 

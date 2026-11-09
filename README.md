@@ -51,6 +51,15 @@ be removed in the next release. Coming from the old `kubecore` package? See
 `kaosctl lint` reads `pipeline.py` and the files around it and reports problems before you open a pull request. It
 never runs your code and needs no login: see the [guide](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html).
 
+## Try a step on your machine
+
+`kaosctl dev` makes a Python environment for each step, `kaosctl step run <step>` runs one step the way the platform runs
+it, and `kaosctl build [step]` builds its image with the container engine you already have (it tells you what to install if
+you have none; it never installs anything). No cluster and no login. Guides:
+[set up](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/dev.html),
+[run a step](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/step-run.html),
+[build an image](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/build.html).
+
 ## Contributing
 
 ```bash

@@ -1,0 +1,9 @@
+Unable to find image 'alpine:3.20' locally
+3.20: Pulling from library/alpine
+3f26bc2dec0b: Pulling fs layer
+3f26bc2dec0b: Verifying Checksum
+3f26bc2dec0b: Download complete
+3f26bc2dec0b: Pull complete
+Digest: sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+Status: Downloaded newer image for alpine:3.20
+exec /bin/true: exec format error

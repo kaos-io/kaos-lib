@@ -1,0 +1,3 @@
+STEP 1/1: FROM ghcr.io/novelcore/kaos-no-such-private-image:1
+Trying to pull ghcr.io/novelcore/kaos-no-such-private-image:1...
+Error: creating build container: unable to copy from source docker://ghcr.io/novelcore/kaos-no-such-private-image:1: initializing source docker://ghcr.io/novelcore/kaos-no-such-private-image:1: Requesting bearer token: received unexpected HTTP status: 403 Forbidden

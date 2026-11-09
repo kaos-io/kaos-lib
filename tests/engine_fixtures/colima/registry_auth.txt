@@ -1,0 +1,1 @@
+ERROR: failed to solve: ghcr.io/example/private-base:1: failed to resolve source metadata for ghcr.io/example/private-base:1: failed to authorize: failed to fetch anonymous token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Aexample%2Fprivate-base%3Apull&service=ghcr.io: 401 Unauthorized

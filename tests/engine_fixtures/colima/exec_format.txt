@@ -1,0 +1,3 @@
+#6 [2/4] RUN pip install --no-cache-dir PyYAML
+#6 0.152 exec /bin/sh: exec format error
+#6 ERROR: process "/bin/sh -c pip install --no-cache-dir PyYAML" did not complete successfully: exit code: 255
