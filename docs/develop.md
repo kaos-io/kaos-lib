@@ -35,6 +35,7 @@ registry, a request to a local HTTP server, and a lock round trip through a file
 | `support.py` | the support window: `release.json` checks for steps and the CLI |
 | `channel.py` | release channel of the install (PEP 610), the platform's recommended spec (`upgrade`) |
 | `cli.py` | the `kaosctl` command (and the deprecated `kubecore` alias) |
+| `lint/` | the pipeline linter: `engine.py` runs the rules of `rules_errors.py`, `rules_warnings.py`, `rules_infos.py` over what `pipeline_reader.py` / `project_reader.py` read, with the facts of `catalogue.py`; `model.py` (report), `render.py`, `cli.py`; `standalone.py` runs it without importing the rest of kaos-lib (PR gate). Static: never runs client code. Standard library + PyYAML only |
 | `kubecore/` | the deprecated `kubecore` import shim (0.3.x and 0.4.x) |
 
 ## The documentation site

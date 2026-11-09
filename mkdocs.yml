@@ -93,10 +93,26 @@ nav:
       - Datasets: datasets.md
       - Outputs: outputs.md
       - Long runs on HPC (Slurm): checkpoint.md
+      - Check your pipeline: lint.md
       - MLflow: mlflow.md
       - Data lock: data-lock.md
       - Datasets shared with your project: shared-datasets.md
       - Make your own dataset layout: make-your-own-layout.md
+  - Lint checks:
+      - L-E00: lint/L-E00.md
+      - L-E01: lint/L-E01.md
+      - L-E02: lint/L-E02.md
+      - L-E03: lint/L-E03.md
+      - L-E04: lint/L-E04.md
+      - L-E05: lint/L-E05.md
+      - L-E06: lint/L-E06.md
+      - L-W01: lint/L-W01.md
+      - L-W02: lint/L-W02.md
+      - L-W03: lint/L-W03.md
+      - L-W04: lint/L-W04.md
+      - L-I01: lint/L-I01.md
+      - L-I02: lint/L-I02.md
+      - L-I03: lint/L-I03.md
   - Reference:
       - CLI: generated/cli.md
       - Python API: api.md

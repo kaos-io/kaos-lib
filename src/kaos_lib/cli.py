@@ -7,6 +7,7 @@
     kaosctl --version                 version, release channel and the platform's recommendation
     kaosctl run --lock <mlflow-run-id> -- <command>   run a command reading exactly the commits that run read
     kaosctl layout list|show|init|validate|publish   dataset layouts (built-in, installed, the project's)
+    kaosctl lint [folder]             check pipeline.py and its config without running it (no login, no network)
 
 User errors print one ``ERROR:`` line (exit 1; validation problems exit 2), never a
 traceback. Every successful command prints the next useful step and a link.
@@ -25,6 +26,7 @@ from typing import Optional
 import requests
 
 from . import __version__, channel, credentials, datasets, layouts, peers, support
+from .lint import cli as lint_cli
 from .config import resolve_endpoint
 from .errors import AuthError, DatasetError, KaosLibError, UnsupportedVersion, ValidationFailed
 from .lakefs import LakeFS
@@ -509,6 +511,13 @@ def build_parser() -> argparse.ArgumentParser:
                                                   f"its {layouts.LAYOUTS_REPOSITORY} repository)")
     sp.add_argument("path", help="a layout.yaml or its folder")
     sp.add_argument("-m", "--message", help="pull request title")
+
+    sp = sub.add_parser("lint", help="check pipeline.py and its config without running it",
+                        description="Check a pipeline's pipeline.py and the files around it for problems the platform "
+                                    "would refuse or that usually go wrong later. It reads your files and never runs "
+                                    "them; it needs no login and no network. Exit 0: no errors; 2: errors found.")
+    lint_cli.add_arguments(sp)
+    sp.set_defaults(func=lint_cli.run)
     return p
 
 
