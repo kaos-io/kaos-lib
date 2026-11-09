@@ -33,6 +33,7 @@ user-definable layouts.
   Lightning's `MLFlowLogger` and Hugging Face's `MLflowCallback`).
 
 ### Changed
+- Documentation sweep: the checkpoint guide now covers `resumable=`, runs longer than the longest HPC class run and the idle limit; the Python API reference includes `kaos_lib.checkpoint`; docstrings rendered on the site no longer name platform internals; a wrong example in "Formerly kubecore" is fixed. One message changed: a peer without a public URL now says it cannot be read from outside "the platform" (was "the cluster").
 - The docs and docstrings say Slurm, not MeluXina: Slurm is the kind of machine, MeluXina is today's provider.
   No API or environment variable changes.
 

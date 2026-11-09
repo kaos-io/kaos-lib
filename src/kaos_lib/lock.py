@@ -1,4 +1,4 @@
-"""Data lock (PRD kaos#1147 D-13, F-18): the exact commit of every dataset a run reads, kept in MLflow, replayable.
+"""Data lock: the exact commit of every dataset a run reads, kept in MLflow, replayable.
 
 Every ``datasets.resolve`` (and so every ``materialize``) records ``(owner, repo, ref) -> commit`` in the process's
 lock, ``current()``. Reads that bypass kaos-lib (an S3-gateway stream, say) are added with ``record``. At the end

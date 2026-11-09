@@ -27,7 +27,7 @@ datasets.list_datasets(); datasets.versions("dataset-x"); datasets.release("data
 
 `materialize` downloads what the dataset's layout names at the pinned commit and caches it by (repository, commit)
 in `$KUBECORE_CACHE_DIR` (default `~/.cache/kubecore/datasets`), so a second call is free. When
-`$KUBECORE_STAGED_DIR` holds that commit (a Slurm job with pre-staged data), it is used in place and nothing is downloaded. A commit
+`$KUBECORE_STAGED_DIR` holds that commit (an HPC (Slurm) job with pre-staged data), it is used in place and nothing is downloaded. A commit
 with no files raises `EmptyDataset` (a `DatasetError`), so a step can tell "no data yet" from other failures.
 
 ## Layouts

@@ -70,7 +70,7 @@ print("training on", datasets.resolve(ref), data)
 ```
 
 `materialize` downloads that commit once and caches it. In a pipeline the platform injects the credentials, so the
-same code runs unchanged in a pipeline step, on a laptop (after `kaosctl login`) and in a Slurm job.
+same code runs unchanged in a pipeline step, on a laptop (after `kaosctl login`) and in an HPC (Slurm) job.
 
 ## 6. Save results
 

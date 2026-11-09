@@ -20,6 +20,7 @@ version you have installed (`kaosctl --version`).
 | install it | [Install](install.md) |
 | make a dataset and use it in a pipeline | [Quickstart](quickstart.md) |
 | understand datasets, versions and layouts | [Datasets](datasets.md) |
+| keep a long run alive through interruptions | [Long runs: checkpoints](checkpoint.md) |
 | fix an error message | [Troubleshooting](troubleshooting.md) |
 | look up a command or a function | [CLI](generated/cli.md), [Python API](api.md) |
 

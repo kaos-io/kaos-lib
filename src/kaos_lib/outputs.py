@@ -62,7 +62,7 @@ class RunWriter:
     """Durable, idempotent writer of one step's outputs (one kind) of one run.
 
     Everything is saved and committed on the run's own branch ``run-<run>-<kind>`` (created from main,
-    or REUSED when it exists, so a retry or a preempted pod resumes). ``finish`` merges the branch into
+    or REUSED when it exists, so a retry or a preempted step resumes). ``finish`` merges the branch into
     main (exactly one new commit on main per step per run) and deletes it. An exception inside the
     ``with`` block neither merges nor deletes. Needs write rights on ``outputs-<app>`` only.
     """

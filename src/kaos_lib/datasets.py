@@ -1,6 +1,6 @@
 """Datasets: one lakeFS repository ``dataset-<name>`` each, versions are tags v1, v2, ... on ``main``.
 
-Data model (PRD kaos#1283): ``latest`` is the head of ``main``; a run picks
+Data model: ``latest`` is the head of ``main``; a run picks
 ``<dataset-repo>@<version>``; changes reach ``main`` only through a pull request
 (except the initial scaffold that ``create_dataset`` commits, as kaos-lake does).
 ``<owner-project>/dataset-<name>@<version>`` reads a dataset another project of the

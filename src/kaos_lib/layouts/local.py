@@ -2,7 +2,7 @@
 
 A copy is keyed by (owner, repo, commit[, prefix]) through a marker file, so a second call is free; a
 dataset another project shares lives under ``<cache>/<owner>/<repo>/<commit>``, apart from the own ones
-(``<cache>/<repo>/<commit>``). A staged copy (``$KUBECORE_STAGED_DIR``, e.g. Slurm staging) that holds
+(``<cache>/<repo>/<commit>``). A staged copy (``$KUBECORE_STAGED_DIR``, e.g. HPC (Slurm) staging) that holds
 the commit of the same repository and owner is used in place.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from ..transfer import download_prefixes
 
 MARKER = ".kubecore-dataset.json"
 STAGED_ENV, CACHE_ENV = "KUBECORE_STAGED_DIR", "KUBECORE_CACHE_DIR"
-STAGED_COMMIT_FILES = (".kaos-commit", ".kaos-ready")  # Slurm stager markers that may hold the commit
+STAGED_COMMIT_FILES = (".kaos-commit", ".kaos-ready")  # HPC (Slurm) stager markers that may hold the commit
 
 
 def cache_root() -> pathlib.Path:

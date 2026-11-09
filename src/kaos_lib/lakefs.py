@@ -76,8 +76,8 @@ class LakeFS:
     def for_owner(self, owner: str) -> "LakeFS":
         """A client for the lakeFS of project ``owner`` (this client when ``owner`` is the own project).
 
-        The address comes from the own lakeFS's peers (``/kaos/v1/peers``): the in-cluster endpoint when
-        this client's base is an in-cluster ``.svc`` address, else the public URL. The credential is a
+        The address comes from the own lakeFS's peers (``/kaos/v1/peers``): the platform-network endpoint when
+        this client's base is such an address (``.svc``), else the public URL. The credential is a
         bearer token (``credentials.resolve_peer``), never this project's access key.
         """
         from . import peers
