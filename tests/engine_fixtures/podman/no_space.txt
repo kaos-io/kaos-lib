@@ -1,0 +1,2 @@
+STEP 3/4: RUN pip install --no-cache-dir torch
+Error: building at STEP "RUN pip install --no-cache-dir torch": while running runtime: write /var/tmp/buildah123/mnt/rootfs/usr/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so: no space left on device

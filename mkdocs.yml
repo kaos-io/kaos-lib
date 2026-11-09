@@ -94,6 +94,9 @@ nav:
       - Outputs: outputs.md
       - Long runs on HPC (Slurm): checkpoint.md
       - Check your pipeline: lint.md
+      - Set up your steps (kaosctl dev): dev.md
+      - Run a step locally: step-run.md
+      - Build a step image: build.md
       - MLflow: mlflow.md
       - Data lock: data-lock.md
       - Datasets shared with your project: shared-datasets.md
@@ -114,6 +117,14 @@ nav:
       - L-I01: lint/L-I01.md
       - L-I02: lint/L-I02.md
       - L-I03: lint/L-I03.md
+      - L-D01: lint/L-D01.md
+      - L-D02: lint/L-D02.md
+      - L-D03: lint/L-D03.md
+      - L-D04: lint/L-D04.md
+      - L-D05: lint/L-D05.md
+      - L-D06: lint/L-D06.md
+      - L-D07: lint/L-D07.md
+      - L-D08: lint/L-D08.md
   - Reference:
       - CLI: generated/cli.md
       - Python API: api.md
@@ -121,6 +132,7 @@ nav:
       - Credentials: credentials.md
       - Support policy and upgrades: support-window.md
       - Troubleshooting: troubleshooting.md
+      - Troubleshooting dev, run, build: troubleshooting-build.md
       - Formerly kubecore: formerly-kubecore.md
       - Develop: develop.md
   - Changelog: changelog.md

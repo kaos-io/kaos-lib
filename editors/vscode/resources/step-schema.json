@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "1.1.0",
+  "ruleset_version": "1.2.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -361,6 +361,62 @@
       "level": "error",
       "fix": "Fix the file so it can be read, then run the check again.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E00.html"
+    },
+    {
+      "id": "L-D01",
+      "name": "MissingKaosLibArg",
+      "level": "error",
+      "fix": "Add `ARG KAOS_LIB_PACKAGE=\"kaos-lib[zitadel]==<the version you tested>\"` before the install and install with `RUN pip install --no-cache-dir \"${KAOS_LIB_PACKAGE}\"`.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D01.html"
+    },
+    {
+      "id": "L-D02",
+      "name": "KaosLibNotInstalled",
+      "level": "error",
+      "fix": "Install it from the argument: `RUN pip install --no-cache-dir \"${KAOS_LIB_PACKAGE}\"`.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D02.html"
+    },
+    {
+      "id": "L-D03",
+      "name": "WrongArchitecture",
+      "level": "error",
+      "fix": "Remove `--platform=` from FROM (the build picks the platform's architecture), or use `--platform=$BUILDPLATFORM`.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D03.html"
+    },
+    {
+      "id": "L-D04",
+      "name": "CopyOutsideContext",
+      "level": "error",
+      "fix": "Copy only files inside the step's folder (the build context). Files of the repository root are available to the compose-and-validate step only.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D04.html"
+    },
+    {
+      "id": "L-D05",
+      "name": "StepContract",
+      "level": "error",
+      "fix": "Put the step's code in steps/<name>/app/entry.py and start it with `ENTRYPOINT [\"python\", \"-m\", \"app.entry\"]`.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D05.html"
+    },
+    {
+      "id": "L-D06",
+      "name": "HugeLayers",
+      "level": "warning",
+      "fix": "Copy only what the step needs, add --no-cache-dir to pip, and remove /var/lib/apt/lists in the same RUN as apt-get install.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D06.html"
+    },
+    {
+      "id": "L-D07",
+      "name": "RootUser",
+      "level": "info",
+      "fix": "Add `RUN useradd --create-home app` and `USER app` before the ENTRYPOINT if your step does not need root.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D07.html"
+    },
+    {
+      "id": "L-D08",
+      "name": "NoCudaForGpuStep",
+      "level": "warning",
+      "fix": "Use a CUDA-enabled base image, or depend on a library whose wheel bundles CUDA (for example torch), so the step can use its GPU. This check is a heuristic: it searches the image and the dependency files.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D08.html"
     },
     {
       "id": "L-E01",

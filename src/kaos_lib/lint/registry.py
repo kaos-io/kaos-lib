@@ -39,6 +39,7 @@ class Hit:
     span: Span
     message: str
     fix: Optional[str] = None   # overrides the rule's generic fix hint when the hint depends on the finding
+    level: Optional[str] = None   # overrides the rule's level for rules that have two (L-D05: error and warning)
 
 
 @dataclass(frozen=True)

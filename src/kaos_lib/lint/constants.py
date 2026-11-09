@@ -7,7 +7,7 @@ rule-set version bump, never a literal buried in a rule.
 # The rule-set version: every report carries it, the PR gate and `kaosctl lint` must agree on it. Bump the major
 # for a rule removed or a level raised, the minor for a rule added or a message-only change that needs a note,
 # the patch for a fix that changes no finding on valid input.
-RULESET_VERSION = "1.1.0"
+RULESET_VERSION = "1.2.0"
 
 # Where a rule's page lives. The site is a plain public bucket, so every link names its .html file.
 DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
@@ -53,3 +53,14 @@ CHECKPOINT_FRAMEWORKS = ("ultralytics", "pytorch_lightning", "lightning", "trans
 # Static evidence that a step's code keeps checkpoints: the folder the platform restores, or the state functions.
 CHECKPOINT_DIR_ENV = "KAOS_CHECKPOINT_DIR"
 CHECKPOINT_STATE_NAMES = ("save_state", "load_state")
+
+# The Dockerfile doctor (rules L-D01 .. L-D08, PRD-CONSOLE-1682 D-19).
+BUILD_ARCH_DEFAULT = "amd64"           # the platform's step images are built for this unless the project says otherwise
+COMPOSE_STEP = "compose-and-validate"  # built with the repository root as context, not its own folder
+LARGE_COPY_BYTES = 50 * 1024 * 1024    # L-D06: a COPY source folder above this is a layer you probably did not mean
+DATA_FOLDER_NAMES = ("data", "dataset", "datasets", "weights", "runs", "out", "outputs", "checkpoints", ".git")
+CUDA_IMAGE_WORDS = ("cuda", "nvidia", "pytorch", "tensorflow", "rocm")
+CUDA_PACKAGE_PATTERN = (r"(?<![a-z0-9_-])(torch|torchvision|tensorflow|jax|jaxlib|cupy|onnxruntime-gpu|ultralytics|"
+                        r"cudf|nvidia-[a-z0-9-]+)(?![a-z0-9_])")
+KAOS_LIB_ARG = "KAOS_LIB_PACKAGE"
+ENTRY_MODULE = "app.entry"

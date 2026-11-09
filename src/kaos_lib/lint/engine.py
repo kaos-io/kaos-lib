@@ -9,7 +9,7 @@ from __future__ import annotations
 import pathlib
 from typing import Optional
 
-from . import rules_errors, rules_infos, rules_warnings  # noqa: F401  (importing registers the rules)
+from . import rules_dockerfile, rules_errors, rules_infos, rules_warnings  # noqa: F401  (importing registers the rules)
 from .catalogue import Catalogue, default_catalogue
 from .constants import MAX_FILE_BYTES, PIPELINE_FILE, RULESET_VERSION
 from .model import ERROR, Finding, Report, Skipped, Span
@@ -42,7 +42,7 @@ def _missing_facts(rule: Rule, catalogue: Catalogue) -> Optional[str]:
 
 
 def _finding(rule: Rule, hit: Hit) -> Finding:
-    return Finding(rule.id, rule.name, rule.level, hit.file, hit.span, hit.message, hit.fix or rule.fix, rule.doc)
+    return Finding(rule.id, rule.name, hit.level or rule.level, hit.file, hit.span, hit.message, hit.fix or rule.fix, rule.doc)
 
 
 def _not_analysable(message: str, file: str = PIPELINE_FILE, span: Span = Span(1, 1, 1, 1)) -> Finding:

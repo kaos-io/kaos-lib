@@ -42,7 +42,7 @@ def test_every_rule_has_a_documentation_page():
 
 
 def test_every_rule_is_in_the_corpus_or_documented_as_inactive():
-    ids = {r.id for r in ALL_RULES}
+    ids = {r.id for r in ALL_RULES if not r.id.startswith("L-D")}   # the L-D rules have their own corpus
     assert ids - set(CASES) == {"L-E00", "L-I03"}
 
 

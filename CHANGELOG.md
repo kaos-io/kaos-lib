@@ -16,6 +16,28 @@ user-definable layouts.
   dependencies as JSON, read from the file without running it. The extension shows the linter's findings in the editor,
   suggests step arguments and values, offers the `walltime=` to `hpc_time_limit=` fix, draws the step graph and signs in
   with `kaosctl login`. It is built as a local `.vsix` and is not published. No rule changed, so the rule set stays `1.1.0`.
+- `kaosctl dev`, `kaosctl step run` and `kaosctl build` (PRD novelcore/kaos#1682 F-29 to F-34, D-15 to D-17, D-19): set up,
+  run and build one step on your own machine, with no cluster and no login. `kaosctl` only detects, verifies and
+  suggests: it never installs a container engine, `uv` or anything else, and never runs a package manager or an installer.
+  - `kaosctl dev` makes `steps/<name>/.venv` for each step from what its Dockerfile installs (read, never run): `pip
+    install` lines, `-r` files, Poetry steps from `poetry.lock`, `requirements.txt`, `pyproject.toml`. The Python of the
+    step's base image when this machine has it, kaos-lib added to the steps that use it, a `.vscode/settings.json`
+    interpreter hint per step. `uv` when present, else `python -m venv` and pip, with the link to get `uv`. Idempotent. Steps
+    with large dependencies (torch, CUDA, TensorFlow) are skipped unless named or `--all`.
+  - `kaosctl step run <step>` starts the step as the platform does (`python -m app.entry --params <composed params>
+    --<upstream output> <json>`) in its environment, with the platform's `/work` mapped into `.kaos/local/work/<step>`, an
+    allowlisted environment (no platform secret or endpoint), `--input`, `--set`, `--params-file`, and an optional small
+    dataset sample (`--dataset`, `--sample-mb`) through the same client as `kaosctl dataset pull`. It prints the outputs.
+  - `kaosctl build [step]` runs the Dockerfile doctor, finds and verifies an engine (Docker Engine, Docker Desktop, Colima,
+    Rancher Desktop, Podman: the daemon, a test build, disk space, architecture and emulation), builds with CI's Dockerfile,
+    context, `REGISTRY_URL`, `VERSION`, `KAOS_LIB_PACKAGE` and `io.kaos.lib` label for the platform's architecture, never
+    pushes, and turns the engine's common errors into a message and a fix. With no usable engine it prints, for your OS, a
+    free engine, the official link, the exact command to run yourself and the Docker Desktop licence note, and stops.
+  - The Dockerfile doctor: eight rules `L-D01` to `L-D08` in the linter (rule set `1.2.0`), so `kaosctl lint`, the pull
+    request check and `kaosctl build` report the same findings: a missing or unused `ARG KAOS_LIB_PACKAGE`, a wrong
+    architecture, a `COPY` outside the build context, a missing `app/entry.py` or entrypoint, huge layers, root user, no CUDA
+    for a GPU step. Guides: `docs/dev.md`, `docs/step-run.md`, `docs/build.md`, `docs/troubleshooting-build.md`, one page per rule.
+- New dependency: `tomli` on Python before 3.11 (reads `pyproject.toml` and `poetry.lock`).
 - The pipeline linter judges whether a step can continue from evidence, not from a guess (PRD novelcore/kaos#1682, rule
   set `1.1.0`). A step is resumable when `pipeline.py` says so, when the platform recorded that a continuation of it loaded
   its checkpoint and got past it (`hpc.resumableSteps` in the project's platform context, read by `--context`), or when its

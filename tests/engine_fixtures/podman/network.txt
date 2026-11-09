@@ -1,0 +1,10 @@
+STEP 1/2: FROM docker.io/library/python:3.11-slim
+STEP 2/2: RUN pip install --no-cache-dir PyYAML
+WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ProxyError('Cannot connect to proxy.', NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f3daf851c50>: Failed to establish a new connection: [Errno 111] Connection refused'))': /simple/pyyaml/
+WARNING: Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ProxyError('Cannot connect to proxy.', NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f3daf749ad0>: Failed to establish a new connection: [Errno 111] Connection refused'))': /simple/pyyaml/
+WARNING: Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ProxyError('Cannot connect to proxy.', NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f3dade12bd0>: Failed to establish a new connection: [Errno 111] Connection refused'))': /simple/pyyaml/
+WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ProxyError('Cannot connect to proxy.', NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f3dadf27b90>: Failed to establish a new connection: [Errno 111] Connection refused'))': /simple/pyyaml/
+WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ProxyError('Cannot connect to proxy.', NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f3dadc96450>: Failed to establish a new connection: [Errno 111] Connection refused'))': /simple/pyyaml/
+ERROR: Could not find a version that satisfies the requirement PyYAML (from versions: none)
+ERROR: No matching distribution found for PyYAML
+Error: building at STEP "RUN pip install --no-cache-dir PyYAML": while running runtime: exit status 1

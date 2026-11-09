@@ -1,0 +1,19 @@
+No usable container engine was found on this machine (kaosctl looked for docker and podman).
+kaosctl builds your step image with an engine that is already installed. It never installs one for you.
+
+What to install (free): Docker Engine inside WSL2
+  Official instructions: https://learn.microsoft.com/windows/wsl/install
+  Command to run yourself, in an administrator PowerShell (then restart Windows):
+      wsl --install
+  Then, in the Linux shell that opens, install Docker Engine with the Linux instructions at https://docs.docker.com/engine/install/ and run kaosctl there (pip install kaos-lib in that shell).
+
+Alternative (free): Podman Desktop
+  Official instructions: https://podman-desktop.io/downloads
+  Command to run yourself:
+      winget install RedHat.Podman-Desktop
+
+If you cannot install WSL2 or an engine (no administrator rights, WSL disabled by policy, no virtualisation), ask your IT team for one of the two.
+
+Docker Desktop also works if you already have it, but it needs a paid subscription for companies with more than 250 employees or more than 10 million US dollars of revenue.
+
+kaosctl did not run any of these commands. After installing, run `kaosctl build` again.
