@@ -9,6 +9,10 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,
 user-definable layouts.
 
+### Changed
+- `runtime.context().slot` now also carries `gpus` for a GPU step that runs alone on its HPC (Slurm) node (the platform sets
+  `KUBECORE_SLOT_GPUS` there too), and `CUDA_VISIBLE_DEVICES` reaches the step as a clean list without trailing blanks.
+
 ### Added
 - `kaosctl lint --stdin-path pipeline.py` reads the pipeline text from standard input (an editor's unsaved buffer) and the rest
   from disk; it works with `--graph` too. Static as before. The VS Code extension (0.1.1) uses it to check as you type, and

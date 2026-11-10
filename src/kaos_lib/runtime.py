@@ -21,7 +21,7 @@ dataset_commit     KUBECORE_DATASET_COMMIT, DATASET_COMMIT         steps / HPC (
 support            verdict of kaos_lib.support.check against       the platform (``KAOS_LIB_SUPPORT``)
                    KAOS_LIB_SUPPORT
 slot               KUBECORE_SLOT_GPUS, KUBECORE_SLOT_CPUS,         the platform, on a shared HPC (Slurm) node
-                   KUBECORE_SLOT_MEM_GIB, KUBECORE_SLOT_SHARED     (None elsewhere)
+                   KUBECORE_SLOT_MEM_GIB, KUBECORE_SLOT_SHARED     (gpus only for a GPU step alone; else None)
 =================  ==============================================  ==========================================
 
 On a shared HPC (Slurm) node a step gets one slot: its GPUs, its cores and its memory share
