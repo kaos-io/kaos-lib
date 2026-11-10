@@ -26,7 +26,7 @@ import shutil
 import sys
 from typing import Callable, Dict, Optional
 
-from . import checkpoint
+from . import checkpoint, progress
 
 _patched: Dict[str, bool] = {}
 
@@ -122,7 +122,13 @@ def _ultra_restore_best(trainer) -> None:
     print("kaos-lib: restored best.pt from %s" % best, file=sys.stderr, flush=True)
 
 
+def _ultra_progress(trainer) -> None:
+    progress.report(int(trainer.epoch) + 1, getattr(trainer, "epochs", None), "epoch")
+
+
 def _ultra_attach(trainer) -> None:
+    trainer.add_callback("on_fit_epoch_end", _ultra_progress)     # progress for the run page, checkpoints or not
+
     def save(path: pathlib.Path):
         shutil.copy2(str(trainer.last), str(path / "last.pt"))
         best = getattr(trainer, "best", None)
@@ -163,7 +169,17 @@ def _patch_lightning(module) -> None:
 
 def _lightning_attach(trainer, top: str) -> None:
     if not getattr(trainer, "is_global_zero", True):
-        return                                   # one rank writes the checkpoint
+        return                                   # one rank writes the checkpoint and reports progress
+    base = importlib.import_module(top + ".callbacks").Callback
+
+    class KaosProgress(base):                   # progress for the run page, checkpoints or not
+        def on_train_epoch_end(self, trainer, pl_module, *a, **k):
+            _lightning_progress(trainer)
+
+        def on_train_batch_end(self, trainer, pl_module, *a, **k):
+            pass
+
+    trainer.callbacks.append(KaosProgress())
 
     def save(path: pathlib.Path):
         trainer.save_checkpoint(str(path / "last.ckpt"))
@@ -171,13 +187,25 @@ def _lightning_attach(trainer, top: str) -> None:
 
     if checkpoint.attach(save) is None:
         return
-    base = importlib.import_module(top + ".callbacks").Callback
 
     class KaosCheckpoint(base):                 # defined here so Lightning is imported only if the step imported it
         def on_train_batch_end(self, trainer, pl_module, *a, **k):
             checkpoint.tick()
 
     trainer.callbacks.append(KaosCheckpoint())
+
+
+def _positive(value) -> Optional[int]:
+    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else None
+
+
+def _lightning_progress(trainer) -> None:
+    """Epochs when the run has a number of epochs, else steps when it has a number of steps, else the epoch alone."""
+    epochs, steps = _positive(getattr(trainer, "max_epochs", None)), _positive(getattr(trainer, "max_steps", None))
+    if epochs is None and steps is not None:
+        progress.report(int(trainer.global_step), steps, "step")
+    else:
+        progress.report(int(trainer.current_epoch) + 1, epochs, "epoch")
 
 
 # ------------------------------------------------------------------------------------------------ Hugging Face
@@ -203,6 +231,17 @@ def _patch_transformers(module) -> None:
 
 
 def _hf_attach(trainer) -> None:
+    callback_base = importlib.import_module("transformers").TrainerCallback
+
+    class KaosProgress(callback_base):          # progress for the run page, checkpoints or not
+        def on_step_end(self, args, state, control, **kwargs):
+            if getattr(state, "is_world_process_zero", True):
+                progress.report(int(state.global_step), _positive(getattr(state, "max_steps", None)), "step")
+
+        def on_save(self, args, state, control, **kwargs):
+            pass
+
+    trainer.add_callback(KaosProgress())
     holder = {"state": None}
 
     def latest(output_dir: str) -> pathlib.Path:

@@ -9,6 +9,7 @@ Public API:
     kaos_lib.runtime   context(), run_id(), usable_cpus(): what the platform injected, from the environment
     kaos_lib.lock      DataLock, record, write, load, replay: the commits a run read (data.lock.json)
     kaos_lib.checkpoint  dir, save, load, progress, stop_requested, exit_for_restart: checkpoints that survive interruptions
+    kaos_lib.progress  report(done, total, unit): how far the step is, shown on the run page
 """
 __version__ = "0.4.0"
 
@@ -22,3 +23,12 @@ if _os.environ.get("KAOS_CHECKPOINT_DIR"):          # the platform's checkpoint 
     from . import checkpoint as _checkpoint  # noqa: E402
 
     _checkpoint.activate()
+elif _os.environ.get("KUBECORE_RUN_ID"):             # a pipeline step without a checkpoint folder: progress hooks only
+    try:
+        from . import frameworks as _frameworks  # noqa: E402
+
+        _frameworks.install()
+    except Exception as _exc:                       # the hooks must never break an import
+        import sys as _sys
+
+        print("kaos-lib: progress hooks not attached: %s" % _exc, file=_sys.stderr, flush=True)

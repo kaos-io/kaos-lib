@@ -254,7 +254,7 @@ def test_lightning_resumes_and_saves_through_a_callback(rig, monkeypatch):
     t = mod.Trainer()
     t.fit(object())
     assert t.ckpt_used == str(d / "last.ckpt")
-    assert len(t.callbacks) == 1
+    assert [type(c).__name__ for c in t.callbacks] == ["KaosProgress", "KaosCheckpoint"]
     newest = folder / ckpts(folder)[-1]
     assert newest.name == "ckpt-000003" and (newest / "last.ckpt").read_bytes().startswith(b"lightning-")
 

@@ -129,6 +129,7 @@ nav:
       - CLI: generated/cli.md
       - Python API: api.md
       - Run context: runtime.md
+      - Progress of a step: progress.md
       - Credentials: credentials.md
       - Support policy and upgrades: support-window.md
       - Troubleshooting: troubleshooting.md
