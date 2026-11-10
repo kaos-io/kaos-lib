@@ -10,6 +10,9 @@ PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the form
 user-definable layouts.
 
 ### Changed
+- In a pipeline step the support line no longer says `Fix: pip install --upgrade ...`: nobody can install into a step's
+  image. Older but supported is one neutral line; deprecated and unsupported say that the image must be rebuilt and who
+  does it. `kaosctl` on a laptop keeps the upgrade command.
 - `runtime.context().slot` now also carries `gpus` for a GPU step that runs alone on its HPC (Slurm) node (the platform sets
   `KUBECORE_SLOT_GPUS` there too), and `CUDA_VISIBLE_DEVICES` reaches the step as a clean list without trailing blanks.
 

@@ -149,15 +149,28 @@ def _tag_mlflow(verdict: str) -> None:
         pass
 
 
+STEP_FIX = ("This step's image must be rebuilt with a newer kaos-lib. If its Dockerfile declares ARG KAOS_LIB_PACKAGE, "
+            "the platform installs kaos-lib and rebuilds the image: tell the platform team. If the Dockerfile pins "
+            "kaos-lib itself, raise that pin and push.")
+
+
 def at_step_start(installed: str, environ=os.environ) -> Optional[dict]:
     """Pipeline steps (``$KAOS_LIB_SUPPORT`` set by the platform): log the verdict, tag MLflow, stop if unsupported."""
     raw = environ.get(ENV)
     if not raw:
         return None
     result = check(installed, raw)
-    line = f"kaos-lib {installed}: {result['verdict']}: {result['message']}"
-    print(line + (f". Fix: {result['fix']}" if result["fix"] else ""), file=sys.stderr)
-    _tag_mlflow(result["verdict"])
-    if result["verdict"] == UNSUPPORTED:
-        raise UnsupportedVersion(f"{result['message']}. Fix: {result['fix']}")
+    verdict = result["verdict"]
+    # A step's image is built by the platform, with the kaos-lib the platform chose: the person reading this
+    # log cannot `pip install` anything. Older but supported says so in one neutral line; only deprecated and
+    # unsupported say what has to happen, and who does it.
+    line = f"kaos-lib {installed}: {verdict}: {result['message']}"
+    if verdict == BEHIND:
+        line += ". Nothing to do: a platform update brings the newer version"
+    elif verdict in (DEPRECATED, UNSUPPORTED):
+        line += ". " + STEP_FIX
+    print(line, file=sys.stderr)
+    _tag_mlflow(verdict)
+    if verdict == UNSUPPORTED:
+        raise UnsupportedVersion(f"{result['message']}. {STEP_FIX}")
     return result
