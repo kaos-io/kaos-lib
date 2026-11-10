@@ -147,10 +147,12 @@ def test_should_set_up_the_environment_first_when_the_step_has_none(tmp_path, mo
     assert calls == ["data-summary"] and "has no environment yet" in capsys.readouterr().out
 
 
-def test_should_refuse_to_compose_without_the_platform_composer_and_ask_for_a_params_file(repo, capsys):
+def test_should_ask_for_the_engine_or_a_params_file_when_the_app_has_no_engine_copy(repo, capsys, monkeypatch):
     (repo / "kubecore/compose.py").unlink()
+    monkeypatch.delenv("KAOS_ENGINE_WHEEL", raising=False)
     assert cli.main(["step", "run", "data-summary", str(repo)]) == 1
-    assert "pass --params-file" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "no pipeline engine was given" in err and "--context" in err and "pass --params-file" in err
 
 
 # --- the dataset sample (through the same client as `kaosctl dataset pull`) -------------------------------------

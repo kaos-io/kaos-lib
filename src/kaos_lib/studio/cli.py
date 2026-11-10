@@ -1,4 +1,4 @@
-"""The command-line arguments of `kaosctl dev`, `kaosctl step run` and `kaosctl build`.
+"""The command-line arguments of `kaosctl dev`, `kaosctl step run`, `kaosctl render` and `kaosctl build`.
 
 Why: kept apart from `kaos_lib.cli` so the studio is one module that the dispatcher only has to register.
 """
@@ -6,12 +6,16 @@ from __future__ import annotations
 
 import argparse
 
-from . import build, dev, run
+from . import build, dev, pipeline_engine, run
 from .constants import DEFAULT_SAMPLE_MB
 
 KAOS_LIB_HELP = ("the kaos-lib to install, as a pip requirement (default: the Dockerfile's own default, else this "
                  "kaosctl's version)")
-CONTEXT_HELP = "the platform's pipeline-context file: its kaosLib.spec is the kaos-lib the platform's build passes"
+CONTEXT_HELP = ("the platform's pipeline-context file: its kaosLib.spec is the kaos-lib the platform's build passes, "
+                "its engine block the pipeline engine the platform renders with")
+ENGINE_WHEEL_HELP = ("the pipeline engine release to use, as its wheel URL with the checksum (default: "
+                     "$KAOS_ENGINE_WHEEL, else the engine block of --context)")
+PROFILE_HELP = "the engine's config-schema profile (default: yolo for an app with a quantization config, else hera)"
 
 
 def add_commands(sub: argparse._SubParsersAction) -> None:
@@ -47,7 +51,20 @@ def add_commands(sub: argparse._SubParsersAction) -> None:
                     help=f"the most the sample downloads (default {DEFAULT_SAMPLE_MB})")
     sp.add_argument("--kaos-lib", metavar="REQUIREMENT", help=KAOS_LIB_HELP)
     sp.add_argument("--context", metavar="FILE", help=CONTEXT_HELP)
+    sp.add_argument("--engine-wheel", metavar="URL#sha256=HEX", help=ENGINE_WHEEL_HELP)
+    sp.add_argument("--profile", choices=pipeline_engine.PROFILES, help=PROFILE_HELP)
     sp.set_defaults(func=run.run_step)
+
+    sp = sub.add_parser("render", help="render pipeline.py with the platform's pipeline engine, as its CI does",
+                        description="Fetch the pipeline engine release the platform pinned for your app (checked by "
+                                    "its SHA-256), install it into .kaos/engine inside the repository, and render "
+                                    "pipeline.py with it. The result is out/raw-workflow-template.yaml. A render "
+                                    "that passes here passes in CI.")
+    sp.add_argument("path", nargs="?", default=".", help="your app folder (default: the current folder)")
+    sp.add_argument("--context", metavar="FILE", help=CONTEXT_HELP)
+    sp.add_argument("--engine-wheel", metavar="URL#sha256=HEX", help=ENGINE_WHEEL_HELP)
+    sp.add_argument("--profile", choices=pipeline_engine.PROFILES, help=PROFILE_HELP)
+    sp.set_defaults(func=pipeline_engine.run_render)
 
     sp = sub.add_parser("build", help="build a step's image on this machine with the container engine you already have",
                         description="Check the Dockerfile (the Dockerfile doctor), find and verify a container engine "

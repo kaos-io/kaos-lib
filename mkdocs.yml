@@ -96,6 +96,7 @@ nav:
       - Check your pipeline: lint.md
       - Set up your steps (kaosctl dev): dev.md
       - Run a step locally: step-run.md
+      - Render your pipeline locally: render.md
       - Build a step image: build.md
       - MLflow: mlflow.md
       - Data lock: data-lock.md
