@@ -176,7 +176,16 @@ def test_step_start_logs_and_continues(capsys, installed, expected):
 def test_step_start_continues_when_deprecated(capsys):
     meta = dict(POLICY, deprecated=[{"range": "<0.3", "unsupported_after": "2999-01-01"}])
     assert support.at_step_start("0.2.0", env_with(meta))["verdict"] == "deprecated"
-    assert "Fix: pip install --upgrade" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "must be rebuilt with a newer kaos-lib" in err and "tell the platform team" in err
+    assert "pip install" not in err, "nobody can pip install into a step's image"
+
+
+def test_step_start_says_one_neutral_line_when_behind_but_supported(capsys):
+    assert support.at_step_start("0.3.0", env_with(POLICY))["verdict"] == "behind"
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "Nothing to do: a platform update brings the newer version" in err
+    assert "Fix" not in err and "pip install" not in err
 
 
 def test_step_start_stops_only_when_unsupported(capsys):
