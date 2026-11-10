@@ -161,12 +161,12 @@ A step that lists `dataset` in `reads=` is covered. [How steps use datasets](ste
 
 ## Where a step runs
 
-You choose on the run form where each step runs: a class of the platform's own machines, or, for a GPU step, a
-class of HPC (Slurm). The step's code is the same in both places.
+You choose on the run form where each step runs: its own class list offers the platform's machines and, when your
+project has them, the classes of HPC (Slurm). Every step of your pipeline has this choice, not only GPU steps. The step's code is the same in both places.
 
 | | the platform's machines | HPC (Slurm) |
 | --- | --- | --- |
-| which steps | every step | steps with `gpu=True` |
+| which steps | every step | every step you write, when your project has HPC classes |
 | dataset | the step downloads the run's commit | the platform copies the run's commit next to the job before it starts, and kaos-lib reads that copy |
 | time | `hpc_time_limit=` does not apply | `hpc_time_limit=` sets the longest run, and the job waits in a queue first |
 | interruption | a lost machine: the step runs again, or continues from its checkpoint | the time limit: the step is told to save, and continues from its checkpoint |

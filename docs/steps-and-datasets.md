@@ -32,7 +32,7 @@ What the pin guarantees:
 | --- | --- |
 | every step of the run reads the same commit | make `latest` stop moving: the next run pins the newer commit |
 | new data merged while the run is going does not change what the run reads | pin data that a step reads without kaos-lib |
-| a wrong dataset name or version stops the run before any step uses time | pin a second dataset (see [common mistakes](#common-mistakes)) |
+| a wrong dataset name or version stops the run before any step uses time | pin a second dataset. The platform pins only the setting named exactly `dataset`, and only when a step lists `dataset` in `reads=` (see [common mistakes](#common-mistakes)) |
 | it works the same for your own and for shared datasets | pin your results repository: it holds what the run writes |
 
 A run's pin is the platform's job. If a step itself calls `ref.with_commit(commit)` with the commit that `resolve` just
@@ -104,18 +104,11 @@ unchanged.
 
 ## What is recorded
 
-kaos-lib remembers every dataset commit a step reads, as `(owner, repository, ref) -> commit`. One call writes it to the
-MLflow run, so you can always say which data a result came from:
-
-```python
-import mlflow
-from kaos_lib import lock
-
-with mlflow.start_run() as run:
-    ...
-    lock.write()                  # the lock of this step goes to the active MLflow run
-lock.write(run_id)                # or to a run you name, as the evaluation example does
-```
+kaos-lib remembers every dataset commit a step reads, as `(owner, repository, ref) -> commit`. In a pipeline step, the
+platform writes it to the step's MLflow run when that run ends: at `mlflow.end_run()`, when the step leaves
+`with mlflow.start_run()`, or when a framework's own MLflow logging ends its run. A run that failed gets it too, and a
+problem while writing never fails the step. So you can always say which data a result came from, and your code calls
+nothing.
 
 | recorded on the MLflow run | holds |
 | --- | --- |
@@ -124,10 +117,9 @@ lock.write(run_id)                # or to a run you name, as the evaluation exam
 | artifact `data.lock.json` | every read: repository, owner, ref and commit |
 
 Several steps that write to one run add up: `data.lock.json` merges. In the MLflow UI, filter on the tag to find every run
-that read a commit. The platform does not write the lock for you: call `lock.write()` once in the step that owns the
-MLflow run. [Training](step-examples.md#4-training) and [Publish](step-examples.md#7-publish-a-model) show it. A step
-that saves a result in your outputs repository can also put the commit in the commit's metadata:
-`r.finish({"dataset_commit": commit})`.
+that read a commit. A step that logs to no MLflow run records nothing. `kaos_lib.lock.write()` is still there for your own
+machine, and for writing the lock to another run ([Data lock](data-lock.md)). A step that saves a result in your outputs
+repository can also put the commit in the commit's metadata: `r.finish({"dataset_commit": commit})`.
 
 ## Reproduce an old run
 
@@ -161,11 +153,11 @@ Start a fresh command without `--lock` to read another version.
 | mistake | what happens | do |
 | --- | --- | --- |
 | no step lists `dataset` in `reads=` | the platform pins nothing. The steps resolve the version themselves, each at its own time | add `"dataset"` to the `reads=` of every step that reads it |
-| the setting that names the dataset is not called `dataset` | it is not pinned. Today only the setting `dataset` is | name it `dataset`. For a second dataset, resolve it in the first step that needs it, and pass `commit` on in the step's output; later steps call `ref.with_commit(commit)` |
+| the setting that names the dataset is not called `dataset` | the platform does not pin it. It pins only the setting named exactly `dataset`, and only when a step lists `dataset` in `reads=` | name it `dataset`. For a second dataset, resolve it in the first step that needs it, and pass `commit` on in the step's output; later steps call `ref.with_commit(commit)` |
 | a step picks a version itself: `latest`, `versions(...)[-1]`, a literal `@v3` in code | different steps can read different data. The run form's choice is ignored | read `cfg["dataset"]` |
 | the dataset is read with another client (a plain S3 or HTTP call) | the read is neither pinned nor recorded | use `materialize`, or `lock.record(...)` ([Data lock](data-lock.md)) |
 | `@latest` to compare two runs | each run pins a different commit | release a version and use `@v1` |
-| `lock.write()` is never called | the MLflow run has no record of the data | call it once in the training step |
+| the step logs to no MLflow run | nothing is recorded: the lock is written to a run when the run ends | log the step's work to an MLflow run ([MLflow](mlflow.md)) |
 | the step writes into the folder `materialize` returned | the write fails on HPC (Slurm), or is lost | copy the files, then change the copy |
 | the dataset has no files yet | `EmptyDataset` | push files and release a version ([Datasets](datasets.md)) |
 | the dataset is read from `context().dataset_ref` | it can be `None`: the platform does not fill it in every step | read `cfg["dataset"]` |

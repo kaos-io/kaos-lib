@@ -191,7 +191,7 @@ ENTRYPOINT ["python", "-m", "app.entry"]
 | writes | `/work/output/data-stats.json` |
 | datasets | `resolve` gives the commit the platform pinned. `materialize` gives the files of exactly that commit |
 | on the platform's machines | the step downloads the files into its own disk |
-| on HPC (Slurm) | not used: a step without `gpu=True` runs on the platform's machines |
+| on HPC (Slurm) | the run form can place it on an HPC class too. The code is the same, and the data is copied next to the job |
 
 `reads=["dataset"]` matters: the platform pins the dataset for a run only when a step lists `dataset` there.
 
@@ -293,7 +293,7 @@ ENTRYPOINT ["python", "-m", "app.entry"]
 | writes | the files `train.csv`, `val.csv` and `scaling.json` in your outputs repository, under `prepared/<experiment>/<run>/`. And `/work/output/prepared-data.json`: where they are, and which dataset commit they came from |
 | datasets | the dataset is read at the pinned commit. The result is not a dataset: it lives in the outputs repository and is tied to one run |
 | on the platform's machines | the same code |
-| on HPC (Slurm) | not used (no GPU) |
+| on HPC (Slurm) | the run form can place it on an HPC class too. The code is the same |
 
 `r.save(tmp)` is durable at once on the run's own branch. `r.finish(...)` makes it one commit in your outputs
 repository and returns the commit id. If the step is run again, it continues on the same branch ([Outputs](outputs.md)).
@@ -409,7 +409,7 @@ ENTRYPOINT ["python", "-m", "app.entry"]
 | writes | the new files in your outputs repository under `datasets/<experiment>/<run>/`, and `/work/output/dataset-draft.json` with their commit and the dataset commit they came from |
 | datasets | reads one pinned version. Creates none |
 | on the platform's machines | the same code |
-| on HPC (Slurm) | not used (no GPU) |
+| on HPC (Slurm) | the run form can place it on an HPC class too. The code is the same |
 
 When the run is done, a person with the rights downloads the folder and publishes it. `<commit>` and `<prefix>` are in
 `dataset-draft.json`:
@@ -456,7 +456,7 @@ from pathlib import Path
 import mlflow
 import torch
 import yaml
-from kaos_lib import checkpoint, datasets, lock, outputs, progress, runtime
+from kaos_lib import checkpoint, datasets, outputs, progress, runtime
 from kaos_lib.mlflow import mlflow as connect_mlflow
 
 
@@ -532,8 +532,6 @@ def main():
                 out_commit = r.finish({"dataset_ref": cfg["dataset"], "dataset_commit": commit,
                                        "mlflow_run_id": run.info.run_id})
 
-        lock.write()                                       # the dataset commit this run read, on the MLflow run
-
     write_output("training-result", {
         "model": {"repo": outputs.outputs_repo(ctx.outputs_repo), "commit": out_commit,
                   "path": outputs.run_prefix(cfg["experiment"]["name"], ctx.run_id, "models") + "model.pt"},
@@ -564,8 +562,8 @@ ENTRYPOINT ["python", "-m", "app.entry"]
 | | |
 | --- | --- |
 | reads | the run's dataset, `experiment` and `train` |
-| writes | to MLflow: parameters, `train_loss` per epoch, `val_mse`, the model file, and the dataset commit (`lock.write()`). To your outputs repository: `models/<experiment>/<run>/model.pt`. `/work/output/training-result.json`: where the model is, the dataset commit, the key metric and the MLflow run id |
-| datasets | one pinned commit, recorded on the MLflow run ([How steps use datasets](steps-and-datasets.md#what-is-recorded)) |
+| writes | to MLflow: parameters, `train_loss` per epoch, `val_mse` and the model file. The platform adds the dataset commit when the run ends. To your outputs repository: `models/<experiment>/<run>/model.pt`. `/work/output/training-result.json`: where the model is, the dataset commit, the key metric and the MLflow run id |
+| datasets | one pinned commit, recorded on the MLflow run when it ends, by the platform ([How steps use datasets](steps-and-datasets.md#what-is-recorded)) |
 | progress | `progress.report(epoch + 1, epochs, unit="epoch")` |
 | interruption | `checkpoint.save(state)` after each epoch, `checkpoint.load("state", default=...)` at the start, `exit_for_restart()` when the platform asks |
 
@@ -578,7 +576,7 @@ from kaos_lib import checkpoint
 YOLO("yolo11n.pt").train(data="data.yaml", project=str(checkpoint.dir()), name="run", exist_ok=True)
 ```
 
-With one of them, drop the `progress` and `checkpoint.save` lines of the loop above. Keep `mlflow()`, `lock.write()`,
+With one of them, drop the `progress` and `checkpoint.save` lines of the loop above. Keep `mlflow()`,
 and the outputs and `training-result` code. See [Progress](progress.md) and [Long runs](checkpoint.md).
 
 | | on the platform's machines | on HPC (Slurm) |
@@ -610,7 +608,7 @@ from pathlib import Path
 
 import torch
 import yaml
-from kaos_lib import datasets, lock, outputs, runtime
+from kaos_lib import datasets, outputs, runtime
 from kaos_lib.lakefs import LakeFS
 from kaos_lib.mlflow import mlflow as connect_mlflow
 
@@ -657,7 +655,6 @@ def main():
     client = connect_mlflow()
     client.log_metric(result["mlflow_run_id"], "eval_mse", mse)
     client.set_tag(result["mlflow_run_id"], "eval_verdict", verdict)
-    lock.write(result["mlflow_run_id"])
 
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "metrics.json").write_text(json.dumps({"mse": mse, "verdict": verdict, "rows": len(rows)}))
@@ -686,10 +683,10 @@ ENTRYPOINT ["python", "-m", "app.entry"]
 | | |
 | --- | --- |
 | reads | `--training-result` (where the model is and the commit it trained on), the model file, the run's dataset |
-| writes | `eval_mse` and the tag `eval_verdict` on the training run in MLflow, the dataset commit on that run (`lock.write(run_id)`), `metrics.json` in your outputs repository under `evaluation/<experiment>/<run>/`, and `/work/output/evaluation-result.json` |
+| writes | `eval_mse` and the tag `eval_verdict` on the training run in MLflow, `metrics.json` in your outputs repository under `evaluation/<experiment>/<run>/`, and `/work/output/evaluation-result.json` |
 | datasets | the same commit as training. The step checks it: `resolve` must give `training-result`'s `dataset_commit`, and with the platform's pin it always does |
 | on the platform's machines | the same code |
-| on HPC (Slurm) | not used (no GPU) |
+| on HPC (Slurm) | the run form can place it on an HPC class too. The code is the same |
 
 `download` reads one file at exactly the commit that `training-result` names, so the model cannot change under the
 step. The step ends with exit code `0` even when the verdict is `fail`: the verdict is a result, and the next step
@@ -777,7 +774,7 @@ ENTRYPOINT ["python", "-m", "app.entry"]
 | writes | `model-fp16.pt` in your outputs repository under `exports/<experiment>/<run>/`, and `/work/output/export-result.json` |
 | datasets | none. It does not read data, so it does not list `dataset` in `reads=` |
 | on the platform's machines | the same code |
-| on HPC (Slurm) | not used (no GPU). A transform that needs a GPU declares `gpu=True` and runs the same code |
+| on HPC (Slurm) | the same as above. A transform that needs a GPU declares `gpu=True` and runs the same code |
 
 A model that is big or needs scratch space asks for it with `disk="20Gi"` on the `step(...)` line.
 
@@ -868,7 +865,7 @@ ENTRYPOINT ["python", "-m", "app.entry"]
 | writes | a registered model version in MLflow, tagged with the dataset, its commit, the model's commit in your outputs repository and the evaluation result. `/work/output/registration-result.json` |
 | datasets | none read. The version carries the dataset commit as a tag, so the model always points back to its data |
 | on the platform's machines | the same code |
-| on HPC (Slurm) | not used (no GPU) |
+| on HPC (Slurm) | the run form can place it on an HPC class too. The code is the same |
 
 The step does not register a model that did not pass. It writes `{"registered": false, ...}` and ends with exit code `0`.
 `promote_to` sets an alias such as `champion` on the new version. Leave it empty to set none.
