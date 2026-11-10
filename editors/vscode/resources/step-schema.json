@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "1.2.0",
+  "ruleset_version": "1.3.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -415,7 +415,7 @@
       "id": "L-D08",
       "name": "NoCudaForGpuStep",
       "level": "warning",
-      "fix": "Use a CUDA-enabled base image, or depend on a library whose wheel bundles CUDA (for example torch), so the step can use its GPU. This check is a heuristic: it searches the image and the dependency files.",
+      "fix": "Use a CUDA-enabled base image, or depend on a library whose wheel bundles CUDA (for example torch), so the step can use its GPU; on a plain base image also set ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/nvidia/lib and ENV PATH=/usr/local/nvidia/bin:${PATH}. This check is a heuristic: it searches the image and the dependency files.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D08.html"
     },
     {

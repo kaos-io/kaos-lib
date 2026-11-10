@@ -15,7 +15,7 @@ from typing import Iterable, Optional
 
 from . import dockerfile as df
 from .constants import (BUILD_ARCH_DEFAULT, COMPOSE_STEP, CUDA_IMAGE_WORDS, CUDA_PACKAGE_PATTERN, DATA_FOLDER_NAMES,
-                        ENTRY_MODULE, KAOS_LIB_ARG, LARGE_COPY_BYTES, MAX_FILE_BYTES, MAX_STEP_BYTES, MAX_STEP_FILES)
+                        DRIVER_PATH, ENTRY_MODULE, KAOS_LIB_ARG, LARGE_COPY_BYTES, MAX_FILE_BYTES, MAX_STEP_BYTES, MAX_STEP_FILES)
 from .model import ERROR, INFO, WARNING, Span
 from .pipeline_reader import UNKNOWN
 from .project_reader import step_folder
@@ -287,9 +287,34 @@ def _dependency_text(ctx: LintContext, step: DockerStep) -> str:
     return " ".join(chunks).lower()
 
 
+def _sets_driver_path(step: DockerStep) -> bool:
+    """True when an ENV line puts the NVIDIA driver folder on LD_LIBRARY_PATH (the image finds the driver itself)."""
+    return any(i.keyword == "ENV" and "LD_LIBRARY_PATH" in i.args and DRIVER_PATH in i.args
+               for i in step.instructions)
+
+
 @rule("L-D08", "NoCudaForGpuStep", WARNING,
       "Use a CUDA-enabled base image, or depend on a library whose wheel bundles CUDA (for example torch), so "
-      "the step can use its GPU. This check is a heuristic: it searches the image and the dependency files.")
+      "the step can use its GPU; on a plain base image also set ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:"
+      "/usr/local/nvidia/lib and ENV PATH=/usr/local/nvidia/bin:${PATH}. This check is a heuristic: it searches "
+      "the image and the dependency files.")
+def no_cuda_for_gpu_step(ctx: LintContext) -> Iterable[Hit]:
+    """A gpu=True step whose image has no sign of CUDA support, or whose plain base never sets the driver path."""
+    for step in _targets(ctx):
+        if not step.gpu:
+            continue
+        images = " ".join(f.image for f in df.froms(step.instructions)).lower()
+        cuda_base = any(w in images for w in CUDA_IMAGE_WORDS)
+        if not (cuda_base or _CUDA_PACKAGES.search(_dependency_text(ctx, step))):
+            yield Hit(step.dockerfile, step.span(step.first_line),
+                      f"Step '{step.name}' asks for a GPU (gpu=True), but its image shows no CUDA support: the base "
+                      f"image is not a CUDA image and no GPU library (torch, tensorflow, jax ...) is installed.")
+        elif not cuda_base and not _sets_driver_path(step):
+            yield Hit(step.dockerfile, step.span(step.first_line),
+                      f"Step '{step.name}' asks for a GPU (gpu=True) on a plain base image that does not set the "
+                      f"NVIDIA driver path: without {DRIVER_PATH} on LD_LIBRARY_PATH the driver is not found "
+                      f"outside the platform's GPU machines and torch trains on the CPU. The platform adds the path "
+                      f"on its own GPU machines, so this warning is about running the image elsewhere.")
 def no_cuda_for_gpu_step(ctx: LintContext) -> Iterable[Hit]:
     """A gpu=True step whose image has no sign of CUDA support."""
     for step in _targets(ctx):

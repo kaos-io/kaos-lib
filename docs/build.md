@@ -56,7 +56,7 @@ Try the image the way the platform starts it: `docker run --rm <tag> --params "$
 | [L-D05 StepContract](lint/L-D05.md) | error, warning | no `app/entry.py` (error); no `python -m app.entry` entrypoint (warning) |
 | [L-D06 HugeLayers](lint/L-D06.md) | warning | `COPY . .`, baked-in data, `pip` without `--no-cache-dir`, `apt-get` without cleanup |
 | [L-D07 RootUser](lint/L-D07.md) | info | the image runs as root (the platform does not require otherwise today) |
-| [L-D08 NoCudaForGpuStep](lint/L-D08.md) | warning | a `gpu=True` step whose image shows no CUDA support |
+| [L-D08 NoCudaForGpuStep](lint/L-D08.md) | warning | a `gpu=True` step whose image shows no CUDA support, or whose plain base sets no NVIDIA driver path |
 
 Each finding has the Dockerfile line, a fix and a page. A step without a Dockerfile is not judged.
 
