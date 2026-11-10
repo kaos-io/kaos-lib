@@ -14,6 +14,10 @@ user-definable layouts.
   `KUBECORE_SLOT_GPUS` there too), and `CUDA_VISIBLE_DEVICES` reaches the step as a clean list without trailing blanks.
 
 ### Added
+- `kaos_lib.progress.report(done, total, unit)`: how far a step is, for the run page. One line in the step's log
+  (`KAOS_PROGRESS {...}`), at most every 10 seconds, plus MLflow tags `kaos.progress.*` when the step has an active run.
+  Never fails the step. Ultralytics, PyTorch Lightning and Hugging Face Trainer report by themselves in a pipeline run,
+  with or without a checkpoint folder. `KAOS_PROGRESS=0` turns it off. See docs/progress.md.
 - Lint rule set `1.3.0`: L-D08 `NoCudaForGpuStep` also warns when a `gpu=True` step's Dockerfile starts from a plain (non-CUDA) base and
   sets no `ENV LD_LIBRARY_PATH` with `/usr/local/nvidia`. Still a warning. The platform adds the driver path on its own GPU
   machines (and fails a GPU step whose driver cannot be reached in its first second), so the warning is about other
