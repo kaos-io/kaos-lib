@@ -77,9 +77,15 @@ it was judged on.
 
 ## In your editor
 
-The VS Code extension in `editors/vscode` of the kaos-lib repository shows the findings in the file as you save,
-suggests `step()` arguments and values from `kaosctl lint --schema`, and draws the step graph from
-`kaosctl lint --graph`. See its README.
+The KAOS extension for VS Code shows the findings in the file as you type, suggests `step()` arguments and values,
+and draws the step graph. Install the one published with your kaos-lib:
+
+```bash
+kaosctl vscode install
+```
+
+It has the same version as your `kaosctl`; after `kaosctl upgrade` it offers to update itself. Its README
+(`editors/vscode` of the kaos-lib repository) has the details.
 
 ## The report
 

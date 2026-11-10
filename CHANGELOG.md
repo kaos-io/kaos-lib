@@ -17,6 +17,12 @@ user-definable layouts.
   `KUBECORE_SLOT_GPUS` there too), and `CUDA_VISIBLE_DEVICES` reaches the step as a clean list without trailing blanks.
 
 ### Added
+- `kaosctl vscode install`: install or update the KAOS extension for VS Code. Every release now publishes the extension
+  built from the same commit, at the same version (`0.4.0rc7` comes with extension `0.4.0-rc.7`); the command downloads
+  the one of your kaos-lib, checks its SHA-256 and installs it into `code`, `cursor`, `codium` or `code-insiders`
+  (`--editor`, `--download DIR`, `--dry-run`). The extension compares itself with the `kaosctl` it runs and offers
+  **Update** when they differ (also **KAOS: Check for an extension update**). `kaosctl upgrade` reminds you. It is no
+  longer a file handed over by hand.
 - In a pipeline step the data lock is written to the MLflow run by itself when the run ends (tags `kaos_lib.data.*` and
   `data.lock.json`): the step no longer calls `lock.write()`. A failed run gets it too; a tracking problem is logged and
   never fails the step. Calling `lock.write()` yourself still works and writes nothing twice.

@@ -93,14 +93,40 @@ def public_release(channel: str) -> Optional[dict]:
     """The channel's newest release.json from the public bucket, or None (offline, not published yet)."""
     if channel not in PREFIX:
         return None
+    return _public_json(f"{PREFIX[channel]}/release.json")
+
+
+def _public_json(name: str) -> Optional[dict]:
+    """One JSON object of the public release bucket, or None (offline, not there, not an object)."""
     base = os.environ.get("KAOS_LIB_RELEASES_BASE") or RELEASES_BASE
     try:
-        resp = requests.get(f"{base.rstrip('/')}/{PREFIX[channel]}/release.json", timeout=TIMEOUT,
-                            headers={"Cache-Control": "no-cache"})
+        resp = requests.get(f"{base.rstrip('/')}/{name}", timeout=TIMEOUT, headers={"Cache-Control": "no-cache"})
         body = resp.json() if resp.status_code == 200 else None
     except (requests.RequestException, ValueError):
         return None
     return body if isinstance(body, dict) else None
+
+
+VSCODE_EXTENSION = "kaos-pipeline"
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def public_vscode(version: str) -> Optional[dict]:
+    """The VS Code extension published with this kaos-lib release (``<rc|stable>/<tag>/vscode.json``:
+    ``{name, version, url, sha256, ...}``), or None: not a release (a local or commit install), offline, a release
+    from before the extension was published, or a record that does not name an https file with a SHA-256."""
+    tag = tag_of(version)
+    if tag is None:
+        return None
+    record = _public_json(f"{PREFIX[channel_of_version(version)]}/{tag}/vscode.json")
+    if not record:
+        return None
+    url, sha = record.get("url"), record.get("sha256")
+    trusted = ("https://", os.environ.get("KAOS_LIB_RELEASES_BASE") or "https://")   # the override also serves the file
+    if (record.get("name") != VSCODE_EXTENSION or not isinstance(url, str) or not url.startswith(trusted)
+            or not isinstance(sha, str) or not _SHA256.match(sha) or not isinstance(record.get("version"), str)):
+        return None
+    return record
 
 
 def recommended(support_value) -> Optional[str]:

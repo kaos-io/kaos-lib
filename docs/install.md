@@ -42,6 +42,7 @@ Python 3.9 or newer. Dependencies: `requests`, `PyYAML`, `packaging`.
 ```bash
 kaosctl --version     # the version, its channel, and what your platform recommends
 kaosctl upgrade       # install the platform's recommendation (--dry-run to see it first)
+kaosctl vscode install   # optional: the KAOS extension for VS Code, the version of this kaos-lib
 ```
 
 Import it as `kaos_lib`. The command is `kaosctl`; `kaos-cli` still works for one release and prints a notice.
