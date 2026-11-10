@@ -31,8 +31,8 @@ Needs the `mlflow` extra: `pip install "kaos-lib[mlflow]==<version>"` ([Install]
 
 | tag | written by | holds |
 | --- | --- | --- |
-| `kaos_lib.data.<repo>.commit` | `lock.write()` ([Data lock](data-lock.md)) | the commit(s) of dataset `<repo>` the run read, comma-separated |
-| `kaos_lib.data.<repo>.owner` | `lock.write()` | the owning project, for a [shared dataset](shared-datasets.md) |
+| `kaos_lib.data.<repo>.commit` | kaos-lib when the run ends in a pipeline step, or `lock.write()` ([Data lock](data-lock.md)) | the commit(s) of dataset `<repo>` the run read, comma-separated |
+| `kaos_lib.data.<repo>.owner` | the same | the owning project, for a [shared dataset](shared-datasets.md) |
 | `kaos_lib.support` | importing `kaos_lib` in a step whose `$KAOS_LIB_SUPPORT` is set | the [support verdict](support-window.md): `current`, `behind`, `deprecated` or `unsupported` |
 
 The run also gets the artifact `data.lock.json`. Filter on the tags in the MLflow UI to find every run that read a
