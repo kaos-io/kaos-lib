@@ -39,7 +39,7 @@ validation. In Python the same messages are the text of `kaos_lib.errors.KaosLib
 | `outputs-<app> does not exist: the platform creates it for each ML app.` | The app name is wrong, or the app is not an ML app. | Use the app's name (`$CHECKPOINT_BUCKET` in a step). |
 | `invalid app name 'X': use lowercase letters, digits and '-'.` | The name has other characters. | Fix the name. |
 | `no MLflow run to write the data lock to: pass run_id=, start a run, or set $MLFLOW_RUN_ID.` | `lock.write()` with no run. | Call it inside `mlflow.start_run()`, or pass `run_id`. |
-| `MLflow run <id> has no data.lock.json: the run did not record its data reads…` | `kaosctl run --lock` on a run that never wrote a lock. | Call `lock.write()` at the end of the original step. |
+| `MLflow run <id> has no data.lock.json: the run did not record its data reads…` | `kaosctl run --lock` on a run that never wrote a lock. | The original run was not made in a pipeline step (there kaos-lib writes the lock when the run ends) or it read no dataset through kaos-lib. Call `lock.write()` in the original code. |
 
 ## Versions
 

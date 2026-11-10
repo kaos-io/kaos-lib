@@ -317,6 +317,52 @@ def _resume_params(existing: Dict[str, str], params) -> list:
     return kept
 
 
+# ------------------------------------------------------------------------------------------------ data lock on the run
+
+_lock_written: Dict[str, int] = {}              # MLflow run id -> how many reads its lock held when last written
+
+
+def write_data_lock(run_id: Optional[str]) -> bool:
+    """Put the step's data lock on the MLflow run ``run_id`` (tags and ``data.lock.json``), once per change.
+
+    What the step read is the platform's to record, not the step's: a model must always say which data it was
+    trained on. Returns whether something was written. Never raises: a tracking problem must not fail a step that
+    is ending.
+    """
+    try:
+        from . import lock
+        reads = len(lock.current().reads)
+        if not run_id or not reads or _lock_written.get(run_id) == reads:
+            return False
+        lock.current().write(run_id)
+        _lock_written[run_id] = reads
+        return True
+    except Exception as exc:
+        print("kaos-lib: the data lock was not written to MLflow run %s: %s" % (run_id, exc), file=sys.stderr,
+              flush=True)
+        return False
+
+
+def _patch_mlflow_fluent(module) -> None:
+    """Write the data lock when a run ends (``mlflow.end_run()``, leaving ``with mlflow.start_run()``, and the
+    frameworks' own MLflow integrations all end a run through this function)."""
+    original = module.end_run
+
+    @functools.wraps(original)
+    def end_run(*args, **kwargs):
+        try:
+            active = module.active_run()
+            write_data_lock(active.info.run_id if active is not None else None)
+        except Exception as exc:                # the run must end whatever happens here
+            _warn("MLflow (data lock)", exc)
+        return original(*args, **kwargs)
+
+    module.end_run = end_run
+    top = sys.modules.get("mlflow")              # `import mlflow` may already have bound the original name
+    if top is not None and getattr(top, "end_run", None) is original:
+        top.end_run = end_run
+
+
 # ------------------------------------------------------------------------------------------------ import hook
 
 WATCHED: Dict[str, Callable] = {
@@ -325,6 +371,7 @@ WATCHED: Dict[str, Callable] = {
     "lightning.pytorch.trainer.trainer": _patch_lightning,
     "transformers.trainer": _patch_transformers,
     "mlflow.tracking.client": _patch_mlflow_client,
+    "mlflow.tracking.fluent": _patch_mlflow_fluent,
 }
 
 
