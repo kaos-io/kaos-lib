@@ -20,6 +20,9 @@ version you have installed (`kaosctl --version`).
 | install it | [Install](install.md) |
 | make a dataset and use it in a pipeline | [Quickstart](quickstart.md) |
 | understand datasets, versions and layouts | [Datasets](datasets.md) |
+| write a pipeline step, and know what the platform gives it | [How a step works](steps.md) |
+| copy a complete step: data check, training, evaluation, export, registration | [Step examples](step-examples.md) |
+| know which data every step of a run reads | [How steps use datasets](steps-and-datasets.md) |
 | keep a long run alive through interruptions | [Long runs: checkpoints](checkpoint.md) |
 | fix an error message | [Troubleshooting](troubleshooting.md) |
 | look up a command or a function | [CLI](generated/cli.md), [Python API](api.md) |

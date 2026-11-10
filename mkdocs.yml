@@ -89,6 +89,10 @@ nav:
   - Home: index.md
   - Install: install.md
   - Quickstart: quickstart.md
+  - Steps:
+      - How a step works: steps.md
+      - Step examples: step-examples.md
+      - How steps use datasets: steps-and-datasets.md
   - Guides:
       - Datasets: datasets.md
       - Outputs: outputs.md
