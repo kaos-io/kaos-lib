@@ -12,7 +12,7 @@ Helps you write and check the `pipeline.py` of a KAOS ML pipeline:
 
 The extension reads your files; it never runs your pipeline or your step code.
 
-## Install (from a file)
+## Install
 
 1. Install `kaosctl` (it comes with the `kaos-lib` package). See the kaos-lib installation page for the index and the
    version to use, then check that this works in a terminal:
@@ -21,18 +21,33 @@ The extension reads your files; it never runs your pipeline or your step code.
    kaosctl lint --schema | head -3
    ```
 
-   If it prints JSON, you are set. If it says the option is unknown, update kaos-lib.
-2. Get the file `kaos-pipeline.vsix` from your platform team.
-3. In VS Code: open the Extensions view, choose the `...` menu at the top, then **Install from VSIX...**, and pick the
-   file. Or from a terminal:
+   If it prints JSON, you are set. If it says the option is unknown, update kaos-lib (`kaosctl upgrade`).
+2. Install the extension that was published with your kaos-lib:
 
    ```bash
-   code --install-extension kaos-pipeline.vsix
+   kaosctl vscode install
    ```
 
+   It downloads the extension of the same version as your `kaosctl`, checks the file, and installs it into the first
+   of `code`, `cursor`, `codium`, `code-insiders` it finds. Use `--editor <command or path>` to pick one, and
+   `--dry-run` to see what it would do. If it says the editor's command was not found, run
+   **Shell Command: Install 'code' command in PATH** from the VS Code Command Palette first.
+
+   To install by hand instead: `kaosctl vscode install --download .` saves the checked `.vsix` file; then in VS Code
+   open the Extensions view, choose the `...` menu, **Install from VSIX...**, and pick the file.
+3. Reload the window (Command Palette: **Developer: Reload Window**).
 4. Open your app folder. The extension turns on by itself when the folder has `.kaos/compat.yaml`,
    `.kubecore/dataset-config.yaml`, or a `pipeline.py` that imports `kubecore.authoring`. In any other folder it
    does nothing.
+
+## Update
+
+The extension and `kaosctl` are released together and carry the same version. After you update kaos-lib
+(`kaosctl upgrade`), the extension notices on the next start that it no longer matches and offers **Update**: it
+installs the matching version and asks you to reload the window. **Not now** stops the question for that version.
+
+You can also ask at any time with **KAOS: Check for an extension update**, or run `kaosctl vscode install` again.
+An editor never updates an extension installed from a file by itself, so one of these is how you get a new one.
 
 ## Use it
 
@@ -74,6 +89,8 @@ the folder asks for and waits for your confirmation. Sign-in needs a folder you 
 | Suggestions look out of date | The extension uses the suggestions of the installed `kaosctl`, or a built-in copy if it cannot run it. Update kaos-lib, then run **KAOS: Reload step suggestions**. The **KAOS** output panel says which copy is in use. |
 | No suggestions at all | Suggestions appear only inside a `step(` call in a file named `pipeline.py`. Open the **KAOS** output panel and check that the folder was recognised. |
 | Nothing happens in my folder | The folder is not recognised as a KAOS pipeline folder (see Install, step 4). |
+| "no VS Code extension is published for kaos-lib ..." | Your kaos-lib is not a published release, or is older than the first published extension. Run `kaosctl upgrade`, then `kaosctl vscode install`. |
+| The update is offered again after "Not now" | It is asked once per new version. A newer kaos-lib brings a newer extension. |
 | "check did not run" in the status bar | Hover it for the reason; the **KAOS** output panel has the details. |
 | Findings do not change when you edit another file | Only `pipeline.py` is checked as you type; other files are read as saved. Save them. |
 | Sign-in does not open a browser | Run `kaosctl login` in a terminal in your app folder and read its message. |

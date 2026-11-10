@@ -23,12 +23,13 @@ import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 import types
 from typing import Optional
 
 import requests
 
-from . import __version__, channel, credentials, datasets, layouts, peers, support
+from . import __version__, channel, credentials, datasets, editor, layouts, peers, support
 from .lint import cli as lint_cli
 from .studio import cli as studio_cli
 from .config import resolve_endpoint
@@ -315,6 +316,7 @@ def cmd_upgrade(args) -> int:
     if code:
         raise KaosLibError(f"pip install failed (exit {code}); kaos-lib {__version__} is unchanged")
     print("Next: kaosctl --version")
+    print("If you use the KAOS extension for VS Code, update it too: kaosctl vscode install")
     return 0
 
 
@@ -444,6 +446,37 @@ def cmd_layout_publish(args) -> int:
     return 0
 
 
+def cmd_vscode_install(args) -> int:
+    """Install the VS Code extension that was published with this kaos-lib release (same version, same commit)."""
+    record = channel.public_vscode(__version__)
+    if not record:
+        print(f"ERROR: no VS Code extension is published for kaos-lib {__version__}. It is published with every "
+              "release from the public channels; a local or commit install has none. Run `kaosctl upgrade`, then "
+              "this command again.", file=sys.stderr)
+        return EXIT_USER_ERROR
+    if args.download:
+        print(editor.download(record, pathlib.Path(args.download)))
+        return 0
+    program = editor.find_editor(args.editor)
+    if not program:
+        wanted = args.editor or " / ".join(editor.EDITORS)
+        print(f"ERROR: the editor's command ({wanted}) was not found. In VS Code run `Shell Command: Install 'code' "
+              "command in PATH` from the Command Palette, or pass --editor <command or path>.", file=sys.stderr)
+        return EXIT_USER_ERROR
+    if args.dry_run:
+        print(f"would download {record['url']}")
+        print(f"would run: {program} --install-extension {record['name']}-{record['version']}.vsix --force")
+        return 0
+    with tempfile.TemporaryDirectory(prefix="kaos-vscode-") as tmp:
+        path = editor.download(record, pathlib.Path(tmp))
+        code = subprocess.call([program, "--install-extension", str(path), "--force"])
+    if code:
+        raise KaosLibError(f"{program} --install-extension failed (exit {code}); the extension is unchanged")
+    print(f"Installed the KAOS extension {record['version']}. Reload the editor window to use it "
+          "(Command Palette: Developer: Reload Window).")
+    return 0
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="kaosctl", description="KAOS platform tools: datasets and run outputs.")
@@ -460,6 +493,14 @@ def build_parser() -> argparse.ArgumentParser:
     add(sub, "login", cmd_login, "sign in through the browser")
     add(sub, "upgrade", cmd_upgrade, "install the kaos-lib the targeted platform recommends").add_argument(
         "--dry-run", action="store_true", help="print the pip command instead of running it")
+    vs = sub.add_parser("vscode", help="the KAOS extension for VS Code")
+    vsub = vs.add_subparsers(dest="vscode_command", required=True)
+    sp = add(vsub, "install", cmd_vscode_install, "install or update the extension published with this kaos-lib",
+             url=False)
+    sp.add_argument("--editor", metavar="COMMAND", help="the editor's command or its path (default: the first of "
+                    + ", ".join(editor.EDITORS) + " on PATH)")
+    sp.add_argument("--download", metavar="DIR", help="only download and check the .vsix into DIR and print its path")
+    sp.add_argument("--dry-run", action="store_true", help="print what would be downloaded and run")
     ds = sub.add_parser("dataset", help="create, version, push and pull datasets")
     dsub = ds.add_subparsers(dest="dataset_command", required=True)
     layout_help = "a layout name (kaosctl layout list) or a path to a layout.yaml or its folder"

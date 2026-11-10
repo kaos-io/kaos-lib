@@ -13,10 +13,14 @@ import { quickFixesFor } from "./quickfix";
 import { Report, parseGraph, parseReport } from "./report";
 import { LOGIN_ARGS, SCHEMA_ARGS, checkArgs, explainFailure, graphArgs, producedReport, run } from "./runner";
 import { Schema, SchemaChoice, chooseSchema, completionsFor, hoverFor } from "./schema";
+import { VERSION_ARGS, downloadArgs, downloadedFile, updateNeeded } from "./update";
 
 const DIAGNOSTIC_SOURCE = "KAOS";
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 const ACCEPTED_ISSUERS_KEY = "kaos.acceptedIssuers";
+const SKIPPED_UPDATE_KEY = "kaos.skippedUpdate";
+const VERSION_TIMEOUT_MS = 30_000;
+const DOWNLOAD_TIMEOUT_MS = 120_000;
 const BUNDLED_SCHEMA = path.join("resources", "step-schema.json");
 const PIPELINE_SELECTOR: vscode.DocumentSelector = { language: "python", pattern: "**/pipeline.py" };
 
@@ -282,6 +286,51 @@ function showAccount(): void {
   void vscode.window.showInformationMessage(describeSession(facts, Date.now()));
 }
 
+// ------------------------------------------------------------------------------------------ update
+
+// Offer the extension that was published with the installed kaosctl when this one is another version. The file is
+// downloaded and checked by kaosctl before anything is asked, so the offer is only made when it can be kept.
+// `asked`: the user ran the command, so every outcome is shown; on start-up only an available update is.
+async function offerUpdate(state: State, folder: vscode.WorkspaceFolder, asked: boolean): Promise<void> {
+  const kaosctl = settings(folder).kaosctl;
+  const mine = String(state.context.extension.packageJSON.version);
+  const v = await run(kaosctl, VERSION_ARGS, folder.uri.fsPath, VERSION_TIMEOUT_MS);
+  if (v.code !== 0) {
+    if (asked) { void vscode.window.showErrorMessage(`KAOS: ${explainFailure(v)}`); }
+    return;
+  }
+  const need = updateNeeded(mine, v.stdout);
+  if (!need) {
+    if (asked) { void vscode.window.showInformationMessage(`KAOS extension ${mine}: nothing newer is published for your kaosctl.`); }
+    return;
+  }
+  if (!asked && state.context.globalState.get<string>(SKIPPED_UPDATE_KEY) === need.wanted) { return; }
+  const dir = path.join(state.context.globalStorageUri.fsPath, "updates");
+  const d = await run(kaosctl, downloadArgs(dir), folder.uri.fsPath, DOWNLOAD_TIMEOUT_MS);
+  const file = d.code === 0 ? downloadedFile(d.stdout) : undefined;
+  if (!file) {
+    const why = d.code === 0 ? "kaosctl printed no file" : explainFailure(d);
+    state.output.appendLine(`No extension update for kaosctl ${need.kaosLib}: ${why}`);
+    if (asked) { void vscode.window.showWarningMessage(`KAOS: no extension update for kaosctl ${need.kaosLib}: ${why}`); }
+    return;
+  }
+  const choice = await vscode.window.showInformationMessage(
+    `KAOS extension ${need.wanted} matches your kaosctl ${need.kaosLib}; this one is ${mine}.`, "Update", "Not now");
+  if (choice !== "Update") {
+    if (choice === "Not now") { await state.context.globalState.update(SKIPPED_UPDATE_KEY, need.wanted); }
+    return;
+  }
+  try {
+    await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(file));
+  } catch (err) {
+    void vscode.window.showErrorMessage(`KAOS: the update could not be installed: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  state.output.appendLine(`Installed the extension ${need.wanted} from ${file}.`);
+  const reload = await vscode.window.showInformationMessage(`KAOS extension ${need.wanted} is installed. Reload the window to use it.`, "Reload window");
+  if (reload === "Reload window") { await vscode.commands.executeCommand("workbench.action.reloadWindow"); }
+}
+
 // ------------------------------------------------------------------------------------------ activation
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -325,9 +374,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("kaos.showStepGraph", () => showGraph(state)),
     vscode.commands.registerCommand("kaos.signIn", () => signIn(state)),
     vscode.commands.registerCommand("kaos.showAccount", showAccount),
+    vscode.commands.registerCommand("kaos.updateExtension", () => offerUpdate(state, folderFor(state) ?? first, true)),
     vscode.commands.registerCommand("kaos.reloadSchema", async () => { await loadSchema(state, first); void vscode.window.showInformationMessage(`KAOS step suggestions: ${state.schema?.source} schema.`); }),
   );
   void checkFolder(state, first, false);
+  void offerUpdate(state, first, false);
 }
 
 export function deactivate(): void { /* disposables are released through context.subscriptions */ }

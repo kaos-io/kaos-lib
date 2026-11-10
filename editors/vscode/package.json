@@ -52,6 +52,11 @@
         "category": "KAOS"
       },
       {
+        "command": "kaos.updateExtension",
+        "title": "Check for an extension update",
+        "category": "KAOS"
+      },
+      {
         "command": "kaos.reloadSchema",
         "title": "Reload step suggestions",
         "category": "KAOS"
@@ -73,6 +78,10 @@
         },
         {
           "command": "kaos.showAccount",
+          "when": "kaos.active"
+        },
+        {
+          "command": "kaos.updateExtension",
           "when": "kaos.active"
         },
         {
