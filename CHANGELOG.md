@@ -14,6 +14,10 @@ user-definable layouts.
   `KUBECORE_SLOT_GPUS` there too), and `CUDA_VISIBLE_DEVICES` reaches the step as a clean list without trailing blanks.
 
 ### Added
+- Lint rule set `1.3.0`: L-D08 `NoCudaForGpuStep` also warns when a `gpu=True` step's Dockerfile starts from a plain (non-CUDA) base and
+  sets no `ENV LD_LIBRARY_PATH` with `/usr/local/nvidia`. Still a warning. The platform adds the driver path on its own GPU
+  machines (and fails a GPU step whose driver cannot be reached in its first second), so the warning is about other
+  environments.
 - `kaosctl lint --stdin-path pipeline.py` reads the pipeline text from standard input (an editor's unsaved buffer) and the rest
   from disk; it works with `--graph` too. Static as before. The VS Code extension (0.1.1) uses it to check as you type, and
   prints the skipped rules once instead of on every check (they are in the status bar tooltip).

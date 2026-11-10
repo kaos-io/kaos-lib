@@ -13,6 +13,10 @@ PIPE = 'from kubecore.authoring import pipeline, step\n\nwith pipeline("p") as p
 ENTRY = "app/entry.py"
 GOOD = ('FROM python:3.11-slim\nWORKDIR /app\nARG KAOS_LIB_PACKAGE="kaos-lib==0.4.0"\n'
         'RUN pip install --no-cache-dir "${KAOS_LIB_PACKAGE}"\nCOPY app/ ./app/\nENTRYPOINT ["python", "-m", "app.entry"]\n')
+DRIVER_ENV = "ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/nvidia/lib\nENV PATH=/usr/local/nvidia/bin:${PATH}\n"
+GOOD_GPU = GOOD.replace("WORKDIR /app\n", "WORKDIR /app\n" + DRIVER_ENV).replace(
+    "kaos-lib==0.4.0\"\n", "kaos-lib==0.4.0\"\nRUN pip install --no-cache-dir torch\n")
+GPU_NO_PATH = GOOD.replace("kaos-lib==0.4.0\"\n", "kaos-lib==0.4.0\"\nRUN pip install --no-cache-dir torch\n")
 USES_LIB = "from kaos_lib import datasets\n"
 
 
@@ -34,8 +38,7 @@ CASES = {
     "L-D05": (repo(entry=False), repo(), 1, "no steps/work/app/entry.py", "error"),
     "L-D06": (repo(GOOD.replace("--no-cache-dir ", "")), repo(), 4, "--no-cache-dir", "warning"),
     "L-D07": (repo(), repo(GOOD.replace("ENTRYPOINT", "USER app\nENTRYPOINT")), 1, "runs as root", "info"),
-    "L-D08": (repo(code="x = 1\n", gpu=True), repo(code="x = 1\n", gpu=True, dockerfile=GOOD.replace(
-        "kaos-lib==0.4.0\"\n", "kaos-lib==0.4.0\"\nRUN pip install --no-cache-dir torch\n")), 1, "no CUDA", "warning"),
+    "L-D08": (repo(code="x = 1\n", gpu=True), repo(code="x = 1\n", gpu=True, dockerfile=GOOD_GPU), 1, "no CUDA", "warning"),
 }
 
 
@@ -108,6 +111,31 @@ def test_should_warn_about_apt_without_cleanup_and_stay_silent_with_it(tmp_path)
 def test_should_accept_a_cuda_base_image_for_a_gpu_step(tmp_path):
     cuda = GOOD.replace("python:3.11-slim", "nvidia/cuda:12.2.0-runtime-ubuntu22.04")
     assert not findings(tmp_path, repo(cuda, code="x = 1\n", gpu=True), "L-D08")
+
+
+def test_should_warn_when_a_gpu_step_on_a_plain_base_does_not_set_the_driver_path(tmp_path):
+    hit = findings(tmp_path, repo(GPU_NO_PATH, code="x = 1\n", gpu=True), "L-D08")
+    assert len(hit) == 1 and hit[0].level == "warning" and hit[0].file == "steps/work/Dockerfile"
+    assert "does not set the NVIDIA driver path" in hit[0].message
+    assert "platform adds the path on its own GPU machines" in hit[0].message
+
+
+def test_should_accept_the_driver_path_on_a_plain_base(tmp_path):
+    assert not findings(tmp_path, repo(GOOD_GPU, code="x = 1\n", gpu=True), "L-D08")
+
+
+def test_should_not_ask_a_cuda_base_for_the_driver_path(tmp_path):
+    cuda = GPU_NO_PATH.replace("python:3.11-slim", "nvidia/cuda:12.2.0-runtime-ubuntu22.04")
+    assert not findings(tmp_path, repo(cuda, code="x = 1\n", gpu=True), "L-D08")
+
+
+def test_should_not_judge_the_driver_path_of_a_cpu_step(tmp_path):
+    assert not findings(tmp_path, repo(GPU_NO_PATH, code="x = 1\n", gpu=False), "L-D08")
+
+
+def test_should_say_only_the_missing_cuda_when_both_would_apply(tmp_path):
+    hit = findings(tmp_path, repo(GOOD, code="x = 1\n", gpu=True), "L-D08")
+    assert len(hit) == 1 and "no CUDA support" in hit[0].message
 
 
 # --- the parser the rules stand on ------------------------------------------------------------------------------
