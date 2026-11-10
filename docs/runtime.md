@@ -41,5 +41,9 @@ if slot and slot.shared and slot.mem_gib:
     ...   # keep in-memory caches well under slot.mem_gib
 ```
 
-`usable_cpus()` is the slot's cores, else the CPUs this process may run on, else the machine's. Outside a shared
-node `slot` is None.
+`usable_cpus()` is the slot's cores, else the CPUs this process may run on, else the machine's.
+
+A GPU step that runs alone on its node also gets `slot.gpus` (the GPU count of its class, from `KUBECORE_SLOT_GPUS`),
+with `slot.shared` false and `cpus` and `mem_gib` None, so `context().slot.gpus` works the same alone and shared.
+`CUDA_VISIBLE_DEVICES` (and `NVIDIA_VISIBLE_DEVICES`) reach the step as a clean comma list, for example `0,1,2,3`, with
+no blanks around it. A CPU-only step on a node of its own has no slot: `slot` is None.
