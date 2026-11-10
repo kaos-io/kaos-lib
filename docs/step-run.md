@@ -21,8 +21,9 @@ Done: data-summary exited 0. Next: kaosctl step run <the step that needs data-su
 
 * **The command.** `python -m app.entry --params <params> --<name> <json> ...`, started in the step's folder.
 * **The parameters.** `--params` receives the *content* of the composed `params.yaml`: your `config/` tree with its defaults
-  and the overrides you give. It is composed here by the same composer the platform uses (in the environment of
-  `compose-and-validate`); `--set key=value` adds an override as on the submit form, and `--params-file FILE` uses a
+  and the overrides you give. It is composed here by the same composer the platform uses: the platform's pipeline engine, fetched
+  as for [`kaosctl render`](render.md) (pass `--context` or `--engine-wheel`), or, in an app that still has its own
+  `kubecore/` folder, that copy in the environment of `compose-and-validate`; `--set key=value` adds an override as on the submit form, and `--params-file FILE` uses a
   params file you already have.
 * **The inputs.** A step receives one `--<name> <json>` for each output of the steps it `needs=`. Here the value comes from
   `--input name=<json>` or `--input name=@file.json`, else from the last local run of the step that produces it, else `{}`

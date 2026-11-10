@@ -14,6 +14,11 @@ user-definable layouts.
   `KUBECORE_SLOT_GPUS` there too), and `CUDA_VISIBLE_DEVICES` reaches the step as a clean list without trailing blanks.
 
 ### Added
+- `kaosctl render`: render `pipeline.py` on your machine with the platform's pipeline engine, the release the platform
+  pinned for your app (`--context`, `--engine-wheel 'URL#sha256=...'` or `$KAOS_ENGINE_WHEEL`). The wheel is checked by its
+  SHA-256 and installed into `.kaos/engine/.venv` inside the repository; the engine runs isolated from the app's folders.
+  `kaosctl step run` composes the parameters with the same engine in an app that has no `kubecore/` folder (PRD
+  novelcore/kaos#1461 D-79). See docs/render.md.
 - `kaos_lib.progress.report(done, total, unit)`: how far a step is, for the run page. One line in the step's log
   (`KAOS_PROGRESS {...}`), at most every 10 seconds, plus MLflow tags `kaos.progress.*` when the step has an active run.
   Never fails the step. Ultralytics, PyTorch Lightning and Hugging Face Trainer report by themselves in a pipeline run,

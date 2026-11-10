@@ -15,7 +15,7 @@ import sys
 from typing import Optional
 
 from ..errors import KaosLibError
-from . import envallow, pyenv, proc, sample, steps
+from . import envallow, pipeline_engine, pyenv, proc, sample, steps
 from .constants import (COMPOSE_STEP, LOCAL_DIR, LOCAL_RUN_ID, OUTPUT_PRINT_CHARS, VENV_DIR)
 from .dev import setup_step
 
@@ -44,14 +44,22 @@ def ensure_environment(step: steps.StepInfo, args) -> pathlib.Path:
 
 
 def compose_params(root: pathlib.Path, args, local: pathlib.Path) -> str:
-    """The composed params.yaml text: `--params-file`, or `python -m kubecore.compose` in compose-and-validate's environment."""
+    """The composed params.yaml text: `--params-file`, else the platform's pipeline engine (an app without its own
+    `kubecore/`), else `python -m kubecore.compose` in compose-and-validate's environment."""
     if args.params_file:
         try:
             return pathlib.Path(args.params_file).read_text(encoding="utf-8")
         except OSError as exc:
             raise KaosLibError(f"cannot read --params-file {args.params_file}: {exc.strerror or exc}") from None
     if not (root / "kubecore" / "compose.py").is_file():
-        raise KaosLibError("this repository has no kubecore/compose.py to compose the parameters: pass --params-file.")
+        # The app holds no copy of the engine: compose with the platform's release, as its CI does.
+        try:
+            pin = pipeline_engine.resolve_pin(getattr(args, "engine_wheel", None), args.context)
+        except KaosLibError as exc:
+            raise KaosLibError(f"{exc} Or pass --params-file with a params.yaml you already have.") from None
+        py = pipeline_engine.ensure(root, pin, pyenv.find_uv())
+        profile = pipeline_engine.profile_of(root, getattr(args, "profile", None))
+        return pipeline_engine.compose(root, py, profile, list(args.override), local / "params.yaml")
     compose = steps.find(root, COMPOSE_STEP)
     py = ensure_environment(compose, args)
     out = local / "params.yaml"
