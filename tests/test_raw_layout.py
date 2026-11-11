@@ -1,4 +1,6 @@
 """raw layout: any repository, whole tree or a prefix; label-driven layout choice; empty datasets."""
+import json
+
 import pytest
 
 from conftest import write_dataset
@@ -63,8 +65,8 @@ def test_raw_uses_staged_dir_whole_and_prefix(repo, fake, client, tmp_path, monk
     staged = tmp_path / "lustre" / fake.head("my-repo")
     (staged / "sub").mkdir(parents=True)
     (staged / "sub" / "b.txt").write_text("B")
-    (staged / ".kaos-ready").write_text("")
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    (staged / ".kaos-ready").write_text(json.dumps({"repo": "my-repo", "commit": staged.name, "full": True}))
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
     assert datasets.materialize(repo, client=client) == staged
     assert datasets.materialize(repo, client=client, prefix="sub") == staged / "sub/"
     assert gets(fake) == []                                               # nothing downloaded

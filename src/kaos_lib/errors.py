@@ -49,5 +49,9 @@ class UnsupportedVersion(KaosLibError):
     """This kaos-lib is past its support deadline (``kaos_lib.support``): steps stop, writes are refused."""
 
 
+class StepError(KaosLibError):
+    """A pipeline step cannot start, read an input, or hand its result on (``kaos_lib.step``)."""
+
+
 class LockError(KaosLibError):
-    """A data lock (``kaos_lib.lock``) is malformed, missing from its MLflow run, or cannot be written."""
+    """A ledger (``kaos_lib.lock``) is malformed, missing from its MLflow run, or cannot be written."""

@@ -23,7 +23,7 @@ if _os.environ.get("KAOS_CHECKPOINT_DIR"):          # the platform's checkpoint 
     from . import checkpoint as _checkpoint  # noqa: E402
 
     _checkpoint.activate()
-elif _os.environ.get("KUBECORE_RUN_ID"):             # a pipeline step without a checkpoint folder: progress hooks only
+elif _os.environ.get("KAOS_STEP_CONTEXT"):          # a pipeline step without a checkpoint folder: progress hooks only
     try:
         from . import frameworks as _frameworks  # noqa: E402
 

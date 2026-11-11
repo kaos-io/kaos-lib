@@ -1,4 +1,4 @@
-"""In a pipeline step the data lock reaches the MLflow run by itself when the run ends: the step calls nothing."""
+"""In a pipeline step the ledger reaches the MLflow run by itself when the run ends: the step calls nothing."""
 import importlib
 import sys
 
@@ -32,12 +32,9 @@ def end_run(status="FINISHED"):
 
 
 class Recorder:
-    """Stands in for the MLflow client `lock.write` uses: remembers what was written, per run."""
+    """Stands in for the MLflow client the ledger is written with: remembers what was written, per run."""
     def __init__(self, fail=False):
-        self.fail, self.tags, self.texts = fail, {}, {}
-
-    def list_artifacts(self, run_id):
-        return []
+        self.fail, self.tags, self.texts, self.names = fail, {}, {}, {}
 
     def set_tag(self, run_id, key, value):
         if self.fail:
@@ -46,6 +43,7 @@ class Recorder:
 
     def log_text(self, run_id, text, name):
         self.texts.setdefault(run_id, []).append(text)
+        self.names.setdefault(run_id, []).append(name)
 
 
 @pytest.fixture
@@ -58,7 +56,7 @@ def step(tmp_path, monkeypatch):
     for name in [m for m in sys.modules if m == "mlflow" or m.startswith("mlflow.")]:
         monkeypatch.delitem(sys.modules, name)
     monkeypatch.setattr(frameworks, "_patched", {})
-    monkeypatch.setattr(frameworks, "_lock_written", {})
+    monkeypatch.setattr(frameworks, "_ledger_written", {})
     lock.reset()
     client = Recorder()
     monkeypatch.setattr(lock, "_client", lambda: client)
@@ -77,6 +75,7 @@ def test_leaving_the_run_writes_what_the_step_read(step):
         lock.record("dataset-a", "latest", "c" * 64)
     assert step.tags["run-7"] == {"kaos_lib.data.dataset-a.commit": "c" * 64}
     assert len(step.texts["run-7"]) == 1 and '"dataset-a"' in step.texts["run-7"][0]
+    assert step.names["run-7"] == ["ledger/local.json"]              # not in a pipeline step: the file is "local"
     assert sys.modules["mlflow.tracking.fluent"].ENDED == [("run-7", "FINISHED")]
 
 
@@ -88,7 +87,7 @@ def test_mlflow_end_run_called_directly_writes_it_too_and_a_failed_run_still_get
     assert "run-8" in step.tags and sys.modules["mlflow.tracking.fluent"].ENDED == [("run-8", "FAILED")]
 
 
-def test_nothing_read_means_nothing_written_and_an_unchanged_lock_is_written_once(step):
+def test_nothing_read_means_nothing_written_and_an_unchanged_ledger_is_written_once(step):
     mlflow = importlib.import_module("mlflow")
     with mlflow.start_run("run-9"):
         pass
@@ -106,7 +105,7 @@ def test_a_tracking_failure_never_keeps_the_run_from_ending(step, capsys):
     with mlflow.start_run("run-10"):
         lock.record("dataset-a", "latest", "c" * 64)
     assert sys.modules["mlflow.tracking.fluent"].ENDED == [("run-10", "FINISHED")]
-    assert "the data lock was not written to MLflow run run-10" in capsys.readouterr().err
+    assert "the ledger was not written to MLflow run run-10" in capsys.readouterr().err
 
 
 def test_mlflow_imported_before_kaos_lib_is_hooked_too(step):
@@ -121,3 +120,13 @@ def test_mlflow_imported_before_kaos_lib_is_hooked_too(step):
     lock.record("dataset-a", "latest", "c" * 64)
     mlflow.end_run()
     assert "run-11" in step.tags
+
+
+def test_in_a_pipeline_step_the_file_carries_the_steps_name(step, monkeypatch):
+    import pathlib
+    wire = (pathlib.Path(__file__).with_name("contract_fixtures") / "context-one-upstream.wire").read_text()
+    monkeypatch.setenv("KAOS_STEP_CONTEXT", wire)
+    mlflow = importlib.import_module("mlflow")
+    with mlflow.start_run("run-12"):
+        lock.record("dataset-a", "latest", "c" * 64)
+    assert step.names["run-12"] == ["ledger/train.json"]

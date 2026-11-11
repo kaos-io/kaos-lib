@@ -75,8 +75,8 @@ def test_materialize_refuses_foreign_nonempty_dest(populated, client, tmp_path):
 
 def test_materialize_uses_staged_copy_without_downloading(populated, client, tmp_path, monkeypatch):
     staged = write_dataset(tmp_path / "lustre" / "dataset-default" / "c-data")
-    (staged / ".kaos-ready").write_text("")
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-default", "commit": "c-data", "full": True}))
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
     data_yaml = datasets.materialize(REF, tmp_path / "out", client=client)
     assert yaml.safe_load(data_yaml.read_text())["path"] == str(staged)    # train reads the resident copy
     assert downloads(populated) == []
@@ -84,8 +84,9 @@ def test_materialize_uses_staged_copy_without_downloading(populated, client, tmp
 
 
 def test_staged_dir_for_another_commit_is_ignored(populated, client, tmp_path, monkeypatch):
-    staged = write_dataset(tmp_path / "lustre" / "other-commit")
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    staged = write_dataset(tmp_path / "lustre" / "dataset")
+    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-default", "commit": "other-commit", "full": True}))
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
     datasets.materialize(REF, tmp_path / "out", client=client)
     assert len(downloads(populated)) > 0
 

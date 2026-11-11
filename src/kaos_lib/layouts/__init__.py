@@ -183,8 +183,8 @@ class Layout:
         """A local copy of ``ref`` at its pinned commit; returns the hook's entry (yolo: ``data.yaml``) or the folder.
 
         Downloads what ``materialize.include`` names (default: the whole tree), cached by (owner, repo, commit,
-        prefix) in ``dest`` (default: the cache); a second call is free. A staged copy (KUBECORE_STAGED_DIR holding
-        the commit) is used in place. ``prefix`` (one folder, stripped) works only for layouts that download the
+        prefix) in ``dest`` (default: the cache); a second call is free. A whole staged copy of the commit (a
+        folder under KAOS_STAGED_ROOT) is used in place. ``prefix`` (one folder, stripped) works only for layouts that download the
         whole tree with no materialize hook. A shared reference (``<owner>/dataset-x@v1``) is read from the owner.
         """
         entry = self._hook_fn("materialize")

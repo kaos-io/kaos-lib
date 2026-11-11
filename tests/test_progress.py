@@ -164,7 +164,7 @@ def test_huggingface_reports_steps(fakes, capsys):
 def test_importing_kaos_lib_in_a_pipeline_step_installs_the_hooks(monkeypatch):
     import kaos_lib
     monkeypatch.delenv("KAOS_CHECKPOINT_DIR", raising=False)
-    monkeypatch.setenv("KUBECORE_RUN_ID", "wf-1")
+    monkeypatch.setenv("KAOS_STEP_CONTEXT", "{}")
     monkeypatch.delenv("KAOS_LIB_SUPPORT", raising=False)
     if frameworks._finder in sys.meta_path:
         sys.meta_path.remove(frameworks._finder)

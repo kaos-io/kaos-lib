@@ -201,11 +201,11 @@ def test_staged_copy_used_only_for_the_same_owner(lakes, step_env, tmp_path, mon
     _, owner = lakes
     commit = owner.head("dataset-x")
     staged = write_dataset(tmp_path / "lustre" / commit, images=("staged",))
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
-    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-x", "commit": commit}))   # b's own copy
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
+    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-x", "commit": commit, "full": True}))   # b's own copy
     data_yaml = datasets.materialize(SHARED)
     assert yaml.safe_load(data_yaml.read_text())["path"] != str(staged) and object_gets(owner)
-    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-x", "commit": commit, "owner": "a"}))
+    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-x", "commit": commit, "owner": "a", "full": True}))
     owner.calls.clear()
     data_yaml = datasets.materialize(SHARED, tmp_path / "out")
     assert yaml.safe_load(data_yaml.read_text())["path"] == str(staged) and not object_gets(owner)

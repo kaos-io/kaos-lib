@@ -178,15 +178,22 @@ def resolve(ref: DatasetRef, client: Optional[LakeFS] = None, commit: Optional[s
 
     ``latest`` is the head of the default branch, ``vN`` a tag, anything else a branch, tag or commit id
     (tried in that order). A pinned ``commit`` (argument, or carried by ``ref``) is returned as is,
-    with no lakeFS call. While a data lock is replayed (``kaos_lib.lock``) a locked repository returns
+    with no lakeFS call. While a ledger is replayed (``kaos_lib.lock``) a locked repository returns
     its locked commit, also with no lakeFS call. Every answer is recorded in ``lock.current()``.
+
+    Inside a pipeline step the run's ledger is replayed and nothing else is read: a repository it does not
+    cover is refused, so a step never picks a version by itself.
     """
     pinned = commit or ref.commit
     found = ref.with_commit(pinned).commit if pinned else _lock.pinned(ref.repo, ref.version, ref.owner)
+    if not found and _lock.refusing():
+        raise DatasetError(f"{ref.repo} is not an input of step '{_lock.refusing()}': a step reads only the "
+                           "versions the run pinned. Add the config value that names it to inputs=[...] in "
+                           "pipeline.py.")
     if not found:
         ref, c = source(ref, client)
         found = _resolve_live(ref, c)
-    _lock.record(ref.repo, ref.version, found, ref.owner)
+    _lock.record(ref.repo, ref.version, found, ref.owner, _lock.name_of(ref.repo, found, ref.owner))
     return found
 
 

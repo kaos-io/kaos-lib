@@ -26,11 +26,19 @@ class FakeMlflowClient:
         self.artifacts.setdefault(run_id, {})[artifact_file] = text
 
     def list_artifacts(self, run_id, path=None):
+        """As MLflow: the entries directly under ``path`` (the top level when None), folders once."""
         self._call("list_artifacts", run_id, path)
-        return [SimpleNamespace(path=p, is_dir=False) for p in self.artifacts.get(run_id, {})]
+        base = f"{path}/" if path else ""
+        seen = {}
+        for p in self.artifacts.get(run_id, {}):
+            if p.startswith(base):
+                head, _, rest = p[len(base):].partition("/")
+                seen[base + head] = bool(rest)
+        return [SimpleNamespace(path=p, is_dir=d) for p, d in seen.items()]
 
     def download_artifacts(self, run_id, path, dst_path=None):
         self._call("download_artifacts", run_id, path)
         target = pathlib.Path(dst_path) / path
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(self.artifacts[run_id][path])
         return str(target)

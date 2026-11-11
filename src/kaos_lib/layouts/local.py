@@ -2,7 +2,7 @@
 
 A copy is keyed by (owner, repo, commit[, prefix]) through a marker file, so a second call is free; a
 dataset another project shares lives under ``<cache>/<owner>/<repo>/<commit>``, apart from the own ones
-(``<cache>/<repo>/<commit>``). A staged copy (``$KUBECORE_STAGED_DIR``, e.g. HPC (Slurm) staging) that holds
+(``<cache>/<repo>/<commit>``). A staged copy (a folder under ``$KAOS_STAGED_ROOT``, HPC (Slurm) staging) that holds
 the commit of the same repository and owner is used in place.
 """
 from __future__ import annotations
@@ -21,8 +21,8 @@ from ..lakefs import LakeFS
 from ..transfer import download_prefixes
 
 MARKER = ".kubecore-dataset.json"
-STAGED_ENV, CACHE_ENV = "KUBECORE_STAGED_DIR", "KUBECORE_CACHE_DIR"
-STAGED_COMMIT_FILES = (".kaos-commit", ".kaos-ready")  # HPC (Slurm) stager markers that may hold the commit
+STAGED_ENV, CACHE_ENV = "KAOS_STAGED_ROOT", "KUBECORE_CACHE_DIR"
+STAGED_MARKER = ".kaos-ready"      # written last by whoever staged the folder: {"repo", "commit", "owner", "full"}
 
 
 def cache_root() -> pathlib.Path:
@@ -55,34 +55,34 @@ def marker_matches(directory: pathlib.Path, repo: str, commit: str, prefix: Opti
 
 
 def _staged_info(staged: pathlib.Path) -> dict:
-    """The stager's ``.kaos-ready`` record (``repo``, ``commit``, ``owner`` ...), or {} when it has none."""
+    """The folder's ``.kaos-ready`` record, or {} when it has none or it is not a JSON object."""
     try:
-        info = json.loads((staged / STAGED_COMMIT_FILES[1]).read_text())
+        info = json.loads((staged / STAGED_MARKER).read_text())
     except (OSError, ValueError):
         return {}
     return info if isinstance(info, dict) else {}
 
 
-def staged_dir(commit: str, required: Optional[str] = None, *, repo: Optional[str] = None,
+def staged_dir(commit: str, required: Optional[str] = None, *, repo: str,
                owner: Optional[str] = None) -> Optional[pathlib.Path]:
-    """The staged copy when ``$KUBECORE_STAGED_DIR`` holds ``commit`` (and the ``required`` file), else None.
+    """The staged copy of ``repo`` at ``commit`` (holding the ``required`` file), else None.
 
-    A stager record naming another repository or another owner disqualifies it; a shared dataset
-    (``owner`` set) is used only from a copy whose record names that owner.
+    On an HPC (Slurm) site the inputs of a step are copied next to the job before it starts: one folder per
+    input under ``$KAOS_STAGED_ROOT``, named after the input. A folder is used only when its ``.kaos-ready``
+    record names this repository, this commit and this owner (absent or null for the own project) and says
+    ``"full": true``, the whole tree of the commit. Anything else (another commit, a partial copy, no record)
+    is not used, and the caller downloads.
     """
     raw = os.environ.get(STAGED_ENV)
-    if not raw:
+    if not raw or not pathlib.Path(raw).is_dir():
         return None
-    staged = pathlib.Path(raw)
-    if not staged.is_dir() or (required and not (staged / required).is_file()):
-        return None
-    holders = [staged.name] + [(staged / f).read_text() for f in STAGED_COMMIT_FILES if (staged / f).is_file()]
-    if not any(commit in h for h in holders):
-        return None
-    info = _staged_info(staged)
-    if repo and info.get("repo") and info["repo"] != repo:
-        return None
-    return staged if (info.get("owner") or None) == (owner or None) else None
+    for staged in sorted(p for p in pathlib.Path(raw).iterdir() if p.is_dir()):
+        info = _staged_info(staged)
+        if (info.get("repo"), info.get("commit"), info.get("owner") or None) != (repo, commit, owner or None):
+            continue
+        if info.get("full") is True and (not required or (staged / required).is_file()):
+            return staged
+    return None
 
 
 def fetch(client: LakeFS, repo: str, commit: str, prefixes, target: pathlib.Path, prefix: Optional[str] = None,

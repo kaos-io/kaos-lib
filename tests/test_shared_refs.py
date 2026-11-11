@@ -162,21 +162,27 @@ def test_marker_must_match_the_owner(tmp_path):
     assert local.marker_matches(d, "dataset-x", "c1") and not local.marker_matches(d, "dataset-x", "c1", owner="a")
 
 
+FULL = {"repo": "dataset-x", "commit": "c1", "full": True}
+
+
 @pytest.mark.parametrize("record,repo,owner,used", [
-    ("", "dataset-x", None, True),                                              # no record: commit decides
-    ("", "dataset-x", "a", False),                                              # shared: the record must name the owner
-    ({"repo": "dataset-x", "commit": "c1"}, "dataset-x", None, True),
-    ({"repo": "dataset-y", "commit": "c1"}, "dataset-x", None, False),          # another repository
-    ({"repo": "dataset-x", "commit": "c1"}, "dataset-x", "a", False),           # the own dataset-x, not a's
-    ({"repo": "dataset-x", "commit": "c1", "owner": "a"}, "dataset-x", "a", True),
-    ({"repo": "dataset-x", "commit": "c1", "owner": "a"}, "dataset-x", None, False),
-    ({"repo": "dataset-x", "commit": "c1", "owner": "a"}, "dataset-x", "b", False),
-    ({"repo": "dataset-y", "commit": "c1", "owner": "a"}, "dataset-x", "a", False),
+    ("", "dataset-x", None, False),                                             # no record: never trusted
+    ("not json", "dataset-x", None, False),
+    (FULL, "dataset-x", None, True),
+    ({"repo": "dataset-x", "commit": "c1"}, "dataset-x", None, False),          # not said to be the whole tree
+    (dict(FULL, full="yes"), "dataset-x", None, False),                         # only true counts
+    (dict(FULL, repo="dataset-y"), "dataset-x", None, False),                   # another repository
+    (FULL, "dataset-x", "a", False),                                            # the own dataset-x, not a's
+    (dict(FULL, owner="a"), "dataset-x", "a", True),
+    (dict(FULL, owner="a"), "dataset-x", None, False),
+    (dict(FULL, owner="a"), "dataset-x", "b", False),
+    (dict(FULL, owner="a", repo="dataset-y"), "dataset-x", "a", False),
 ])
-def test_staged_dir_checks_repository_and_owner(tmp_path, monkeypatch, record, repo, owner, used):
-    staged = tmp_path / "lustre" / "c1"
+def test_staged_dir_checks_repository_owner_and_that_the_copy_is_whole(tmp_path, monkeypatch, record, repo, owner, used):
+    staged = tmp_path / "staged" / "raw"            # one folder per input, named after it
     staged.mkdir(parents=True)
+    (tmp_path / "staged" / "other-input").mkdir()   # an input of the same step that is not this one
     (staged / ".kaos-ready").write_text(record if isinstance(record, str) else json.dumps(record))
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(tmp_path / "staged"))
     assert (local.staged_dir("c1", repo=repo, owner=owner) == staged) is used
     assert local.staged_dir("c2", repo=repo, owner=owner) is None             # another commit: never
