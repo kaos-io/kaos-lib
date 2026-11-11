@@ -25,6 +25,7 @@ exclude_docs: |
   design/
 hooks:
   - docs/hooks.py
+  - docs_check.py   # words, removed names, links: a finding fails the build
 
 theme:
   name: material

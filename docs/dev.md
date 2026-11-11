@@ -10,17 +10,17 @@ kaosctl dev
 ```
 
 ```text
-data-summary: setting up steps/data_summary/.venv ...
-dataset-loading: setting up steps/dataset_loading/.venv ...
-  data-summary: created (Python 3.11.9)
-  dataset-loading: created (Python 3.11.9, kaos-lib from the default of ARG KAOS_LIB_PACKAGE in the Dockerfile)
+data-check: setting up steps/data_check/.venv ...
+export-report: setting up steps/export_report/.venv ...
+  data-check: created (Python 3.11.9, kaos-lib from the default of ARG KAOS_LIB_PACKAGE in the Dockerfile)
+  export-report: created (Python 3.11.9)
   model-training: skipped, its dependencies are large (torch ...). Set it up with: kaosctl dev --step model-training
 Next: kaosctl step run <step>
 ```
 
 ## What it does
 
-For each step (the steps of `pipeline.py` and the `compose-and-validate` step the platform adds):
+For each step of `pipeline.py`:
 
 1. **Reads what the step installs, without running anything.** The `pip install` lines of its `Dockerfile` are the
    declaration, because that is what the image has. A `-r requirements.txt` they name is read; a Poetry step
@@ -36,7 +36,7 @@ For each step (the steps of `pipeline.py` and the `compose-and-validate` step th
 4. **Adds kaos-lib** to a step that uses it (its Dockerfile declares `ARG KAOS_LIB_PACKAGE`, or its code imports
    `kaos_lib`). A step that does not, such as a step that needs only PyYAML, does not get it.
 5. **Writes `steps/<name>/.vscode/settings.json`** so VS Code picks that environment when you open the step's folder
-   (`code steps/data_summary`). An existing settings file is merged, not replaced; one with comments in it is left alone.
+   (`code steps/data_check`). An existing settings file is merged, not replaced; one with comments in it is left alone.
 
 Run it again whenever you like: an environment whose dependencies did not change is left as it is (`up-to-date`).
 

@@ -5,16 +5,15 @@
 needed, and no platform secret is ever used.
 
 ```bash
-kaosctl step run data-summary
+kaosctl step run evaluate
 ```
 
 ```text
-  input --dataset-info: empty ({}); give it with --input
-Running data-summary: python -m app.entry --params <1636 characters of composed params> --dataset-info ...
-Data summary: dataset='dataset-default@v1' source='lakefs' seed=42
-Outputs of data-summary (the platform's /work/output, here .kaos/local/work/data-summary/output):
+  input --training-result: empty ({}); give it with --input
+Running evaluate: python -m app.entry --params <1636 characters of composed params> --training-result ...
+Outputs of evaluate (the platform's /work/output, here .kaos/local/work/evaluate/output):
   none written
-Done: data-summary exited 0. Next: kaosctl step run <the step that needs data-summary>, or kaosctl build data-summary
+Done: evaluate exited 0. Next: kaosctl step run <the step that needs evaluate>, or kaosctl build evaluate
 ```
 
 ## What is the same as on the platform
@@ -22,9 +21,8 @@ Done: data-summary exited 0. Next: kaosctl step run <the step that needs data-su
 * **The command.** `python -m app.entry --params <params> --<name> <json> ...`, started in the step's folder.
 * **The parameters.** `--params` receives the *content* of the composed `params.yaml`: your `config/` tree with its defaults
   and the overrides you give. It is composed here by the same composer the platform uses: the platform's pipeline engine, fetched
-  as for [`kaosctl render`](render.md) (pass `--context` or `--engine-wheel`), or, in an app that still has its own
-  `kubecore/` folder, that copy in the environment of `compose-and-validate`; `--set key=value` adds an override as on the submit form, and `--params-file FILE` uses a
-  params file you already have.
+  as for [`kaosctl render`](render.md) (pass `--context` or `--engine-wheel`); `--set key=value` adds an override as on
+  the submit form, and `--params-file FILE` uses a params file you already have.
 * **The inputs.** A step receives one `--<name> <json>` for each output of the steps it `needs=`. Here the value comes from
   `--input name=<json>` or `--input name=@file.json`, else from the last local run of the step that produces it, else `{}`
   (what the platform passes for an output that is not there). Run the steps in order and each one finds the last one's

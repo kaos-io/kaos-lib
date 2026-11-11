@@ -30,3 +30,15 @@ kaosctl dataset pull team-a/dataset-cats@v3  # read-only copy
 - **Errors**: an owner that is not a project of your organisation, or a lakeFS too old to serve
   `/kaos/v1/peers`, is a one-line error. In `list --shared`, a peer that answers 401 shares nothing with you; a
   peer too old or unreachable is skipped with a `NOTE:` on stderr.
+
+## Share a dataset (the owning project)
+
+The admins of the project that owns the dataset do this. Everyone else sees the list but cannot change it.
+
+1. Open the KAOS console → **Datasets** → the dataset.
+2. Open the **Sharing** tab, choose **Share with project** → **Add a project…**, and **Save sharing**.
+
+lakeFS shows on the dataset's page which projects it is shared with. Removing a project from the list stops its
+reads within a couple of minutes. In the other project, the run form's `dataset` dropdown offers the dataset as
+`<owner-project>/dataset-<name>@<version>` once that project's pipeline has been refreshed (any release of a dataset
+in that project refreshes it).

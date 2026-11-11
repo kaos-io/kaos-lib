@@ -32,7 +32,7 @@ kaosctl build hello-world     # one step
 | Input | Locally |
 |---|---|
 | Dockerfile | `steps/<name>/Dockerfile` |
-| Context | the step's folder; the repository root for `compose-and-validate` |
+| Context | the step's folder |
 | `REGISTRY_URL` | `local` (the platform passes its registry); `--registry-url` changes it |
 | `VERSION` | `local-<short commit>` (`local-nogit` outside a git repository) |
 | `KAOS_LIB_PACKAGE` and the label `io.kaos.lib` | only for a Dockerfile that declares `ARG KAOS_LIB_PACKAGE`. Passed when you give `--kaos-lib` or `--context`; otherwise the Dockerfile's own default installs and the label names it |
