@@ -135,8 +135,17 @@ def _fold_poetry(deps: StepDeps, step_dir: pathlib.Path) -> None:
         locked = _toml.loads(_read(lock)) if lock.is_file() else {}
     except _toml.TOMLDecodeError:
         locked = {}
-    pins = [f"{p['name']}=={p['version']}" for p in locked.get("package", [])
-            if "main" in (p.get("groups") or [p.get("category", "main")]) and p.get("name") and p.get("version")]
+    pins = []
+    for p in locked.get("package", []):
+        if "main" not in (p.get("groups") or [p.get("category", "main")]):
+            continue
+        if not (p.get("name") and p.get("version")):
+            continue
+        pin = f"{p['name']}=={p['version']}"
+        marker = p.get("markers")            # poetry.lock stores it as a PEP 508 string (sometimes a per-group dict, skipped)
+        if isinstance(marker, str) and marker.strip():   # keep e.g. pywin32's sys_platform == "win32"
+            pin += f" ; {marker.strip()}"    # so pip/uv skip a win32-only dep on macOS/Linux, matching the real poetry build
+        pins.append(pin)
     if pins:
         deps.sources.append("poetry.lock")
         deps.requirements += pins
