@@ -65,7 +65,7 @@ and what a pull downloads. Two are built in:
 
 | layout | holds | checked |
 | --- | --- | --- |
-| `yolo` | images, one YOLO `.txt` label file per image, and a `data.yaml` with the splits and class names | detection (`cls x y w h`), segmentation (`cls x1 y1 …`, an even count of at least 6), pose (`kpt_shape: [K, D]`) |
+| `yolo` | images (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.tif`, `.tiff` or `.webp`), one YOLO `.txt` label file per image, and a `data.yaml` with the splits and class names | detection (`cls x y w h`), segmentation (`cls x1 y1 …`, an even count of at least 6), pose (`kpt_shape: [K, D]`) |
 | `raw` | any files | nothing; published as is |
 
 `materialize` uses the layout named by the repository's `kaos.template` label, and otherwise `raw`. Your team can

@@ -57,11 +57,16 @@ alone with `python3 docs_check.py`:
 | removed names | a step or a folder that no longer exists (`REMOVED` in the file) |
 | links | a link of this repository that does not resolve, here or in the two pipeline templates (hera, yolo), and a link of a template into this site that does not resolve |
 
-The link check reads the templates at their trunk: it downloads them, or reads the checkouts named by
-`DOCS_CHECK_HERA` and `DOCS_CHECK_YOLO`. `DOCS_CHECK_OFFLINE=1` checks this repository alone and says what it
-skipped (a build that cannot download them does the same, so the site still builds without the network); `DOCS_CHECK_EXTERNAL=1` also fetches every other address. The same file is kept in both templates
-(`scripts/docs_check.py`): change it in all three. `CHANGELOG.md` and `docs/design/` are not client pages and are
-not checked for words and removed names.
+This file is the only copy of the checks. The templates carry none, so an app created from a template is never
+checked by it: a template's `scripts/check-docs.sh` and the platform's docs build of the templates run this file
+on the template (`python3 docs_check.py <template folder>`).
+
+The link check reads the other repositories at their trunk: it downloads them, or reads the checkouts named by
+`DOCS_CHECK_HERA` and `DOCS_CHECK_YOLO`. A download that fails stops the build with a message that names the
+repository; nothing is skipped silently. `DOCS_CHECK_OFFLINE=1` checks this repository alone and prints what it
+skipped; set it yourself to build without the network. `DOCS_CHECK_EXTERNAL=1` also fetches every other address.
+`CHANGELOG.md` and `docs/design/` are not client pages and are not checked for words and removed names.
+`python3 docs_check.py --self-test` runs the checker's own cases; the build runs them too.
 
 One topic has one page. What is true for every pipeline is explained here; a template's guide holds only what is
 specific to that template and links here for the rest.

@@ -81,7 +81,7 @@ parameters are logged as usual. Metrics keep the framework's own step numbers, w
 |---|---|---|
 | node failure, maintenance, pre-emption, reclaimed spot node | continues from the newest good checkpoint | re-runs from the start, at most twice |
 | wall time reached (HPC) | continues from the newest good checkpoint | ends: "wall time reached" (a step that asked for longer than the class allows is refused before it starts, see below) |
-| ended as idle (no GPU work and no log output for 20 minutes; `idle_timeout="40m"` on a GPU step raises it, `idle_timeout=0` turns it off) | continues from the newest good checkpoint | ends: idle |
+| ended as idle (a GPU step whose GPU use stays below 5 % and whose log gets no new line for 20 minutes; `idle_timeout="40m"` on the step raises it, `idle_timeout=0` turns it off) | on HPC (Slurm): continues from the newest good checkpoint. On the platform's own machines: ends as failed with the reason `Idle`, and is not repeated | ends: idle |
 | an error in your own code (non-zero exit) | ends: failed | ends: failed |
 
 A continued run waits in the queue again and its time counts against your budget. A checkpoint is used only when it
@@ -137,6 +137,6 @@ You never name a queue or a QoS: the time limit and the lane a step runs in are 
 | the step ends as failed after its machine was reclaimed | it ran out of its two repeats: run it again, or pick an on-demand class for this step |
 | copies fail with a disk message | raise `disk=` on the step |
 | the step was ended as idle but was working | raise `idle_timeout=` on the step (`idle_timeout=0` turns the rule off) |
-| a GPU step fails with `KaosIdle: ended by the idle watchdog ...` | the platform saw no GPU use and no new log line for the idle time and stopped the step, so the GPU stops costing money |
+| a GPU step on the platform's own machines fails with `KaosIdle: ended by the idle watchdog ...` | the platform saw GPU use below 5 % and no new log line for the idle time and stopped the step, so the GPU stops costing money. It is not repeated: raise `idle_timeout=` if the step was working, and run it again |
 | a CPU step is not copied | set `checkpoint_every=` on it (a short CPU step is simply repeated) |
 | the hooks did nothing | `KAOS_CHECKPOINT_HOOKS` must not be 0; framework versions the hooks do not know are left alone, with a message in the log |
