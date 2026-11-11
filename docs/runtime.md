@@ -26,6 +26,12 @@ Every step gets the run id, workflow name, results repository and endpoints; a v
 `None` (`KUBECORE_APP`, `KUBECORE_PROJECT` and `KUBECORE_STEP` are not set yet; in an HPC (Slurm) job the step comes from
 `STEP_NAME`).
 
+The run's dataset is not read from this context. Read it from the composed config (`cfg["dataset"]`, see
+[How a step works](steps.md)), and its commit from `datasets.resolve(...)`
+([How steps use datasets](steps-and-datasets.md)). `KUBECORE_DATASET_REF` and `KUBECORE_DATASET_COMMIT` are not set
+by the platform for a step on its machines, nor in an HPC (Slurm) job. An HPC job sets `DATASET` (the run's dataset
+setting) and `DATASET_COMMIT` (the pinned commit), so `dataset_ref` and `dataset_commit` are filled there only.
+
 ## A shared HPC node
 
 On HPC (Slurm), steps of one project can share a node: each gets one slot, a GPU with its cores and its memory share

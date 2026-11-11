@@ -19,7 +19,7 @@
 from kaos_lib import datasets
 
 ref = datasets.DatasetRef.parse("dataset-default@v2")    # also "my-repo@main", "@latest", "@<tag>", "@<commit>"
-ref = ref.with_commit(commit)                            # optional: pin the commit an earlier step resolved
+ref = ref.with_commit(commit)                            # read one specific commit on purpose (the platform pins the run's data)
 commit = datasets.resolve(ref)                           # a pinned commit as is, else the tag or main's head
 data = datasets.materialize(ref, dest=None)              # yolo: the path of data.yaml; raw: the folder (prefix= for one folder)
 datasets.list_datasets(); datasets.versions("dataset-x"); datasets.release("dataset-x")   # release returns "vN"

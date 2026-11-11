@@ -26,6 +26,9 @@ user-definable layouts.
 - In a pipeline step the data lock is written to the MLflow run by itself when the run ends (tags `kaos_lib.data.*` and
   `data.lock.json`): the step no longer calls `lock.write()`. A failed run gets it too; a tracking problem is logged and
   never fails the step. Calling `lock.write()` yourself still works and writes nothing twice.
+- Docs: the Steps guide (`docs/steps.md`, `docs/step-examples.md`, `docs/steps-and-datasets.md`): the contract between a pipeline
+  step and the platform, a complete example for every kind of step, and how every step of a run reads the same pinned
+  dataset. Describes the contract after the platform's breaking release (PRD-HPC-1461 D-80, D-81).
 - `kaosctl render`: render `pipeline.py` on your machine with the platform's pipeline engine, the release the platform
   pinned for your app (`--context`, `--engine-wheel 'URL#sha256=...'` or `$KAOS_ENGINE_WHEEL`). The wheel is checked by its
   SHA-256 and installed into `.kaos/engine/.venv` inside the repository; the engine runs isolated from the app's folders.
