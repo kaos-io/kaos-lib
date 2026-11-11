@@ -3,10 +3,10 @@
 Status: design, not implemented. This page is not part of the published site (`exclude_docs` in `mkdocs.yml`).
 It becomes the description of the pull request that implements package W1.
 
-Field names follow the contract fixtures as drafted on 2026-11-12 (`docs/step-contract/fixtures/` in
-kaos-hpc-operator, not yet on a pushed branch). Where the contract document has to decide something this note
-needs, the line starts with **Contract:**. Where the PRD is silent and this note chooses, the line starts with
-**Choice:**.
+Field names, the result path, the wire form and the caps follow the step contract: `docs/step-contract.md` and
+`docs/step-contract/fixtures/` in kaos-hpc-operator, branch `prd1911/contract` at `dd2da46`. Where the contract
+does not yet decide something this note needs, the line starts with **Contract:**. Where the PRD and the
+contract are silent and this note chooses, the line starts with **Choice:**.
 
 ## 1. What the engineer writes
 
@@ -90,8 +90,8 @@ does not put them in the context. `dataset_ref`, `dataset_commit` and their six 
 `runtime.context()` outside a step (a laptop, `kaosctl`) still returns `None` fields and never raises;
 `step.start()` is the call that raises.
 
-**Contract:** whether `workflow` (today `KUBECORE_WORKFLOW_NAME`, the name of the MLflow run) is the same as
-`run`. The draft fixtures carry only `run`. This note assumes they are the same and deletes `workflow`.
+The contract has one name for the run, `run`. `workflow` (today `KUBECORE_WORKFLOW_NAME`, used to name the MLflow
+run) is deleted and `run` takes its place.
 
 ## 4. Ledger version 2 (`lock.py`)
 
@@ -131,7 +131,10 @@ and new runs.
 
 ## 5. The result
 
-`result(**values)` writes one JSON file, atomically (a temporary file in the same folder, then a rename), once:
+`result(**values)` writes one file, `/work/output/kaos-result.json`, atomically (a temporary file in the same
+folder, then a rename), once. The file is in the contract's wire form: no whitespace, ASCII only, and `{` and
+`}` inside strings written as `\u007b` and `\u007d`. `lock.py` gets the one writer, `wire(obj) -> str`, tested
+byte for byte against every `.wire` fixture. Shown here indented for reading:
 
 ```json
 {"version": 1, "status": "ok", "values": {"rows": 1200},
@@ -141,10 +144,9 @@ and new runs.
 
 - `values` are the keyword arguments. They must be JSON values (text, numbers, booleans, null, lists, objects);
   anything else is refused before any output is saved.
-- The file is at most 32 KiB. Larger is refused, naming the size and the largest value. A large hand-over is an
-  artifact, not a value.
-- **Contract:** the path of the file. This note assumes one fixed path that the platform reads on a pod and the
-  runner reads in a Slurm job; kaos-lib writes nowhere else.
+- The file is at most 32 KiB (32,768 bytes of the wire form). Larger is refused, naming the size and the largest
+  value. A large hand-over is an artifact, not a value.
+- The path is the same on a pod and in a Slurm job. kaos-lib writes nowhere else.
 - **The "absent" sentinel.** kaos-lib never writes it. When a step wrote no result (it was skipped by `when=`,
   or it ended without calling `result()`), the platform hands its consumers `{"version": 1, "status": "absent"}`
   in `context.upstream[<step>]`. It is never `{}`. `upstream("x")` on an absent result raises, naming `x`
@@ -153,8 +155,9 @@ and new runs.
   run's ledger then shows that the step did not use it.
 
 **Choice:** a process that called `start()` and exits with code 0 without `result()` is made to exit with code 1
-and the message of section 8. The PRD requires only that the consumer fails; failing the producer too puts the
-red mark on the step that has the bug. A step with nothing to hand on calls `step.result()`.
+and the message of section 8. The contract lets such a step end well and gives its consumers the sentinel;
+failing the producer too puts the red mark on the step that has the bug, and is the stricter of the two. A step
+with nothing to hand on calls `step.result()`.
 
 **Order inside `result()`:** check the values; save each output in declaration order (models and artifacts with
 `outputs.RunWriter`, datasets with the writer of section 7); write the ledger to MLflow when there is a run;
@@ -173,7 +176,9 @@ A retry repeats the saves, which are idempotent (`RunWriter` reuses its run bran
    point is a file, such as `data.yaml`, its folder).
 3. A model or an artifact an upstream step produced: download `outputs-<app>` at the written commit, prefix
    `<name>/<experiment>/<run>/`, into `<cache>/outputs-<app>/<commit>/<name>/` (`transfer.download_prefixes`).
-4. Record the read, with its `name`, for the result.
+   **Contract:** the contract's reads are datasets only and a Slurm job stages datasets only, so this is a
+   download inside the step and is not recorded as a read. To confirm, or to leave out of 0.5.
+4. Record a dataset read, with its `name`, for the result.
 
 ### Staged folders, one per input
 
@@ -191,7 +196,7 @@ staged copy for another commit, or one without the "complete" flag (a copy stage
 used: that is AC-05.
 
 **Contract:** the name of the staged-root variable and the exact marker fields (Brief C adds the "complete"
-flag or a new cache root).
+flag or a new cache root). The contract at `dd2da46` defines `spec.inputs[]` and not where they land.
 
 ### `output(name)`
 
@@ -239,8 +244,8 @@ Uploads are HTTP `POST`, which the client's session does not retry today (`lakef
 `GET`, `PUT`, `DELETE`). The mirror retries each failed upload up to four times with a growing pause; an upload
 is safe to repeat because it replaces the same path.
 
-**Contract:** how "this run promotes" reaches the step (D-06). This note assumes a boolean `promote` on the
-`produces` entry of a dataset, default false.
+**Contract:** how "this run promotes" reaches the step (D-06). The contract at `dd2da46` does not say. This note
+assumes a boolean `promote` on the `produces` entry of a dataset, default false.
 
 **Choice:** the recorded commit is the merge commit on `main` when the run promotes, and the sealed commit on
 the run branch (kept by its `k-` tag) when it does not. Both are verified against the manifest.
@@ -381,10 +386,10 @@ parse `reads[].commit` from the `data-lock` output (`scripts/e2e/kaose2e/mlrun.p
 
 ## 11. Test plan for W1
 
-- The contract fixtures are loaded by path from a checkout of kaos-hpc-operator named by one variable, and
-  copied into `tests/contract_fixtures/` by a script with their SHA-256 list, the way `tests/layout_fixtures/`
-  is kept equal to kaos-lake today. `start()` is tested on every `context-*.wire`; `result()` must produce
-  `result-ok.json` and `result-model.json` byte for byte from the matching context.
+- The contract fixtures are copied into `tests/contract_fixtures/` with their SHA-256 list by one script, from
+  a checkout of kaos-hpc-operator, the way `tests/layout_fixtures/` is kept equal to kaos-lake today; a test
+  fails when the list and the files differ. `start()` is tested on every `context-*.wire`; `result()` must
+  produce `result-ok.wire` and `result-model.wire` byte for byte from the matching context.
 - Every row of section 8 is one test asserting the message.
 - The dataset writer is tested twice: on the fake, extended with `expected_head` (412) and nothing else; and on
   the real server (`KAOS_LIB_TEST_LAKEFS=real`) for what the fake cannot show. The 412 tests need the kaos-lake
