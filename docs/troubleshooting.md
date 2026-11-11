@@ -32,14 +32,18 @@ validation. In Python the same messages are the text of `kaos_lib.errors.KaosLib
 | `dataset failed validation (N problem(s))` (exit `2`) | The layout's checks found problems; each is listed above this line. | Fix them, or `kaosctl dataset validate <dir> --layout <name>` to re-check. |
 | `cannot create <owner>/dataset-x: it belongs to project <owner>, and datasets shared with your project are read-only. Ask <owner> to create it.` | `create`, `push` or `release` of `<owner>/dataset-x`. | Shared datasets are read-only: ask the owning project, see [shared datasets](shared-datasets.md). |
 
-## Outputs and the data lock
+## Steps, outputs and the data lock
+
+Every message of a step that cannot start, read an input or hand its result on is listed in
+[The step API](step.md#what-goes-wrong-and-what-the-message-says).
 
 | You see | Why | Do |
 | --- | --- | --- |
-| `outputs-<app> does not exist: the platform creates it for each ML app.` | The app name is wrong, or the app is not an ML app. | Use the app's name (`$CHECKPOINT_BUCKET` in a step). |
+| `this is not a pipeline step: KAOS_STEP_CONTEXT is not set.` | The step's code was started by hand. | Start it with `kaosctl step run <step>` ([Run a step locally](step-run.md)). |
+| `step '<x>' ended without step.result()` | The step's code returned without handing a result on. | Call `step.result()` as the last line, also when there is nothing to hand on. |
+| `outputs-<app> does not exist: the platform creates it for each ML app.` | The app name is wrong, or the app is not an ML app. | Use the app's name. |
 | `invalid app name 'X': use lowercase letters, digits and '-'.` | The name has other characters. | Fix the name. |
-| `no MLflow run to write the data lock to: pass run_id=, start a run, or set $MLFLOW_RUN_ID.` | `lock.write()` with no run. | Call it inside `mlflow.start_run()`, or pass `run_id`. |
-| `MLflow run <id> has no data.lock.json: the run did not record its data reads…` | `kaosctl run --lock` on a run that never wrote a lock. | The original run was not made in a pipeline step (there kaos-lib writes the lock when the run ends) or it read no dataset through kaos-lib. Call `lock.write()` in the original code. |
+| `MLflow run <id> has no ledger/ and no data.lock.json: the run did not record its data reads.` | `kaosctl run --lock` on a run that recorded nothing. | The original run was not made in a pipeline step, or it read no dataset through kaos-lib. |
 
 ## Versions
 

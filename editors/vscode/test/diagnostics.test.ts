@@ -14,7 +14,7 @@ test("should_group_findings_by_file", () => {
 
 test("should_convert_one_based_positions_to_zero_based", () => {
   const e06 = mapReport(report).get("pipeline.py")!.find((d) => d.rule === "L-E06")!;
-  assert.deepEqual([e06.startLine, e06.startCharacter, e06.endLine, e06.endCharacter], [4, 53, 4, 67]);
+  assert.deepEqual([e06.startLine, e06.startCharacter, e06.endLine, e06.endCharacter], [4, 53, 4, 73]);
 });
 
 test("should_map_levels_to_severities", () => {
@@ -26,8 +26,8 @@ test("should_map_levels_to_severities", () => {
 
 test("should_carry_the_fix_hint_and_the_doc_link", () => {
   const d = mapFinding(report.findings.find((f) => f.rule === "L-E06")!);
-  assert.match(d.message, /no argument 'walltime'/);
-  assert.match(d.message, /\nFix: Use walltime/);
+  assert.match(d.message, /no argument 'hpc_time_limit'/);
+  assert.match(d.message, /\nFix: Rename it to walltime/);
   assert.match(d.doc, /^https:\/\/.*L-E06\.html$/);
 });
 

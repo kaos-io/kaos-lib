@@ -4,6 +4,38 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 `release.json`. Packages: `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` (stable),
 `.../kaos-lib-rc/simple/` (prerelease).
 
+## 0.5.0 (unreleased)
+
+PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: every app changes once.** The guide is
+`docs/migrate-to-0.5.md`; `kaosctl lint --fix` makes the mechanical part of the change.
+
+### Added
+- `kaos_lib.step`: `start()`, `input(name)`, `output(name)`, `upstream(step)`, `check(name)`, `result(**values)`. A step is
+  started with no arguments, reads everything from `step.start()` and hands one result on. A step that ends without
+  `step.result()` fails.
+- The ledger: the data lock at version 2, with named reads and with writes. Each step records what it read and wrote in
+  its result and, on its MLflow run, in its own `ledger/<step>.json`.
+- `step()` in `pipeline.py` takes `kind=` (required), `inputs=`, `produces=` and `walltime=`. `kaosctl lint` checks them
+  (`L-E07`), finds steps still written for 0.4 (`L-E08`), and `kaosctl lint --fix` renames `hpc_time_limit=`, removes
+  `outputs=` and adds a `kind=` placeholder that you replace. Rule set 2.0.0.
+- `kaosctl step run` starts a step with the new contract: `--input NAME=FOLDER|REPO@REF` gives an input, `--upstream`
+  a needed step's result; outputs and results stay in `.kaos/local/`.
+- On HPC (Slurm) every input of a step is read from its own staged copy.
+
+### Changed
+- `runtime.context()` takes the run, app, project, step, kind and experiment from what the platform hands the step.
+- Inside a pipeline step, `datasets.resolve` and `datasets.materialize` refuse a dataset the run did not pin.
+- `kaosctl dataset versions BAD` and other invalid names answer "invalid dataset name" instead of an HTTP error.
+
+### Removed
+- `hpc_time_limit=` (use `walltime=`) and `outputs=` (use `step.result()`), with no alias.
+- The `kubecore` import shim, the `kubecore` and `kaos-cli` commands, `kaos_lib.errors.KubecoreError`.
+- `lock.write()` and writing `data.lock.json` (reading one, for a run made with 0.4, stays).
+- `runtime.context().dataset_ref`, `.dataset_commit`, `.workflow`, and reading `KUBECORE_RUN_ID`, `KUBECORE_APP`,
+  `KUBECORE_STEP`, `STEP_NAME`, `OUTPUTS_REPO`, `CHECKPOINT_BUCKET`, `KUBECORE_DATASET_*`, `DATASET*` and
+  `KUBECORE_STAGED_DIR`.
+- `kaosctl step run --dataset` (use `--input NAME=REPO@REF`).
+
 ## 0.4.0 (unreleased)
 
 PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,

@@ -42,9 +42,8 @@ with outputs.run("myapp", "exp1", "run-7") as r:                            # yo
     r.finish({"dataset_ref": "dataset-cats@v1"})
 ```
 
-The command is `kaosctl`. `kaos-cli` and `kubecore` still work as deprecated aliases that print a notice, and will
-be removed in the next release. Coming from the old `kubecore` package? See
-[Formerly kubecore](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/formerly-kubecore.html).
+The command is `kaosctl`. Coming from kaos-lib 0.4? See
+[Move to kaos-lib 0.5](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html).
 
 ## Check your pipeline
 

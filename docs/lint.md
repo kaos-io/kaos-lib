@@ -17,11 +17,22 @@ pipeline.py:7: error L-E05 DependencyOrProducer: Step 'evaluate' needs 'train', 
     fix: Move the line that defines 'train' above this step.
     docs: .../lint/L-E05.html
 config/dataset.yaml:1:10: warning L-W03 UnpinnedDataset: The dataset 'dataset-default@latest' follows the newest data ...
-0 errors, 1 warning, 0 infos; 2 rules skipped. Rule set 1.3.0; facts from: built-in default.
+0 errors, 1 warning, 0 infos; 2 rules skipped. Rule set 2.0.0; facts from: built-in default.
 ```
 
 The exit code is `0` when there are no errors and `2` when there is at least one error. Warnings and infos never change
 it. (`1` means the check could not run, for example the folder does not exist.)
+
+## Fix what can be fixed for you
+
+```bash
+kaosctl lint --fix
+```
+
+rewrites `pipeline.py` for the step contract of kaos-lib 0.5 and then checks as usual: it renames `hpc_time_limit=`
+to `walltime=`, removes `outputs=`, and gives every step without a `kind=` a placeholder. The placeholder lists the
+six kinds and is not one of them, so the check keeps failing until you choose: `--fix` never chooses a kind for you.
+Nothing else in the file is touched. [Move to kaos-lib 0.5](migrate-to-0.5.md) has the rest of the change.
 
 ## The same check on your pull request
 
@@ -111,6 +122,8 @@ render and when a step is submitted.
 | error | [L-E04 ClientIdentity](lint/L-E04.md) | your own service account, a pod patch or a reserved name |
 | error | [L-E05 DependencyOrProducer](lint/L-E05.md) | a wrong `needs=`, `reads=`, name or cycle |
 | error | [L-E06 RefusedArgument](lint/L-E06.md) | a `step()` argument the library refuses |
+| error | [L-E07 StepDeclaration](lint/L-E07.md) | a step without a `kind`, or with a wrong `inputs=` or `produces=` |
+| error | [L-E08 StepNotMoved](lint/L-E08.md) | a step whose code is still written for kaos-lib 0.4 |
 | warning | [L-W01 LongGpuStepNotResumable](lint/L-W01.md) | a long GPU step known not to continue |
 | warning | [L-W02 IdleTimeoutOff](lint/L-W02.md) | the idle limit turned off |
 | warning | [L-W03 UnpinnedDataset](lint/L-W03.md) | a dataset reference that follows `@latest` |

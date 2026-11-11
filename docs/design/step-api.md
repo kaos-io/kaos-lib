@@ -1,12 +1,25 @@
 # Design: `kaos_lib.step` (kaos-lib 0.5, PRD kaos#1911 F-02, F-11, F-12)
 
-Status: design, not implemented. This page is not part of the published site (`exclude_docs` in `mkdocs.yml`).
-It becomes the description of the pull request that implements package W1.
+Status: implemented on branch `prd1911/step-api` (package W1). This page is not part of the published site
+(`exclude_docs` in `mkdocs.yml`). The client pages are `docs/step.md`, `docs/results.md` and
+`docs/migrate-to-0.5.md`.
 
-Field names, the result path, the wire form and the caps follow the step contract: `docs/step-contract.md` and
-`docs/step-contract/fixtures/` in kaos-hpc-operator, branch `prd1911/contract` at `dd2da46`. Where the contract
-does not yet decide something this note needs, the line starts with **Contract:**. Where the PRD and the
-contract are silent and this note chooses, the line starts with **Choice:**.
+The sections below are the design as it was reviewed. Where the implementation differs, this list wins:
+
+| Topic | As built |
+|---|---|
+| Contract | `docs/step-contract.md` of kaos-hpc-operator at `5ad1f92`; fixtures copied to `tests/contract_fixtures/` by `sync.py`, pinned by `SHA256SUMS` |
+| Caps | Counted by cost (`lock.cost`: every `"` and `\` counts twice). Context 96 KiB in `start()`; result 8 KiB in `result()`, on the coordinator's instruction (the contract page at `5ad1f92` still says 32 KiB) |
+| `promote` | A boolean on a `dataset` entry of `produces`, set by the platform; absent means false |
+| `input(name)` | An `inputs=` name resolves from `ledger.reads`; a dataset, model or artifact of a needed step from `upstream.<step>.writes`. Only dataset reads are recorded |
+| Staged inputs | One folder per input under `$KAOS_STAGED_ROOT`, named after the input. Used only when `<folder>/.kaos-ready` is a JSON object with this `repo`, this `commit`, this `owner` (absent or null for the own project) and `"full": true`. An optional `"layout"` lets the step read the copy without asking lakeFS. The one function is `layouts.local.staged_dir` |
+| Outputs on disk | `/work/kaos/outputs/<name>/` |
+| A declared output | Must be written: `result()` refuses a `produces=` entry whose folder was never asked for or is empty |
+| Ending without a result | Exit 1 through an exit hook. `sys.exit(n)`, an uncaught exception and `checkpoint.exit_for_restart()` (85) keep their own exit; a bare `raise SystemExit(n)` with `n != 0` becomes 1 |
+| The ledger on MLflow | `ledger/<step>.json`, written when the step's MLflow run ends and again by `result()` once the writes are known |
+| Local runs | `kaosctl step run` sets `KAOS_STEP_CONTEXT`, `KAOS_STAGED_ROOT`, `KAOS_LOCAL_OUTPUTS` and `KAOS_LOCAL_WORK`; with `KAOS_LOCAL_OUTPUTS` set, `result()` keeps outputs on disk and uploads nothing |
+| Lint | `L-E07` (declaration), `L-E08` (step not moved), `lint --fix`; rule set 2.0.0. The positional order of `step()` follows the contract's signature |
+| Release policy | `_release.json`: 0.5.0, `supported >=0.5`, `breaking: true` |
 
 ## 1. What the engineer writes
 

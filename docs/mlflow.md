@@ -31,11 +31,11 @@ Needs the `mlflow` extra: `pip install "kaos-lib[mlflow]==<version>"` ([Install]
 
 | tag | written by | holds |
 | --- | --- | --- |
-| `kaos_lib.data.<repo>.commit` | kaos-lib when the run ends in a pipeline step, or `lock.write()` ([Data lock](data-lock.md)) | the commit(s) of dataset `<repo>` the run read, comma-separated |
+| `kaos_lib.data.<repo>.commit` | kaos-lib when the run ends in a pipeline step ([Results](results.md)) | the commit(s) of dataset `<repo>` the run read, comma-separated |
 | `kaos_lib.data.<repo>.owner` | the same | the owning project, for a [shared dataset](shared-datasets.md) |
 | `kaos_lib.support` | importing `kaos_lib` in a step whose `$KAOS_LIB_SUPPORT` is set | the [support verdict](support-window.md): `current`, `behind`, `deprecated` or `unsupported` |
 
-The run also gets the artifact `data.lock.json`. Filter on the tags in the MLflow UI to find every run that read a
+The run also gets one artifact per step, `ledger/<step>.json`: what that step read and wrote. Filter on the tags in the MLflow UI to find every run that read a
 dataset commit, or that ran an unsupported kaos-lib.
 
 ## A 401 from MLflow

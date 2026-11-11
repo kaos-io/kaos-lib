@@ -12,7 +12,7 @@ The newest release's file is the policy. `kaos_lib.support.check(installed, supp
 a deprecated range whose `unsupported_after` has not passed, or that sets none), `unsupported` (outside
 `supported` and past any deadline). Metadata that cannot be read is `unknown`: a warning, never a failure.
 
-- Pipeline steps: when the platform sets `$KAOS_LIB_SUPPORT`, importing `kaos_lib` (or the `kubecore` shim) logs
+- Pipeline steps: when the platform sets `$KAOS_LIB_SUPPORT`, importing `kaos_lib` logs
   the verdict on stderr, tags the MLflow run `kaos_lib.support` (the active run, or `$MLFLOW_RUN_ID`), and stops
   the step only when unsupported. A step's image is built by the platform, so the log never tells you to
   `pip install`: older but supported is one neutral line ("Nothing to do: a platform update brings the newer

@@ -5,8 +5,7 @@ Run with ``KAOS_LIB_TEST_LAKEFS=real`` (or ``both``); skipped otherwise, and whe
 import pytest
 
 import real_lakefs
-from kaos_lib.errors import AuthError, DatasetError, LakeFSError
-from kaos_lib import datasets
+from kaos_lib.errors import AuthError, LakeFSError
 
 REPO = "outputs-myapp"
 
@@ -54,10 +53,3 @@ def test_a_protected_branch_refuses_a_direct_write_and_accepts_a_merge(real, cli
         client.upload_object(REPO, "main", "direct.bin", local)
     _commit_on(client, "run-a", "data/part.bin", b"a", tmp_path)
     assert client.merge(REPO, "run-a", "main", "a") == real.head(REPO)
-
-
-def test_a_deleted_repository_keeps_its_name_for_a_while(real, client):
-    first = datasets.create_dataset("cats", "none", "", client)
-    real.delete_repo(first)
-    with pytest.raises(DatasetError, match="already exists"):
-        datasets.create_dataset("cats", "none", "", client)

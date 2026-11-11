@@ -1,8 +1,11 @@
 # Python API
 
 Generated from the code's docstrings on every build. The guides show how the pieces fit:
-[Datasets](datasets.md), [Outputs](outputs.md), [MLflow](mlflow.md), [Run context](runtime.md) and
-[Data lock](data-lock.md), [Long runs](checkpoint.md) and [Progress](progress.md).
+[The step API](step.md), [Datasets](datasets.md), [Outputs](outputs.md), [MLflow](mlflow.md),
+[Run context](runtime.md), [Results](results.md), [Data lock](data-lock.md), [Long runs](checkpoint.md) and
+[Progress](progress.md).
+
+::: kaos_lib.step
 
 ::: kaos_lib.datasets
 

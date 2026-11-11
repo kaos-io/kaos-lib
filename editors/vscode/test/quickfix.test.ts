@@ -11,18 +11,18 @@ const source = fixture("pipeline.py").split("\n");
 const walltime = mapReport(parseReport(fixture("report.json"))).get("pipeline.py")!.find((d) => d.rule === "L-E06")!;
 const textAtStart = source[walltime.startLine].slice(walltime.startCharacter);
 
-test("should_rename_walltime_to_walltime", () => {
+test("should_rename_hpc_time_limit_to_walltime", () => {
   const fixes = quickFixesFor(walltime, textAtStart, renamed);
   assert.equal(fixes.length, 1);
-  assert.equal(fixes[0].title, "Rename 'walltime' to 'walltime'");
+  assert.equal(fixes[0].title, "Rename 'hpc_time_limit' to 'walltime'");
   const e = fixes[0].edit;
   assert.equal(source[e.startLine].slice(0, e.startCharacter) + e.newText + source[e.endLine].slice(e.endCharacter),
-    source[4].replace("walltime", "walltime"));
+    source[4].replace("hpc_time_limit", "walltime"));
 });
 
 test("should_replace_only_the_argument_name_and_keep_the_value", () => {
   const e = quickFixesFor(walltime, textAtStart, renamed)[0].edit;
-  assert.equal(e.endCharacter - e.startCharacter, "walltime".length);
+  assert.equal(e.endCharacter - e.startCharacter, "hpc_time_limit".length);
 });
 
 test("should_offer_nothing_for_other_rules", () => {

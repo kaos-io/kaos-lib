@@ -187,6 +187,7 @@ class RealLakeFS:
         self.server, self.base = server, self.BASE
         self.calls, self.auth, self.writes = [], [], []
         self.kaos, self.templates, self.deny = {}, [], None
+        self.refused_labels: list = []                     # (repository, label) the server keeps for the platform
         self.storage_prefix = "gs://bucket/lakefs"
         self.repos = _Repos(self)
         # One server serves the whole session and a deleted repository's name stays taken on it, so each test's
@@ -241,8 +242,12 @@ class RealLakeFS:
         self._ns[local] = ns
         api("POST", "/repositories", json={"name": self.on_server(name), "default_branch": "main",
                                            "storage_namespace": local})
-        if metadata:
-            api("POST", f"/repositories/{self.on_server(name)}/metadata", json={"metadata": metadata})
+        for key, value in (metadata or {}).items():   # one by one: kaos-lake keeps some labels for the platform
+            done = api("POST", f"/repositories/{self.on_server(name)}/metadata", json={"metadata": {key: value}},
+                       ok=(200, 201, 204, 400))
+            if done.status_code == 400:
+                assert "invalid repository label" in done.text, done.text
+                self.refused_labels.append((name, key))
         for path, content in (files or {}).items():
             api("POST", f"/repositories/{self.on_server(name)}/branches/main/objects", params={"path": path},
                 files={"content": ("f", content)})

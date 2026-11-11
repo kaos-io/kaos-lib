@@ -8,7 +8,7 @@ const names = (text: string) => completionsFor(schema, text).map((c) => c.label)
 
 test("should_parse_the_bundled_schema_and_know_every_step_argument", () => {
   assert.equal(schema.schema_version, SUPPORTED_SCHEMA_VERSION);
-  assert.deepEqual(schema.step.parameters.map((p) => p.name).slice(0, 3), ["name", "reads", "gpu"]);
+  assert.deepEqual(schema.step.parameters.map((p) => p.name).slice(0, 3), ["name", "kind", "reads"]);
   assert.ok(schema.step.parameters.every((p) => p.doc.length > 20));
 });
 

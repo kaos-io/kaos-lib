@@ -5,44 +5,49 @@
 needed, and no platform secret is ever used.
 
 ```bash
-kaosctl step run evaluate
+kaosctl step run prepare --input dataset=./toy
 ```
 
 ```text
-  input --training-result: empty ({}); give it with --input
-Running evaluate: python -m app.entry --params <1636 characters of composed params> --training-result ...
-Outputs of evaluate (the platform's /work/output, here .kaos/local/work/evaluate/output):
-  none written
-Done: evaluate exited 0. Next: kaosctl step run <the step that needs evaluate>, or kaosctl build evaluate
+  input dataset: the folder ./toy
+  upstream data-check: from its last local run (data-check.json)
+Running prepare: python -m app.entry (the step context holds 412 characters of composed params)
+Result of prepare (kept in .kaos/local/results/prepare.json):
+  values: {"rows": 250, "dropped": 0}
+  read    dataset: dataset-toy at 5f2c9a1b0d3e
+  wrote   clean (dataset): .kaos/local/staged/clean
+Done: prepare exited 0. Next: kaosctl step run <the step that needs prepare>, or kaosctl build prepare
 ```
 
 ## What is the same as on the platform
 
-* **The command.** `python -m app.entry --params <params> --<name> <json> ...`, started in the step's folder.
-* **The parameters.** `--params` receives the *content* of the composed `params.yaml`: your `config/` tree with its defaults
-  and the overrides you give. It is composed here by the same composer the platform uses: the platform's pipeline engine, fetched
+* **The command.** `python -m app.entry` with no arguments, started in the step's folder. Everything the step needs
+  reaches it through `kaos_lib.step` ([The step API](step.md)), exactly as on the platform.
+* **The parameters.** `step.start().params` is the composed config: your `config/` tree with its defaults and the
+  overrides you give. It is composed here by the same composer the platform uses: the platform's pipeline engine, fetched
   as for [`kaosctl render`](render.md) (pass `--context` or `--engine-wheel`); `--set key=value` adds an override as on
   the submit form, and `--params-file FILE` uses a params file you already have.
-* **The inputs.** A step receives one `--<name> <json>` for each output of the steps it `needs=`. Here the value comes from
-  `--input name=<json>` or `--input name=@file.json`, else from the last local run of the step that produces it, else `{}`
-  (what the platform passes for an output that is not there). Run the steps in order and each one finds the last one's
-  outputs.
-* **The outputs.** A step writes small results to `/work/output/<name>.json`. A laptop has no `/work`, so `kaosctl` maps
-  that folder to `.kaos/local/work/<step>/` for the run (nothing is written to your machine's root). When the step ends, its
-  outputs are printed and copied to `.kaos/local/outputs/<step>/<name>.json`.
+* **The checks.** A step that names an input it did not declare, hands on a value that is too large, or ends without
+  `step.result()` fails here with the same message.
+* **The results of earlier steps.** `step.upstream("<step>")` gives the result of that step's last local run. Run the
+  steps in order and each one finds the last one's result and what it produced. A step that has not run here is seen as
+  not run, as a skipped step is on the platform. `--upstream STEP=<json>` or `--upstream STEP=@file.json` gives a result
+  by hand.
 
 ## What is different, on purpose
 
+* **Inputs are folders on your machine.** Give each input the step declares in `inputs=` with `--input`:
+  `--input dataset=./a-few-files` uses a folder as it is; `--input dataset=dataset-toy@v1` downloads a small sample
+  of that dataset version with your own sign-in (`kaosctl login`). The sample takes root files first, then spreads
+  over the dataset's folders, smallest files first, up to `--sample-mb` (default 50). With folders only, the run
+  works offline.
+* **Nothing is uploaded.** What the step writes into `step.output("<name>")` is kept in `.kaos/local/staged/<name>/`,
+  where the next step finds it with `step.input("<name>")`. No dataset version and no model is created.
 * **No platform secrets or services.** The step runs with a short allowlist of your environment (`PATH`, `HOME`, locale,
-  proxy and certificate settings). Endpoints, tokens, buckets and keys that the platform injects into a running step
-  (`MLFLOW_TRACKING_URI`, `LAKEFS_*`, `CHECKPOINT_BUCKET`, cloud keys ...) are not passed, even if your own shell exports
-  them. If the step's code names one of them, the command says so before it runs. A step that needs the service stops with
-  its own error; a step that has a fallback (config, a default) runs on it. To try such a step, give it a stub: read the
-  value in the step's code through a function you can replace in a test.
-* **A sample of a dataset, on request.** `--dataset <repository>@<ref>` first downloads a small sample of that dataset with
-  your own sign-in (`kaosctl login`), the same lakeFS client as `kaosctl dataset pull`, and puts its folder in
-  `$KAOS_LOCAL_DATASET_DIR`. The sample takes root files first, then spreads over the dataset's folders, smallest files
-  first, up to `--sample-mb` (default 50). Without `--dataset` nothing is downloaded and the run works offline.
+  proxy and certificate settings). Endpoints, tokens and keys that the platform gives a running step
+  (`MLFLOW_TRACKING_URI`, `LAKEFS_*`, cloud keys ...) are not passed, even if your own shell exports them. If the
+  step's code names one of them, the command says so before it runs. A step that needs the service stops with its own
+  error; a step that has a fallback (config, a default) runs on it.
 * **Your hardware.** A step that needs a GPU runs on the CPU, or fails, like any program would.
 
 ## Options
@@ -53,17 +58,19 @@ Done: evaluate exited 0. Next: kaosctl step run <the step that needs evaluate>, 
 | `[path]` | your app folder (default: the current folder) |
 | `--set KEY=VALUE` | a config override for the composition (repeat for more) |
 | `--params-file FILE` | use this `params.yaml` instead of composing one |
-| `--input NAME=VALUE` or `NAME=@FILE` | the value of an upstream output |
-| `--dataset REPO@REF`, `--sample-mb MB` | a small dataset sample (needs `kaosctl login`) |
+| `--input NAME=FOLDER` or `NAME=REPO@REF` | what the step gets for the input `NAME`: a local folder, or a small sample of a dataset version (needs `kaosctl login`) |
+| `--sample-mb MB` | the most a sample downloads |
+| `--upstream STEP=JSON` or `STEP=@FILE` | the result of a step this one needs |
 | `--kaos-lib REQUIREMENT`, `--context FILE` | as in [`kaosctl dev`](dev.md), for the environment it may have to make |
 
-The exit code is the step's own; `1` when the step could not be started (for example an unknown step name).
+The exit code is the step's own; `1` when the step could not be started (for example an unknown step name, or an
+input that was not given).
 
 ## Where things are
 
 Everything a run writes is under `.kaos/local/` in your app folder, which has its own `.gitignore` (nothing in it is ever
-committed): `params.yaml` (the composed parameters), `work/<step>/` (the mapped `/work`), `outputs/<step>/` (each step's
-results), `data/` (dataset samples).
+committed): `params.yaml` (the composed parameters), `work/<step>/` (the step's working folder), `staged/<name>/` (each
+input, and everything a step produced), `results/<step>.json` (each step's result).
 
 !!! note "Not `kaosctl run`"
     `kaosctl run --lock <mlflow-run-id> -- <command>` already exists: it replays the data a past MLflow run read.

@@ -35,8 +35,9 @@ the `/kaos/v1` answers stay scripted, and a test that rewrites the fake's state 
 | `oidc.py` | PKCE browser login to Zitadel (ported from `dataset_tools`) |
 | `zitadel.py` | machine-key token (JWT-profile grant), extra `kaos-lib[zitadel]` |
 | `mlflow.py` | `mlflow()`, `token()`, the MLflow auth provider `zitadel`, extra `kaos-lib[mlflow]` |
-| `runtime.py` | `context()`, `run_id()`: the injected run context |
-| `lock.py` | the data lock: record, write, load, replay, `$KAOS_LIB_LOCK` |
+| `step.py` | a pipeline step: `start`, `input`, `output`, `upstream`, `check`, `result`; reads the step context, writes the result |
+| `runtime.py` | `context()`, `run_id()`: where the step runs |
+| `lock.py` | the ledger (the data lock at version 2): reads and writes, the wire form and its cost, load, replay, `$KAOS_LIB_LOCK` |
 | `peers.py` | the other projects (`/kaos/v1/peers`) and what they share (`/kaos/v1/shared`) |
 | `lakefs.py` | lakeFS REST client |
 | `transfer.py` | mirror plan, upload, download of file trees |
@@ -50,11 +51,11 @@ the `/kaos/v1` answers stay scripted, and a test that rewrites the fake's state 
 | `support.py` | the support window: `release.json` checks for steps and the CLI |
 | `channel.py` | release channel of the install (PEP 610), the platform's recommended spec (`upgrade`), the extension published with a release (`public_vscode`) |
 | `editor.py` | `kaosctl vscode install`: find the editor's command, download the published `.vsix` and check its SHA-256 |
-| `cli.py` | the `kaosctl` command (and the deprecated `kubecore` alias) |
+| `cli.py` | the `kaosctl` command |
 | `lint/` | the pipeline linter: `engine.py` runs the rules of `rules_errors.py`, `rules_warnings.py`, `rules_infos.py` over what `pipeline_reader.py` / `project_reader.py` read, with the facts of `catalogue.py`; `model.py` (report), `render.py`, `cli.py`; `standalone.py` runs it without importing the rest of kaos-lib (PR gate). Static: never runs client code. Standard library + PyYAML only |
+| `lint/fix.py` | `kaosctl lint --fix`: the mechanical edits of `pipeline.py` for the step contract |
 | `lint/schema.py`, `lint/graph.py` | `kaosctl lint --schema` (what `step()` accepts, for editors) and `--graph` (the step DAG); the extension's bundled copy of the schema is `editors/vscode/resources/step-schema.json`, kept equal by `tests/test_lint_schema.py` |
 | `editors/vscode/` | the VS Code extension (TypeScript, no runtime dependencies): `npm test`, `npm run package`; see its README |
-| `src/kubecore/` | the deprecated `kubecore` import shim (0.3.x and 0.4.x) |
 
 ## The documentation site
 

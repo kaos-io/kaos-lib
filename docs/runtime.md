@@ -1,36 +1,31 @@
 # Run context
 
+Where the step runs. Most steps need only `step.start()` ([The step API](step.md)); this module is for code that
+is not the step's entry (a library, a helper) and for the step's share of a shared HPC node.
+
 ```python
 from kaos_lib import runtime
-ctx = runtime.context()    # frozen dataclass, read from the environment; missing values are None
-runtime.run_id()           # $KUBECORE_RUN_ID, or None
+ctx = runtime.context()    # frozen dataclass; a value that was not given is None, and it never raises
+runtime.run_id()           # the run's name, or None outside a pipeline run
+runtime.in_step()          # whether this process is a pipeline step
 runtime.usable_cpus()      # the cores to size worker pools by (see "A shared HPC node" below)
 ```
 
-| field | variables (first non-empty wins) |
+| field | what it is |
 | --- | --- |
-| `run_id` | `KUBECORE_RUN_ID` |
-| `workflow` | `KUBECORE_WORKFLOW_NAME` |
-| `app` | `KUBECORE_APP`, else `<app>` of `outputs_repo` = `outputs-<app>` |
-| `project` | `KUBECORE_PROJECT` |
-| `step` | `KUBECORE_STEP`, `STEP_NAME` |
-| `outputs_repo` | `OUTPUTS_REPO`, `CHECKPOINT_BUCKET` |
-| `lakefs_endpoint` | `LAKEFS_ENDPOINT`, `LAKEFS_URL` |
+| `run_id` | the run's name |
+| `app`, `project` | the app and its project |
+| `step`, `kind` | the step's name and its kind |
+| `experiment` | the experiment the run belongs to |
+| `outputs_repo` | the app's outputs repository, `outputs-<app>` |
+| `lakefs_endpoint` | `LAKEFS_ENDPOINT`, else `LAKEFS_URL` |
 | `mlflow_uri` | `MLFLOW_TRACKING_URI` |
-| `dataset_ref` | `KUBECORE_DATASET_REF`, `DATASET`, `DATASET_REPO@DATASET_REF` |
-| `dataset_commit` | `KUBECORE_DATASET_COMMIT`, `DATASET_COMMIT` |
 | `support` | the `kaos_lib.support` verdict for `$KAOS_LIB_SUPPORT` |
-| `slot` | `KUBECORE_SLOT_GPUS`, `KUBECORE_SLOT_CPUS`, `KUBECORE_SLOT_MEM_GIB`, `KUBECORE_SLOT_SHARED` (a `Slot`, or None) |
+| `slot` | the step's share of a shared HPC (Slurm) node (a `Slot`, or None) |
 
-Every step gets the run id, workflow name, results repository and endpoints; a value the step does not have is
-`None` (`KUBECORE_APP`, `KUBECORE_PROJECT` and `KUBECORE_STEP` are not set yet; in an HPC (Slurm) job the step comes from
-`STEP_NAME`).
-
-The run's dataset is not read from this context. Read it from the composed config (`cfg["dataset"]`, see
-[How a step works](steps.md)), and its commit from `datasets.resolve(...)`
-([How steps use datasets](steps-and-datasets.md)). `KUBECORE_DATASET_REF` and `KUBECORE_DATASET_COMMIT` are not set
-by the platform for a step on its machines, nor in an HPC (Slurm) job. An HPC job sets `DATASET` (the run's dataset
-setting) and `DATASET_COMMIT` (the pinned commit), so `dataset_ref` and `dataset_commit` are filled there only.
+The first six come from what the platform hands a pipeline step and are `None` on your own machine. The step's
+config, inputs and upstream results are not here: they are `step.start().params`, `step.input()` and
+`step.upstream()`.
 
 ## A shared HPC node
 
