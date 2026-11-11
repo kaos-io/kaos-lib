@@ -64,6 +64,7 @@ every step of one run, use a version: `dataset-toy@v1`.
 | pinned | yes | yes, and the lock records the owner |
 | written to | by people, through a pull request | never: it is read-only |
 | kept apart in the cache | `<cache>/<repo>/<commit>` | `<cache>/<owner>/<repo>/<commit>` |
+| on HPC (Slurm) | yes | not yet: a step that would read it there is refused before it starts |
 
 Reading a shared dataset in a step needs `kaos-lib[zitadel]` in the image. See [Datasets shared with your project](shared-datasets.md).
 
@@ -159,6 +160,8 @@ Start a fresh command without `--lock` to read another version.
 | `@latest` to compare two runs | each run pins a different commit | release a version and use `@v1` |
 | the step logs to no MLflow run | nothing is recorded: the lock is written to a run when the run ends | log the step's work to an MLflow run ([MLflow](mlflow.md)) |
 | the step writes into the folder `materialize` returned | the write fails on HPC (Slurm), or is lost | copy the files, then change the copy |
+| the `dataset` setting names something that is not a dataset (its name does not start with `dataset-`) | the run stops in its first step, before any other step starts, and names the field | pick a dataset: `dataset-<name>@<version>` |
+| a step that reads a shared dataset is placed on HPC (Slurm) | the step is refused before a job is submitted | run that step on the platform's machines, or ask the owner for a copy in your project |
 | the dataset has no files yet | `EmptyDataset` | push files and release a version ([Datasets](datasets.md)) |
 | the dataset is read from `context().dataset_ref` | it can be `None`: the platform does not fill it in every step | read `cfg["dataset"]` |
 
