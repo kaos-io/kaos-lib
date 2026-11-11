@@ -1,10 +1,12 @@
-"""Shared fixtures: a fake lakeFS, a clean environment, and a sample yolo dataset on disk."""
+"""Shared fixtures: a fake lakeFS (or a real one, see ``real_lakefs``), a clean environment, and a sample yolo
+dataset on disk."""
 from __future__ import annotations
 
 import json
 
 import pytest
 
+import real_lakefs
 from fake_lakefs import FakeLakeFS
 
 ENV_VARS = ("LAKEFS_ENDPOINT", "LAKEFS_URL", "LAKEFS_ACCESS_KEY", "LAKEFS_SECRET_KEY", "LAKEFS_BEARER_TOKEN",
@@ -33,13 +35,42 @@ def clean_env(tmp_path, monkeypatch):
     monkeypatch.setattr(mlflow, "_source", mlflow.TokenSource())
 
 
+def pytest_generate_tests(metafunc):
+    """With ``$KAOS_LIB_TEST_LAKEFS=real`` (or ``both``), every test that uses ``fake`` also runs on a real server."""
+    backends = real_lakefs.modes()
+    if backends != ["fake"] and "fake" in metafunc.fixturenames:
+        metafunc.parametrize("lakefs_backend", backends, ids=[f"{b}-lakefs" for b in backends])
+
+
 @pytest.fixture
-def fake():
+def lakefs_backend():
+    return "fake"
+
+
+@pytest.fixture(scope="session")
+def lakefs_server():
+    """The container, started by the first test that needs it (skipped when docker is not available)."""
+    holder = {}
+    yield lambda: holder.get("server") or holder.setdefault("server", real_lakefs.Server())
+    if "server" in holder:
+        holder["server"].stop()
+
+
+@pytest.fixture
+def fake(lakefs_backend, lakefs_server):
+    if lakefs_backend == "real":
+        f = real_lakefs.RealLakeFS(lakefs_server())
+        f.add_repo("dataset-default", metadata={"kaos.kind": "dataset", "kaos.template": "yolo",
+                                                "kaos.default": "true"})
+        f.add_repo("outputs-myapp", metadata={"kaos.kind": "outputs", "kaos.app": "myapp"})
+        yield f
+        f.cleanup()
+        return
     f = FakeLakeFS()
     f.add_repo("dataset-default", metadata={"kaos.kind": "dataset", "kaos.template": "yolo",
                                             "kaos.default": "true"})
     f.add_repo("outputs-myapp", metadata={"kaos.kind": "outputs", "kaos.app": "myapp"})
-    return f
+    yield f
 
 
 @pytest.fixture

@@ -11,6 +11,21 @@ endpoint (`tests/fake_zitadel.py`) and a fake MlflowClient (`tests/fake_mlflow.p
 network. With mlflow-skinny installed (the `test` extra) a few tests also drive real MLflow: its auth-provider
 registry, a request to a local HTTP server, and a lock round trip through a file store.
 
+### Against a real lakeFS
+
+The fake has no merge conflicts, no branch protection and no policies. To run every test that uses it against a real
+server in a container as well (needs docker; skipped when docker is not available):
+
+```bash
+KAOS_LIB_TEST_LAKEFS=real pytest -k real-lakefs      # only the tests that reach lakeFS, on the real server
+KAOS_LIB_TEST_LAKEFS=both pytest                     # everything; those tests run twice
+```
+
+The image is `$KAOS_LIB_TEST_LAKEFS_IMAGE`, else a local `kaos-lake:prd1911` when there is one, else
+`treeverse/lakefs:1.86.0`, with local block storage. `tests/real_lakefs.py` gives the server the fake's helper names;
+the `/kaos/v1` answers stay scripted, and a test that rewrites the fake's state in place is skipped there.
+`tests/test_real_server.py` holds what only a real server answers (a refused merge, a protected branch).
+
 ## File map
 
 | file | job |
