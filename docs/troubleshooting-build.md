@@ -48,5 +48,4 @@ enable anything for you.
 |---|---|
 | `this step reads MLFLOW_TRACKING_URI, which only the platform sets` | Expected on a laptop. The step runs without it and may stop with its own error; give it a fallback or a stub. |
 | `composing the parameters failed` | A bad `--set` override, or a config error: the message is the composer's own. `--params-file` skips composing. |
-| `this repository has no kubecore/compose.py` | Pass `--params-file FILE`. |
 | `input --x: empty ({})` | Run the step that produces `x` first, or pass `--input x=<json>`. |

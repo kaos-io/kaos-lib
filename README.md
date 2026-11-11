@@ -68,6 +68,7 @@ pip install -r docs/requirements.txt -e . && mkdocs serve    # the documentation
 ```
 
 The CLI reference is generated from the code on every docs build (never edit `docs/generated/`), and the site must
-build with `mkdocs build --strict`.
+build with `mkdocs build --strict`. The build also runs `docs_check.py` (words, removed names, links across this
+site and both pipeline templates): see [Develop](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/develop.html).
 
 License: Apache-2.0.

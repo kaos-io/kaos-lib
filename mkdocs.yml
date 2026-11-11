@@ -24,6 +24,7 @@ exclude_docs: |
   generated/install.md
 hooks:
   - docs/hooks.py
+  - docs_check.py   # words, removed names, links: a finding fails the build
 
 theme:
   name: material
