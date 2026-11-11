@@ -57,6 +57,19 @@ def test_should_fall_back_to_pyproject_constraints_without_a_lock_file(repo):
     assert d.requirements == ["torch>=2.3,<3", "PyYAML>=6.0,<7"]
 
 
+def test_should_keep_a_lock_platform_marker_so_a_win32_only_dep_is_not_demanded_elsewhere(tmp_path):
+    # Regression: a poetry.lock package carrying `markers` (e.g. pywin32, sys_platform == "win32") must keep it, or
+    # `kaosctl dev` demands a Windows-only dep on macOS/Linux and fails on a step whose real poetry build is fine.
+    repo = template_repo(tmp_path / "app", {
+        "steps/model_training/poetry.lock":
+            '[[package]]\nname = "torch"\nversion = "2.3.1"\ngroups = ["main"]\n\n'
+            '[[package]]\nname = "pywin32"\nversion = "311"\ngroups = ["main"]\nmarkers = "sys_platform == \\"win32\\""\n',
+    })
+    d = deps.read_step_deps(repo / "steps/model_training")
+    assert 'pywin32==311 ; sys_platform == "win32"' in d.requirements   # kept, so pip/uv skip it off-Windows
+    assert "torch==2.3.1" in d.requirements                             # a dep with no marker is unchanged
+
+
 def test_should_follow_a_requirements_file_named_in_the_dockerfile(repo):
     (repo / "steps/data_summary/Dockerfile").write_text(
         "FROM python:3.10-slim\nRUN pip install --no-cache-dir -r requirements.txt\n")
