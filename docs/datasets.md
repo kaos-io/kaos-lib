@@ -9,6 +9,34 @@
 - Changes reach `main` only through a **pull request**. The only direct commit is the starter layout `create` writes.
 - Each ML app writes its results to `outputs-<app>` ([Outputs](outputs.md)), never to a dataset.
 
+## Where you work with datasets
+
+| place | what you do there |
+| --- | --- |
+| the KAOS console, **Datasets** page | see every dataset of your organisation, its versions and where it is; share a dataset with another project; open a project's lakeFS to create one |
+| lakeFS (your project's data store), **Datasets** page | **New dataset**, upload files on a branch, open and merge pull requests, edit `data.yaml`, **Release version** |
+| `kaosctl` on your computer | the same from a terminal: [create, push, validate, release, download](#commands) |
+| a pipeline step | read the version the run picked ([How steps use datasets](steps-and-datasets.md)) |
+
+People create datasets, push changes, merge pull requests and release versions. A pipeline only reads datasets: no
+step can write to one, and nobody writes to a dataset's `main` directly.
+
+## In the browser
+
+- **Create.** Open your project's lakeFS and go to **Datasets** (from the KAOS console: **Datasets** → **Create in
+  project**). Click **New dataset**, type the name and a short description, and choose the layout: **No layout**
+  (chosen until you pick another) takes any files; **yolo** asks for the class names, one per line, in label-id
+  order (the first one is id `0`).
+- **Add or change files.** This suits a few files; for many, use `kaosctl dataset push`. Open the dataset →
+  **Branches** → create a branch from `main`, upload your files to that branch, and open a **pull request** into
+  `main`. To change the class names of a `yolo` dataset, open `data.yaml` and use **Edit** (Edit classes): it writes
+  `data.yaml` again from the names you typed, so its class count always matches, and saves the change as a pull
+  request.
+- **Merge.** Open the pull request, look at the change, and **Merge**. Until then `main` is unchanged.
+- **Release.** Open the dataset on the **Datasets** page and click **Release version**. A few minutes later the run
+  form of every pipeline offers the version in its `dataset` dropdown (`dataset-cats@v1`, `dataset-cats@latest`); if
+  it is not there yet, open the form again.
+
 ## Any repository works
 
 `DatasetRef.parse` accepts any lakeFS repository (`my-repo@main`) and a ref that is `vN` (a version tag), `latest`
@@ -59,6 +87,12 @@ kaosctl dataset versions <repo>
 kaosctl dataset pull [<owner>/]<repo>@<version> [dest]
 kaosctl dataset list [--shared]
 ```
+
+`push` makes the dataset look exactly like your folder: it uploads new and changed files and removes the files you
+deleted, on a draft branch, and opens the pull request; a dataset that does not exist yet is created. `pull`
+without `dest` keeps the copy by repository and commit and prints where it is, so pulling the same commit again is
+instant; `--prefix folder/` downloads one folder, and the ref can be a version, `latest`, a branch, a tag or a
+commit id. A copy you pulled is yours to change: `push` the folder to send the changes back.
 
 `create` makes an empty dataset unless you name a layout (`--layout yolo`, or `--layout none` to say so); the
 platform lists an empty dataset once its first commit lands. `--classes` and `--param` need a named layout. `validate` uses the

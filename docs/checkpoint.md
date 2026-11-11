@@ -87,6 +87,27 @@ parameters are logged as usual. Metrics keep the framework's own step numbers, w
 A continued run waits in the queue again and its time counts against your budget. A checkpoint is used only when it
 verifies; if the newest does not, the previous one is. `resumable=False` on the step turns continuing off.
 
+The platform copies the folder every 10 minutes by default, and when the machine is being taken away. A slow copy
+lengthens the interval, so copying stays near 10 % of the run time. It keeps the two newest copies and deletes them
+all when the step succeeds. `checkpoint_every=`, `idle_timeout=` and the HPC time limit are set on the step in
+`pipeline.py` ([What you declare](steps.md#what-you-declare)); a CPU step is copied only when it sets
+`checkpoint_every=`. The folder is on the step's own disk, so a checkpoint of several GB needs room: raise `disk=`
+on the step (for example `disk="30Gi"`).
+
+## What you see in the step's log
+
+| message | meaning |
+|---|---|
+| `[kaos-checkpoint] continuing from the checkpoint saved at 12:03:11 UTC (3 files)` | this is a repeat; the step picks up from that copy |
+| `[kaos-checkpoint] no saved checkpoint for this step: starting from the beginning` | a first run, or nothing had been saved yet |
+| `[kaos-checkpoint] saved a checkpoint copy: 3 files, 212.4 MB, 4 s` | a regular copy |
+| `[kaos-checkpoint] skipping checkpoint ...: the copy does not match its checksum` | a damaged copy was ignored; the previous one is used |
+| `[kaos-checkpoint] could not save a checkpoint copy (...); the step is not affected` | the copy failed; the step carries on and tries again later |
+| `[kaos-checkpoint] step finished; its checkpoint copies were removed` | the step succeeded and the copies were cleaned up |
+
+A repeated step shows its attempts one after the other in the run (`train(1)`, `train(2)`). On HPC (Slurm) the
+step's status line says why a job was repeated.
+
 ## Declare it in the pipeline, or let the platform learn it
 
 On HPC (Slurm) a step can say how it wants to be stopped: `resumable="3m"` on the step (a lead time such as `"3m"` or
@@ -113,4 +134,9 @@ You never name a queue or a QoS: the time limit and the lane a step runs in are 
 | a continued step starts from scratch | your code must read the folder: point the framework at `checkpoint.dir()`, or use `load` |
 | `NoProgress` | the step restarted without loading, or saved the same state: check that you load what you saved |
 | saving is slow or the checkpoint is large | save less (weights only), or save less often |
+| the step ends as failed after its machine was reclaimed | it ran out of its two repeats: run it again, or pick an on-demand class for this step |
+| copies fail with a disk message | raise `disk=` on the step |
+| the step was ended as idle but was working | raise `idle_timeout=` on the step (`idle_timeout=0` turns the rule off) |
+| a GPU step fails with `KaosIdle: ended by the idle watchdog ...` | the platform saw no GPU use and no new log line for the idle time and stopped the step, so the GPU stops costing money |
+| a CPU step is not copied | set `checkpoint_every=` on it (a short CPU step is simply repeated) |
 | the hooks did nothing | `KAOS_CHECKPOINT_HOOKS` must not be 0; framework versions the hooks do not know are left alone, with a message in the log |

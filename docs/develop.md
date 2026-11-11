@@ -39,7 +39,7 @@ registry, a request to a local HTTP server, and a lock round trip through a file
 | `lint/` | the pipeline linter: `engine.py` runs the rules of `rules_errors.py`, `rules_warnings.py`, `rules_infos.py` over what `pipeline_reader.py` / `project_reader.py` read, with the facts of `catalogue.py`; `model.py` (report), `render.py`, `cli.py`; `standalone.py` runs it without importing the rest of kaos-lib (PR gate). Static: never runs client code. Standard library + PyYAML only |
 | `lint/schema.py`, `lint/graph.py` | `kaosctl lint --schema` (what `step()` accepts, for editors) and `--graph` (the step DAG); the extension's bundled copy of the schema is `editors/vscode/resources/step-schema.json`, kept equal by `tests/test_lint_schema.py` |
 | `editors/vscode/` | the VS Code extension (TypeScript, no runtime dependencies): `npm test`, `npm run package`; see its README |
-| `kubecore/` | the deprecated `kubecore` import shim (0.3.x and 0.4.x) |
+| `src/kubecore/` | the deprecated `kubecore` import shim (0.3.x and 0.4.x) |
 
 ## The documentation site
 
@@ -47,3 +47,21 @@ Build it with `mkdocs build --strict` (`pip install -r docs/requirements.txt -e 
 runs `docs_gen.py` before every build and writes `docs/generated/`: the CLI reference (every `kaosctl` command's
 `--help`, from `kaos_lib.cli.build_parser`), the version line, and each channel's install command (from its public
 `release.json`). Never edit `docs/generated/`; it is not committed.
+
+The second hook, `docs_check.py`, runs three checks before every build, and a finding fails the build. Run them
+alone with `python3 docs_check.py`:
+
+| check | fails on |
+| --- | --- |
+| words | a page that names what the platform is built from. These pages are for client engineers: the list is `WORDS` in the file |
+| removed names | a step or a folder that no longer exists (`REMOVED` in the file) |
+| links | a link of this repository that does not resolve, here or in the two pipeline templates (hera, yolo), and a link of a template into this site that does not resolve |
+
+The link check reads the templates at their trunk: it downloads them, or reads the checkouts named by
+`DOCS_CHECK_HERA` and `DOCS_CHECK_YOLO`. `DOCS_CHECK_OFFLINE=1` checks this repository alone and says what it
+skipped (a build that cannot download them does the same, so the site still builds without the network); `DOCS_CHECK_EXTERNAL=1` also fetches every other address. The same file is kept in both templates
+(`scripts/docs_check.py`): change it in all three. `CHANGELOG.md` and `docs/design/` are not client pages and are
+not checked for words and removed names.
+
+One topic has one page. What is true for every pipeline is explained here; a template's guide holds only what is
+specific to that template and links here for the rest.
