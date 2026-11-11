@@ -38,6 +38,11 @@ _COMMIT_RE = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 _OWNER_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")   # a project name, as kaos-lake validates it
 
 
+def is_repo_name(name: str) -> bool:
+    """Whether ``name`` can be a lakeFS repository name at all (lakeFS answers anything else with an error)."""
+    return bool(_REPO_RE.match(name or ""))
+
+
 def dataset_repo(name: str) -> str:
     """``dataset-<name>`` from ``name`` or ``dataset-<name>``; validates the 3-48 char ``[a-z0-9-]`` rule."""
     short = name[len(DATASET_PREFIX):] if name.startswith(DATASET_PREFIX) else name

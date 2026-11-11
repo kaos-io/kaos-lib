@@ -48,3 +48,14 @@ def pull_sample(ref_text: str, dest: pathlib.Path, max_mb: int, client: Optional
     for o in chosen:
         c.download_object(ref.repo, commit, o["path"], dest / o["path"])
     return len(chosen), sum(o.get("size_bytes", 0) for o in chosen)
+
+
+def repository(ref_text: str) -> str:
+    """The repository `<repository>@<ref>` names."""
+    return datasets.DatasetRef.parse(ref_text).repo
+
+
+def layout(ref_text: str, client: Optional[LakeFS] = None) -> str:
+    """The layout of the dataset `<repository>@<ref>` (its label; `raw` when it has none)."""
+    ref, c = datasets.source(datasets.DatasetRef.parse(ref_text), client or LakeFS.connect())
+    return datasets.layout_of(ref.repo, c)

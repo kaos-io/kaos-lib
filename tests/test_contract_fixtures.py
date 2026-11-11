@@ -67,3 +67,14 @@ def test_line_is_kept_and_never_invented():
     ledger = lock.DataLock.parse({"version": 2, "reads": [entry], "writes": []})
     assert ledger.to_dict()["reads"] == [entry]
     assert "line" not in lock.Read("dataset-raw", "v1", "c1").as_dict()
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_every_fixture_is_within_its_cap_by_cost(name):
+    from kaos_lib import step
+    text = (HERE / f"{name}.wire").read_text()
+    assert lock.cost(text) == len(text) + text.count('"') + text.count(chr(92)) >= len(text)
+    if name.startswith("context-"):
+        assert lock.cost(text) <= step.CONTEXT_CAP
+    if name.startswith("result-"):
+        assert lock.cost(text) <= step.RESULT_CAP

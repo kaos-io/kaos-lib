@@ -19,7 +19,7 @@ from . import credentials
 from .config import resolve_endpoint
 from .errors import AuthError, LakeFSError, NotFoundError
 
-USER_AGENT = "kaos-lib/0.4"
+USER_AGENT = "kaos-lib/0.5"
 
 
 def _q(value: str) -> str:
@@ -136,6 +136,10 @@ class LakeFS:
             return self._call("GET", f"/repositories/{_q(repo)}", what=f"repository {repo}").json()
         except NotFoundError:
             return None
+        except LakeFSError as exc:
+            if exc.status == 400 and "invalid value" in str(exc):   # a name no repository can have: there is none
+                return None
+            raise
 
     def create_repository(self, repo: str, storage_namespace: str, default_branch: str = "main") -> None:
         self._call("POST", f"/repositories", json={

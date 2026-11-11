@@ -13,7 +13,7 @@ from typing import Callable, Iterable, Optional
 from .lakefs import LakeFS
 
 # layouts.local.MARKER: a pulled copy's marker never goes back up when the folder is pushed.
-IGNORED_NAMES = {".DS_Store", "Thumbs.db", ".kubecore-dataset.json"}
+IGNORED_NAMES = {".DS_Store", "Thumbs.db", ".kubecore-dataset.json", ".kaos-ready"}
 
 
 @dataclass

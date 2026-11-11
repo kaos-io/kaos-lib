@@ -22,7 +22,8 @@ Replay matches a resolve on (owner, repo, ref) first, then on (owner, repo) when
 that repository. A commit pinned by the caller (``ref.commit`` or ``commit=``) is used as given and recorded.
 
 ``wire(value)`` is the form in which a context or a result crosses a process boundary: JSON with no whitespace,
-ASCII only, and ``{`` and ``}`` inside strings written as ``\\u007b`` and ``\\u007d``.
+ASCII only, and ``{`` and ``}`` inside strings written as ``\\u007b`` and ``\\u007d``. ``cost(text)`` is what such a
+text counts against a size cap.
 """
 from __future__ import annotations
 
@@ -61,6 +62,12 @@ def wire(value) -> str:
                 raise TypeError(f"object keys must be strings, got {key!r}")
         return "{" + ",".join(wire(k) + ":" + wire(v) for k, v in value.items()) + "}"
     raise TypeError(f"not a JSON value: {value!r}")
+
+
+def cost(wire_text: str) -> int:
+    """What a value in wire form costs against its cap: its length as a JSON string, where each quote and each
+    backslash counts twice. That is the room it takes where the platform carries it."""
+    return len(wire_text) + wire_text.count('"') + wire_text.count("\\")
 
 
 def _default_name(repo: str) -> str:

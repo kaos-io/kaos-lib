@@ -21,7 +21,7 @@ SCHEMA_VERSION = 1
 AUTHORING_MODULES = ("kubecore.authoring",)
 
 # Argument names the library no longer takes and what to use instead: the editor offers a one-click rename.
-RENAMED_ARGUMENTS = {"walltime": "hpc_time_limit"}
+RENAMED_ARGUMENTS = {"hpc_time_limit": "walltime"}
 
 GUIDE_URL = DOC_BASE[: -len("lint/")] + "lint.html"
 
@@ -38,26 +38,44 @@ _PARAMS = {
             "underscores) and its image, so use lowercase letters, digits and hyphens, with no hyphen at the start "
             "or end, for example `model-evaluation`. Every step needs its own name.",
         pattern=STEP_NAME_PATTERN, values=[]),
+    "kind": dict(
+        type="str", required=True, rules=("L-E07",), snippet='"${1|ingest,transform,train,evaluate,publish,control|}"',
+        doc="What the step is. Required. The platform labels the step with it and offers only the compute "
+            "classes that fit the kind.",
+        values=[_value('"ingest"', "Brings data in from outside."),
+                _value('"transform"', "Turns data into other data: preprocess, filter, split, convert."),
+                _value('"train"', "Trains a model."),
+                _value('"evaluate"', "Measures a model or a dataset."),
+                _value('"publish"', "Registers or delivers a result."),
+                _value('"control"', "Decides or coordinates; does no data work itself.")]),
     "reads": dict(
         type="list[str]", rules=("L-E05",), snippet='["${1:train}"]',
         doc="The config sections the step reads (the files and folders of `config/`, for example `\"train\"`). A "
             "section that does not exist is refused when the pipeline is rendered.",
         values=[]),
+    "produces": dict(
+        type="list[model|artifact|dataset]", rules=("L-E07",), snippet='[${1|model,artifact,dataset|}("${2:name}")]',
+        doc="What the step writes: `model(\"name\")`, `artifact(\"name\")` or `dataset(\"name\")`. The step "
+            "writes each into the folder `step.output(\"name\")` gives it, and `step.result()` saves them.",
+        values=[_value('[model("model")]', "The step writes a model."),
+                _value('[artifact("report")]', "The step writes files that belong to this run."),
+                _value('[dataset("clean")]', "The step writes a version of the dataset `clean`.")]),
     "gpu": dict(
         type="bool", rules=("L-E06", "L-W01", "L-W02"), snippet="True",
-        doc="Run the step on a GPU. Only GPU steps can run on the HPC (Slurm) site, so `hpc_time_limit` and "
+        doc="Run the step on a GPU. Only GPU steps can run on the HPC (Slurm) site, so `walltime` and "
             "`resumable` need `gpu=True`.",
         default="False",
         values=[_value("True", "The step gets one GPU."), _value("False", "A CPU step (the default).")]),
+    "inputs": dict(
+        type="list[str]", rules=("L-E07",), snippet='["${1:dataset}"]',
+        doc="The names of the config values that hold a dataset reference, for example `\"dataset\"` for "
+            "`dataset: my-data@latest`. The platform pins each to one exact version when the run starts, and "
+            "the step reads it with `step.input(\"dataset\")`. Step code never names a version.",
+        values=[]),
     "needs": dict(
         type="list[step]", rules=("L-E05",), snippet="[${1:previous_step}]",
         doc="The steps that must finish first. Give the step variables (`needs=[prepare]`), not their names, and "
             "define each step above the steps that need it.",
-        values=[]),
-    "outputs": dict(
-        type="list[str]", rules=(), snippet='["${1:metrics}"]',
-        doc="The names of the values this step passes on. Every step that lists this step in `needs` receives them "
-            "as inputs.",
         values=[]),
     "when": dict(
         type="str", rules=(), snippet='"${1:condition}"',
@@ -70,7 +88,7 @@ _PARAMS = {
             "for example `\"20Gi\"`. Set it for steps that need more than the platform's default.",
         pattern=DISK_PATTERN,
         values=[_value('"20Gi"', "20 gibibytes."), _value('"50Gi"', "50 gibibytes."), _value('"200Gi"', "200 gibibytes.")]),
-    "hpc_time_limit": dict(
+    "walltime": dict(
         type="str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-I02"), snippet='"${1:12h}"',
         doc="The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or "
             f"`\"720\"` (minutes). Only for `gpu=True` steps. Without it the platform uses {DEFAULT_LIMIT_MINUTES // 60} "

@@ -69,7 +69,7 @@ export function layoutPipeline(p: GraphPipeline): Layout {
 function badges(n: GraphNode): string[] {
   const out: string[] = [];
   if (n.gpu) { out.push("GPU"); }
-  if (n.hpc_time_limit !== null) { out.push(`limit ${String(n.hpc_time_limit)}`); }
+  if (n.walltime !== null) { out.push(`limit ${String(n.walltime)}`); }
   if (n.resumable === true || (typeof n.resumable === "string")) { out.push("resumable"); }
   if (n.resumable === false) { out.push("not resumable"); }
   if (n.disk !== null) { out.push(`disk ${String(n.disk)}`); }

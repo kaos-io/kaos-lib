@@ -15,7 +15,9 @@ from typing import Optional
 import yaml
 
 from .constants import (CHECKPOINT_DIR_ENV, CHECKPOINT_FRAMEWORKS, CHECKPOINT_STATE_NAMES, CONFIG_DIR, MAX_FILE_BYTES,
-                        MAX_STEP_BYTES, MAX_STEP_FILES, STEPS_DIR)
+                        MAX_STEP_BYTES, MAX_STEP_FILES, OLD_ENTRY_ARGUMENT, OLD_ENTRY_VARIABLES, STEPS_DIR)
+
+ENTRY_FILE = "app/entry.py"        # the module the platform starts: python -m app.entry
 from .model import Span
 from .source import SourceFile, TooLarge, inside, parse_python, read_text
 
@@ -32,6 +34,9 @@ class StepSource:
     uses_mlflow: bool = False
     registers_model: bool = False
     latest_refs: list = field(default_factory=list)   # (file, Span) of a string holding `@latest`
+    has_entry: bool = False            # app/entry.py exists: the module the platform starts
+    starts_step: bool = False          # the code calls kaos_lib.step (step.start())
+    old_contract: list = field(default_factory=list)  # (file, Span, what): how steps were written before kaos_lib.step
 
 
 @dataclass
@@ -122,6 +127,12 @@ def _scan_python(src: SourceFile, out: StepSource) -> None:
             out.registers_model |= n.value.startswith("models:/")
             if LATEST_REF.search(n.value):
                 out.latest_refs.append((src.rel, src.span(n)))
+            if n.value == OLD_ENTRY_ARGUMENT:
+                out.old_contract.append((src.rel, src.span(n), f"takes {OLD_ENTRY_ARGUMENT} on its command line"))
+            elif n.value in OLD_ENTRY_VARIABLES:
+                out.old_contract.append((src.rel, src.span(n), f"reads {n.value} from the environment"))
+        if isinstance(n, ast.Attribute) and n.attr == "start" and isinstance(n.value, ast.Name) and n.value.id == "step":
+            out.starts_step = True
 
 
 def read_step_source(root: pathlib.Path, name: str) -> StepSource:
@@ -143,6 +154,7 @@ def read_step_source(root: pathlib.Path, name: str) -> StepSource:
         if src is None:
             continue
         if path.suffix == ".py":
+            out.has_entry |= path.relative_to(folder).as_posix() == ENTRY_FILE
             if parse_python(src) is not None:
                 _scan_python(src, out)
         else:   # dependency files: an `mlflow` dependency counts as MLflow use

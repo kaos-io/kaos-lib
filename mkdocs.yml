@@ -115,6 +115,8 @@ nav:
       - L-E04: lint/L-E04.md
       - L-E05: lint/L-E05.md
       - L-E06: lint/L-E06.md
+      - L-E07: lint/L-E07.md
+      - L-E08: lint/L-E08.md
       - L-W01: lint/L-W01.md
       - L-W02: lint/L-W02.md
       - L-W03: lint/L-W03.md
@@ -140,6 +142,5 @@ nav:
       - Support policy and upgrades: support-window.md
       - Troubleshooting: troubleshooting.md
       - Troubleshooting dev, run, build: troubleshooting-build.md
-      - Formerly kubecore: formerly-kubecore.md
       - Develop: develop.md
   - Changelog: changelog.md

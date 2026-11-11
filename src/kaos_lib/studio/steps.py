@@ -11,7 +11,7 @@ import pathlib
 from dataclasses import dataclass, field
 
 from ..errors import KaosLibError
-from ..lint.constants import PIPELINE_FILE
+from ..lint.constants import PIPELINE_FILE, PRODUCE_TYPES
 from ..lint.pipeline_reader import UNKNOWN, read_pipeline
 from ..lint.source import TooLarge, parse_python, read_text
 from .constants import COMPOSE_STEP, STEPS_DIR
@@ -19,15 +19,17 @@ from .constants import COMPOSE_STEP, STEPS_DIR
 
 @dataclass
 class StepInfo:
-    """One step: its name, folder, declared outputs, the steps it needs and whether it asks for a GPU."""
+    """One step: its name, folder, kind, what it reads and produces, the steps it needs and whether it asks for a GPU."""
     name: str
     folder: str                                   # steps/<name with underscores>, relative to the repository root
     root: pathlib.Path
-    outputs: list = field(default_factory=list)
     needs: list = field(default_factory=list)     # names of the steps it needs
     reads: list = field(default_factory=list)
     gpu: bool = False
     implicit: bool = False                        # compose-and-validate: the platform adds it, pipeline.py does not
+    kind: str = ""                                # kind=, "" when it is missing or not a literal
+    inputs: list = field(default_factory=list)    # inputs=: the config values that hold a dataset reference
+    produces: list = field(default_factory=list)  # produces=: (type, name) for model(...), artifact(...), dataset(...)
 
     @property
     def path(self) -> pathlib.Path:
@@ -65,10 +67,22 @@ def _pipeline_steps(root: pathlib.Path) -> list:
         if s.name is UNKNOWN:
             continue
         needs = [by_var[n.id].name for n in _names(s.node("needs")) if n.id in by_var]
-        outputs = s.value("outputs", [])
-        reads = s.value("reads", [])
-        out.append(StepInfo(s.name, folder_of(s.name), root, list(outputs) if isinstance(outputs, (list, tuple)) else [],
-                            needs, list(reads) if isinstance(reads, (list, tuple)) else [], s.is_gpu is True))
+        reads, inputs, kind = s.value("reads", []), s.value("inputs", []), s.value("kind", "")
+        out.append(StepInfo(s.name, folder_of(s.name), root, needs,
+                            list(reads) if isinstance(reads, (list, tuple)) else [], s.is_gpu is True,
+                            kind=kind if isinstance(kind, str) else "",
+                            inputs=list(inputs) if isinstance(inputs, (list, tuple)) else [],
+                            produces=_produces(s.node("produces"))))
+    return out
+
+
+def _produces(node) -> list:
+    """`(type, name)` for every `model("x")`, `artifact("x")` or `dataset("x")` of a literal produces=[...]."""
+    out = []
+    for el in node.elts if isinstance(node, (ast.List, ast.Tuple)) else ():
+        if isinstance(el, ast.Call) and isinstance(el.func, ast.Name) and el.func.id in PRODUCE_TYPES and el.args \
+                and isinstance(el.args[0], ast.Constant) and isinstance(el.args[0].value, str):
+            out.append((el.func.id, el.args[0].value))
     return out
 
 

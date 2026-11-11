@@ -9,7 +9,7 @@ from kaos_lib.lint import lint_project
 from lint_corpus import write_repo
 
 DOCS = pathlib.Path(__file__).resolve().parent.parent / "docs" / "lint"
-PIPE = 'from kubecore.authoring import pipeline, step\n\nwith pipeline("p") as p:\n    a = step("work"%s)\n'
+PIPE = 'from kubecore.authoring import pipeline, step\n\nwith pipeline("p") as p:\n    a = step("work", kind="train"%s)\n'
 ENTRY = "app/entry.py"
 GOOD = ('FROM python:3.11-slim\nWORKDIR /app\nARG KAOS_LIB_PACKAGE="kaos-lib==0.4.0"\n'
         'RUN pip install --no-cache-dir "${KAOS_LIB_PACKAGE}"\nCOPY app/ ./app/\nENTRYPOINT ["python", "-m", "app.entry"]\n')

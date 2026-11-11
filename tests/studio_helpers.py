@@ -8,39 +8,57 @@ import sys
 
 from kaos_lib.studio import proc
 
-PIPELINE = '''from kubecore.authoring import pipeline, step
+PIPELINE = '''from kubecore.authoring import artifact, dataset, model, pipeline, step
 
 with pipeline("ml-pipeline") as p:
-    load = step("dataset-loading", reads=["dataset"], outputs=["dataset-info"])
-    summary = step("data-summary", reads=["data", "summary"], needs=[load])
-    train = step("model-training", gpu=True, needs=[load], reads=["train"], outputs=["training-result"])
+    load = step("dataset-loading", kind="transform", reads=["dataset"], inputs=["dataset"], produces=[dataset("clean")])
+    summary = step("data-summary", kind="evaluate", reads=["data", "summary"], needs=[load],
+                   produces=[artifact("summary")])
+    train = step("model-training", kind="train", gpu=True, needs=[load], reads=["train"], produces=[model("model")])
 '''
 DOCKER_PLAIN = ('FROM python:3.11-slim\nWORKDIR /app\nRUN pip install --no-cache-dir PyYAML\nCOPY app/ ./app/\n'
                 'ENTRYPOINT ["python", "-m", "app.entry"]\n')
 DOCKER_LIB = ('FROM python:3.11-slim\nWORKDIR /app\nARG KAOS_LIB_PACKAGE="kaos-lib[zitadel]==0.4.0rc20"\n'
               'RUN pip install --no-cache-dir "${KAOS_LIB_PACKAGE}"\nCOPY app/ ./app/\n'
               'ENTRYPOINT ["python", "-m", "app.entry"]\n')
+DOCKER_SUMMARY = DOCKER_LIB.replace('RUN pip install --no-cache-dir "${KAOS_LIB_PACKAGE}"',
+                                    'RUN pip install --no-cache-dir PyYAML "${KAOS_LIB_PACKAGE}"')
 DOCKER_POETRY = ('FROM python:3.12-slim\nWORKDIR /app\nRUN python -m venv /opt/poetry && /opt/poetry/bin/pip install --no-cache-dir poetry\n'
                  'COPY pyproject.toml poetry.lock* ./\nRUN /opt/poetry/bin/poetry export --only=main -f requirements.txt --output /tmp/r.txt '
                  '&& pip install --no-cache-dir -r /tmp/r.txt\nCOPY app/ ./app/\nENTRYPOINT ["python", "-m", "app.entry"]\n')
-SUMMARY_ENTRY = '''"""data-summary: prints a one-line summary of the dataset config (modelled on the yolo template's step)."""
-import argparse
+SUMMARY_ENTRY = '''"""data-summary: prints a one-line summary of the config and of what dataset-loading handed on."""
 import json
-import pathlib
 
-import yaml
+from kaos_lib import step
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--params", required=True)
-    parser.add_argument("--dataset-info", default="{}")
-    args, _ = parser.parse_known_args()
-    cfg = yaml.safe_load(args.params)
-    print(f"{cfg['summary']['label']}: seed={cfg['data']['seed']} info={json.loads(args.dataset_info)}")
-    out = pathlib.Path("/work/output")
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "summary.json").write_text(json.dumps({"seed": cfg["data"]["seed"]}))
+    ctx = step.start()
+    cfg = ctx.params
+    load = step.upstream("dataset-loading", required=False)
+    print(f"{cfg['summary']['label']}: seed={cfg['data']['seed']} info={load.values if load else None}")
+    (step.output("summary") / "summary.json").write_text(json.dumps({"seed": cfg["data"]["seed"]}))
+    step.result(seed=cfg["data"]["seed"])
+
+
+if __name__ == "__main__":
+    main()
+'''
+LOADING_ENTRY = '''"""dataset-loading: copies its input into the dataset it produces and hands the file count on."""
+import shutil
+
+from kaos_lib import step
+
+
+def main():
+    step.start()
+    data = step.input("dataset")
+    files = [p for p in data.rglob("*") if p.is_file() and not p.name.startswith(".")]
+    out = step.output("clean")
+    for f in files:
+        shutil.copy(f, out / f.name)
+    print("loading", len(files), "files")
+    step.result(files=len(files))
 
 
 if __name__ == "__main__":
@@ -81,8 +99,8 @@ def template_repo(root: pathlib.Path, extra: dict = None) -> pathlib.Path:
         "steps/compose_and_validate/Dockerfile": COMPOSE_DOCKER,
         "steps/dataset_loading/Dockerfile": DOCKER_LIB,
         "steps/dataset_loading/app/__init__.py": "",
-        "steps/dataset_loading/app/entry.py": "from kaos_lib import datasets\nprint('loading')\n",
-        "steps/data_summary/Dockerfile": DOCKER_PLAIN,
+        "steps/dataset_loading/app/entry.py": LOADING_ENTRY,
+        "steps/data_summary/Dockerfile": DOCKER_SUMMARY,
         "steps/data_summary/app/__init__.py": "", "steps/data_summary/app/entry.py": SUMMARY_ENTRY,
         "steps/model_training/Dockerfile": DOCKER_POETRY,
         "steps/model_training/app/__init__.py": "", "steps/model_training/app/entry.py": "import torch\n",

@@ -37,7 +37,7 @@ def test_schema_is_versioned_with_the_rule_set():
 def test_schema_patterns_are_the_ones_the_rules_use():
     by_name = {p["name"]: p for p in build_schema()["step"]["parameters"]}
     assert by_name["disk"]["pattern"] == DISK_PATTERN
-    assert by_name["hpc_time_limit"]["pattern"] == TIME_PATTERN
+    assert by_name["walltime"]["pattern"] == TIME_PATTERN
 
 
 def test_every_argument_has_documentation_and_every_link_has_a_page():
@@ -54,14 +54,14 @@ def test_schema_lists_every_rule_with_its_link():
 
 
 def test_renamed_arguments_point_at_real_arguments():
-    assert RENAMED_ARGUMENTS == {"walltime": "hpc_time_limit"}
+    assert RENAMED_ARGUMENTS == {"hpc_time_limit": "walltime"}
     assert set(RENAMED_ARGUMENTS.values()) <= set(STEP_PARAMS)
     assert not set(RENAMED_ARGUMENTS) & set(STEP_PARAMS)
 
 
 def test_allowed_values_match_what_the_library_accepts():
     by_name = {p["name"]: p for p in build_schema()["step"]["parameters"]}
-    for name in ("hpc_time_limit", "disk", "resumable"):
+    for name in ("walltime", "disk", "resumable"):
         pattern = re.compile(by_name[name]["pattern"])
         for v in by_name[name]["values"]:
             text = v["insert"]
@@ -88,8 +88,8 @@ def test_the_extensions_bundled_fallback_equals_the_generated_schema():
 
 
 # ---------------------------------------------------------------- graph
-BODY = ('    a = step("prepare")\n    b = step("train", needs=[a], gpu=True, hpc_time_limit="12h")\n'
-        '    step("evaluate", needs=[a, b])\n')
+BODY = ('    a = step("prepare", kind="train")\n    b = step("train", kind="train", needs=[a], gpu=True, walltime="12h")\n'
+        '    step("evaluate", kind="train", needs=[a, b])\n')
 
 
 def test_graph_has_the_steps_and_their_dependencies(tmp_path):
@@ -99,17 +99,17 @@ def test_graph_has_the_steps_and_their_dependencies(tmp_path):
     assert [n["name"] for n in block["nodes"]] == ["prepare", "train", "evaluate"]
     assert [(e["from"], e["to"]) for e in block["edges"]] == [("s0", "s1"), ("s0", "s2"), ("s1", "s2")]
     train = block["nodes"][1]
-    assert train["gpu"] is True and train["hpc_time_limit"] == "12h" and train["line"] == 5 and train["variable"] == "b"
+    assert train["gpu"] is True and train["walltime"] == "12h" and train["line"] == 5 and train["variable"] == "b"
 
 
 def test_graph_marks_loop_steps_dynamic_and_wires_nothing(tmp_path):
-    body = '    a = step("prepare")\n    for i in range(3):\n        step("w", needs=[a])\n'
+    body = '    a = step("prepare", kind="train")\n    for i in range(3):\n        step("w", kind="train", needs=[a])\n'
     block = build_graph(write_repo(tmp_path, repo(body)))["pipelines"][0]
     assert [n["dynamic"] for n in block["nodes"]] == [False, True] and block["edges"] == []
 
 
 def test_graph_lists_what_it_cannot_follow_instead_of_guessing(tmp_path):
-    body = '    a = step("prepare")\n    step("x", needs=[a, missing])\n    step("y", needs=["prepare"])\n'
+    body = '    a = step("prepare", kind="train")\n    step("x", kind="train", needs=[a, missing])\n    step("y", kind="train", needs=["prepare"])\n'
     block = build_graph(write_repo(tmp_path, repo(body)))["pipelines"][0]
     assert len(block["edges"]) == 1 and len(block["unresolved"]) == 2
 
@@ -128,7 +128,7 @@ def test_graph_command_is_byte_stable(tmp_path, capsys):
 
 def test_graph_never_runs_the_pipeline_file(tmp_path):
     marker = tmp_path / "ran"
-    body = f'    open({str(marker)!r}, "w").write("x")\n    step("a")\n'
+    body = f'    open({str(marker)!r}, "w").write("x")\n    step("a", kind="train")\n'
     root = write_repo(tmp_path / "r", repo(body))
     (root / "steps" / "a" / "app").mkdir(parents=True, exist_ok=True)
     build_graph(root)

@@ -7,7 +7,7 @@ rule-set version bump, never a literal buried in a rule.
 # The rule-set version: every report carries it, the PR gate and `kaosctl lint` must agree on it. Bump the major
 # for a rule removed or a level raised, the minor for a rule added or a message-only change that needs a note,
 # the patch for a fix that changes no finding on valid input.
-RULESET_VERSION = "1.3.0"
+RULESET_VERSION = "2.0.0"
 
 # Where a rule's page lives. The site is a plain public bucket, so every link names its .html file.
 DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
@@ -23,8 +23,26 @@ CONFIG_DIR = "config"
 STEPS_DIR = "steps"
 
 # What the library's step() accepts, in order (positional arguments map onto it).
-STEP_PARAMS = ("name", "reads", "gpu", "needs", "outputs", "when", "disk", "hpc_time_limit", "resumable",
-               "checkpoint_every", "idle_timeout")
+STEP_PARAMS = ("name", "kind", "reads", "inputs", "needs", "produces", "gpu", "disk", "when", "walltime",
+               "resumable", "checkpoint_every", "idle_timeout")
+# Arguments step() took before the step contract of kaos-lib 0.5, and what to do about each.
+REMOVED_STEP_PARAMS = {
+    "hpc_time_limit": "Rename it to walltime.",
+    "outputs": "Remove it: a step hands values on with step.result(...), and a step that needs them reads "
+               "step.upstream(...).values.",
+}
+# What a step is (kind=), and what it may declare in produces=[...].
+STEP_KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
+PRODUCE_TYPES = ("model", "artifact", "dataset")
+RESERVED_NAME_PREFIX = "kaos-"
+# What `kaosctl lint --fix` writes for a missing kind: it is not a kind, so the check keeps failing until one is chosen.
+KIND_PLACEHOLDER = "choose one: " + " | ".join(STEP_KINDS)
+# What step code used before the step contract: finding one means the step was not moved to kaos_lib.step.
+OLD_ENTRY_ARGUMENT = "--params"
+OLD_ENTRY_VARIABLES = ("KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME", "CHECKPOINT_BUCKET", "OUTPUTS_REPO",
+                       "KUBECORE_DATASET_REF", "KUBECORE_DATASET_COMMIT", "DATASET_REPO", "DATASET_REF",
+                       "DATASET_COMMIT", "KUBECORE_STAGED_DIR", "KAOS_LIB_LOCK")
+MIGRATION_URL = DOC_BASE[: -len("lint/")] + "migrate-to-0.5.html"
 
 # A DNS-label step name, as the library requires.
 STEP_NAME_PATTERN = r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"

@@ -54,7 +54,7 @@ def marker_matches(directory: pathlib.Path, repo: str, commit: str, prefix: Opti
     return same and (required is None or (directory / required).is_file())
 
 
-def _staged_info(staged: pathlib.Path) -> dict:
+def staged_info(staged: pathlib.Path) -> dict:
     """The folder's ``.kaos-ready`` record, or {} when it has none or it is not a JSON object."""
     try:
         info = json.loads((staged / STAGED_MARKER).read_text())
@@ -71,13 +71,14 @@ def staged_dir(commit: str, required: Optional[str] = None, *, repo: str,
     input under ``$KAOS_STAGED_ROOT``, named after the input. A folder is used only when its ``.kaos-ready``
     record names this repository, this commit and this owner (absent or null for the own project) and says
     ``"full": true``, the whole tree of the commit. Anything else (another commit, a partial copy, no record)
-    is not used, and the caller downloads.
+    is not used, and the caller downloads. The record may also name the dataset's ``layout``; a step then reads
+    the copy without asking lakeFS for it.
     """
     raw = os.environ.get(STAGED_ENV)
     if not raw or not pathlib.Path(raw).is_dir():
         return None
     for staged in sorted(p for p in pathlib.Path(raw).iterdir() if p.is_dir()):
-        info = _staged_info(staged)
+        info = staged_info(staged)
         if (info.get("repo"), info.get("commit"), info.get("owner") or None) != (repo, commit, owner or None):
             continue
         if info.get("full") is True and (not required or (staged / required).is_file()):

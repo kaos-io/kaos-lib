@@ -20,7 +20,7 @@ test("should_refuse_a_schema_of_an_unknown_version_and_garbage", () => {
 
 test("should_offer_argument_names_inside_a_step_call", () => {
   const got = names('with pipeline("p") as p:\n    step("train", ');
-  assert.ok(got.includes("resumable") && got.includes("hpc_time_limit") && got.includes("idle_timeout"));
+  assert.ok(got.includes("resumable") && got.includes("walltime") && got.includes("idle_timeout"));
   assert.ok(!got.includes("name"), "name is already given as the first positional argument");
 });
 
@@ -39,7 +39,7 @@ test("should_offer_the_schema_values_after_resumable_equals", () => {
 });
 
 test("should_narrow_value_completions_by_what_is_typed_and_report_the_replace_length", () => {
-  const items = completionsFor(schema, 'step("train", gpu=True, hpc_time_limit="1');
+  const items = completionsFor(schema, 'step("train", gpu=True, walltime="1');
   assert.deepEqual(items.map((i) => i.label), ['"12h"']);
   assert.equal(items[0].replaceLength, 2);
 });
@@ -89,15 +89,15 @@ test("should_show_hover_docs_for_an_argument_name_and_its_value", () => {
 });
 
 test("should_link_the_rule_pages_in_hover_docs", () => {
-  const line = 'step("a", gpu=True, hpc_time_limit="12h")';
-  const h = hoverFor(schema, "", line, line.indexOf("hpc_time_limit") + 2);
+  const line = 'step("a", gpu=True, walltime="12h")';
+  const h = hoverFor(schema, "", line, line.indexOf("walltime") + 2);
   assert.ok(h && /\[L-E01\]\(https:\/\/.*L-E01\.html\)/.test(h.markdown));
 });
 
 test("should_explain_a_renamed_argument_on_hover", () => {
   const line = 'step("a", gpu=True, walltime="12h")';
   const h = hoverFor(schema, "", line, line.indexOf("walltime") + 1);
-  assert.ok(h && h.markdown.includes("hpc_time_limit"));
+  assert.ok(h && h.markdown.includes("walltime"));
 });
 
 test("should_give_no_hover_on_ordinary_words", () => {

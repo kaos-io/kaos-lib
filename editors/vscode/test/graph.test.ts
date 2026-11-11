@@ -5,7 +5,7 @@ import { Graph, GraphNode, parseGraph } from "../src/report";
 import { fixture } from "./helpers";
 
 const graph = parseGraph(fixture("graph.json"));
-const nodeBase: GraphNode = { id: "s0", name: "a", variable: "a", line: 1, dynamic: false, gpu: false, hpc_time_limit: null, resumable: null, disk: null };
+const nodeBase: GraphNode = { id: "s0", name: "a", variable: "a", line: 1, dynamic: false, gpu: false, walltime: null, resumable: null, disk: null };
 
 test("should_place_a_step_to_the_right_of_everything_it_needs", () => {
   const layout = layoutPipeline(graph.pipelines[0]);

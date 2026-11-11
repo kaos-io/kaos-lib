@@ -27,7 +27,7 @@ test("should_map_levels_to_severities", () => {
 test("should_carry_the_fix_hint_and_the_doc_link", () => {
   const d = mapFinding(report.findings.find((f) => f.rule === "L-E06")!);
   assert.match(d.message, /no argument 'walltime'/);
-  assert.match(d.message, /\nFix: Use hpc_time_limit/);
+  assert.match(d.message, /\nFix: Use walltime/);
   assert.match(d.doc, /^https:\/\/.*L-E06\.html$/);
 });
 

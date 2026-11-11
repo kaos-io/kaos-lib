@@ -33,12 +33,20 @@ from .errors import AuthError, LockError, NotFoundError, StepError
 
 ENV = runtime.STEP_CONTEXT_ENV
 VERSION = 1                         # of the context and of the result
-CONTEXT_CAP = 96 * 1024             # bytes
-RESULT_CAP = 32 * 1024              # bytes
+CONTEXT_CAP = 96 * 1024             # the most a context may cost (lock.cost)
+RESULT_CAP = 8 * 1024               # the most a result may cost
 KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 WORK = "/work"                      # the step's working folder
 RESULT_FILE = "/work/output/kaos-result.json"
 RESERVED_PREFIX = "kaos-"
+LOCAL_OUTPUTS_ENV = "KAOS_LOCAL_OUTPUTS"    # set by `kaosctl step run`: outputs stay on this machine, in this folder
+LOCAL_WORK_ENV = "KAOS_LOCAL_WORK"          # set by `kaosctl step run`: the folder that stands for /work there
+
+
+def _work(path: str) -> pathlib.Path:
+    """``path`` (under the working folder), or its place on this machine in a local run."""
+    local = os.environ.get(LOCAL_WORK_ENV)
+    return pathlib.Path(local + path[len(WORK):]) if local and path.startswith(WORK) else pathlib.Path(path)
 
 
 @dataclass(frozen=True)
@@ -120,10 +128,10 @@ def _produces(entries) -> tuple:
 
 def parse(text: str) -> Step:
     """The step context from its text; StepError saying what is wrong. Fields it does not know are ignored."""
-    size = len(text.encode("utf-8"))
+    size = lock.cost(text)
     if size > CONTEXT_CAP:
-        _fail(f"the step context is {size} bytes; the limit is {CONTEXT_CAP}. Move large values out of the "
-              "config into a dataset or an artifact.")
+        _fail(f"the step context costs {size}; the limit is {CONTEXT_CAP}. Make the config smaller, or have the "
+              "steps this one needs hand on less: large values belong in a dataset or an artifact.")
     try:
         data = json.loads(text)
     except ValueError as exc:
@@ -256,11 +264,18 @@ def input(name: str) -> pathlib.Path:  # noqa: A001 - the contract's name
 
 
 def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Path:
+    from . import layouts
     from .layouts import local
-    ref = datasets.DatasetRef(read.repo, read.ref, owner=read.owner)
-    if os.environ.get(local.STAGED_ENV) and not local.staged_dir(read.commit, repo=read.repo, owner=read.owner):
-        print(f"input '{name}': no whole staged copy of {read.repo} at {read.commit}; downloading it.", flush=True)
-    entry = datasets.materialize(ref, client=run.client, commit=read.commit)
+    staged = local.staged_dir(read.commit, repo=read.repo, owner=read.owner)
+    layout = local.staged_info(staged).get("layout") if staged else None
+    if layout:     # the copy says which layout it is: nothing to ask lakeFS
+        entry = layouts.load(layout).entry_of(staged, local.cache_dir(read.repo, read.commit, owner=read.owner))
+        lock.record(read.repo, read.ref, read.commit, read.owner, read.name)
+    else:
+        if os.environ.get(local.STAGED_ENV) and not staged:
+            print(f"input '{name}': no whole staged copy of {read.repo} at {read.commit}; downloading it.", flush=True)
+        ref = datasets.DatasetRef(read.repo, read.ref, owner=read.owner)
+        entry = datasets.materialize(ref, client=run.client, commit=read.commit)
     return entry if entry.is_dir() else entry.parent
 
 
@@ -269,6 +284,9 @@ def _artifact(run: _Running, name: str, write: lock.Write) -> pathlib.Path:
     from .layouts import local
     from .outputs import run_prefix
     step = run.step
+    staged = local.staged_dir(write.commit, repo=write.repo)
+    if staged:
+        return staged
     prefix = run_prefix(step.experiment, step.run, name)
     target = local.cache_dir(write.repo, write.commit, prefix)
     if not local.marker_matches(target, write.repo, write.commit, prefix):
@@ -308,7 +326,7 @@ def output(name: str) -> pathlib.Path:
     run = _need()
     _produce(run, name)
     if name not in run.outputs:
-        folder = pathlib.Path(WORK) / "kaos" / "outputs" / name
+        folder = _work(WORK) / "kaos" / "outputs" / name
         folder.mkdir(parents=True, exist_ok=True)
         run.outputs[name] = folder
     return run.outputs[name]
@@ -347,6 +365,8 @@ def _problems(run: _Running, produce: Produce) -> list:
 def _save(run: _Running, produce: Produce, folder: pathlib.Path) -> str:
     """Save one output; returns the commit that holds it."""
     step = run.step
+    if os.environ.get(LOCAL_OUTPUTS_ENV):
+        return _keep_locally(produce, folder, pathlib.Path(os.environ[LOCAL_OUTPUTS_ENV]))
     reads = {f"read.{r.name}": r.commit for r in lock.current().reads}
     try:
         if produce.type == "dataset":
@@ -362,6 +382,23 @@ def _save(run: _Running, produce: Produce, folder: pathlib.Path) -> str:
               f"pipeline.py can be written. ({exc})")
 
 
+def _keep_locally(produce: Produce, folder: pathlib.Path, root: pathlib.Path) -> str:
+    """A local run (``kaosctl step run``) uploads nothing: the output is kept in ``root/<name>``, marked as a whole
+    copy so that the next local step finds it as its input. The commit is a hash of the content."""
+    import hashlib
+    import shutil
+    from .layouts import local
+    from .transfer import _md5, local_files
+    listing = "".join(f"{path} {_md5(p)}\n" for path, p in local_files(folder).items())
+    commit = hashlib.sha256(listing.encode()).hexdigest()
+    target = root / produce.name
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(folder, target)
+    (target / local.STAGED_MARKER).write_text(json.dumps(
+        {"repo": produce.repo, "commit": commit, "full": True, "layout": "raw"}))
+    return commit
+
+
 # ------------------------------------------------------------------------------------------------------- result
 def _result(values: dict, writes: list) -> dict:
     return {"version": VERSION, "status": "ok", "values": values,
@@ -370,11 +407,13 @@ def _result(values: dict, writes: list) -> dict:
 
 def _sized(result: dict) -> str:
     text = lock.wire(result)
-    if len(text) > RESULT_CAP:
-        sizes = {k: len(lock.wire(v)) for k, v in result["values"].items()}
+    if lock.cost(text) > RESULT_CAP:
+        sizes = {k: lock.cost(lock.wire(v)) for k, v in result["values"].items()}
         big = max(sizes, key=sizes.get) if sizes else None
-        hint = f" The largest value is '{big}' ({sizes[big]} bytes): save it with step.output() instead." if big else ""
-        _fail(f"the result is {len(text)} bytes; the limit is {RESULT_CAP}.{hint}")
+        hint = f" The largest value is '{big}' ({sizes[big]})." if big else ""
+        _fail(f"the result costs {lock.cost(text)}; the limit is {RESULT_CAP}.{hint} A result carries a few small "
+              "values: log metrics to MLflow, or write the rest into an artifact with step.output() and hand on "
+              "its name.")
     return text
 
 
@@ -401,7 +440,7 @@ def result(**values) -> None:
         lock.current().wrote(lock.Write(produce.name, produce.type, produce.repo, commit))
     text = _sized(_result(values, lock.current().writes))
     _ledger_on_mlflow()
-    target = pathlib.Path(RESULT_FILE)
+    target = _work(RESULT_FILE)
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(target.name + ".part")
     partial.write_text(text, encoding="ascii")

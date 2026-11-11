@@ -11,13 +11,13 @@ const source = fixture("pipeline.py").split("\n");
 const walltime = mapReport(parseReport(fixture("report.json"))).get("pipeline.py")!.find((d) => d.rule === "L-E06")!;
 const textAtStart = source[walltime.startLine].slice(walltime.startCharacter);
 
-test("should_rename_walltime_to_hpc_time_limit", () => {
+test("should_rename_walltime_to_walltime", () => {
   const fixes = quickFixesFor(walltime, textAtStart, renamed);
   assert.equal(fixes.length, 1);
-  assert.equal(fixes[0].title, "Rename 'walltime' to 'hpc_time_limit'");
+  assert.equal(fixes[0].title, "Rename 'walltime' to 'walltime'");
   const e = fixes[0].edit;
   assert.equal(source[e.startLine].slice(0, e.startCharacter) + e.newText + source[e.endLine].slice(e.endCharacter),
-    source[4].replace("walltime", "hpc_time_limit"));
+    source[4].replace("walltime", "walltime"));
 });
 
 test("should_replace_only_the_argument_name_and_keep_the_value", () => {
@@ -35,7 +35,7 @@ test("should_offer_nothing_for_an_argument_without_a_known_rename", () => {
 });
 
 test("should_be_idempotent_once_the_name_is_fixed", () => {
-  assert.deepEqual(quickFixesFor(walltime, 'hpc_time_limit="12h")', renamed), []);
+  assert.deepEqual(quickFixesFor(walltime, 'walltime="12h")', renamed), []);
 });
 
 test("should_not_treat_a_prototype_property_as_a_rename", () => {

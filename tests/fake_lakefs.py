@@ -16,6 +16,7 @@ from kaos_lib import credentials, lakefs
 from kaos_lib.lakefs import LakeFS
 
 BRANCH_ID = re.compile(r"^\w[-\w]*$")  # lakeFS's branch id rule
+REPO_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,62}$")  # and its repository id rule
 
 
 class FakeLakeFS(BaseAdapter):
@@ -144,6 +145,8 @@ class FakeLakeFS(BaseAdapter):
             self.repos[body["name"]]["metadata"] = {}
             return 201, {"id": body["name"]}
         repo, rest = parts[1], parts[2:]
+        if not REPO_ID.match(repo):                                  # lakeFS: 400, not 404, for a name it cannot hold
+            return 400, {"message": "argument repository: repository id: invalid value: validation error"}
         if repo not in self.repos:
             return 404, {"message": "repository not found"}
         r = self.repos[repo]

@@ -15,6 +15,7 @@ from .graph import graph_json
 from .catalogue import CatalogueError, default_catalogue, empty_catalogue, read_context, read_file
 from .constants import MAX_FILE_BYTES, PIPELINE_FILE, RULESET_VERSION
 from .engine import MissingPipeline, lint_project
+from .fix import fix_pipeline
 from .model import Report
 from .schema import schema_json
 
@@ -45,6 +46,10 @@ def add_arguments(sp: argparse.ArgumentParser) -> None:
                     help="read the content of this file (it must be the pipeline file) from standard input instead of "
                          "from disk, and everything else from disk: for editors checking unsaved text. The text is "
                          "parsed, never run")
+    sp.add_argument("--fix", action="store_true",
+                    help="first rewrite the pipeline file for kaos-lib 0.5: rename hpc_time_limit= to walltime=, "
+                         "remove outputs=, and add a kind= placeholder to steps that have none (you choose the "
+                         "kind: the placeholder lists them and keeps the check failing). Then check as usual")
     sp.add_argument("--schema", action="store_true",
                     help="print what step() accepts (names, types, allowed values, docs, links) as JSON, versioned "
                          "with the rule set, and stop: editors read it for completion and hover text")
@@ -83,6 +88,22 @@ def _stdin_text(args) -> Optional[str]:
     return data.decode("utf-8", errors="replace")
 
 
+def _fix(args) -> None:
+    """Apply `fix_pipeline` to the pipeline file on disk and say what changed (on stderr: the report stays clean)."""
+    if args.stdin_path or args.from_report:
+        raise ValueError("--fix rewrites the pipeline file on disk: it cannot be combined with --stdin-path or "
+                         "--from-report")
+    path = pathlib.Path(args.path) / args.pipeline
+    text = path.read_text(encoding="utf-8")
+    fixed, changes = fix_pipeline(text, args.pipeline)
+    if fixed != text:
+        path.write_text(fixed, encoding="utf-8")
+    for change in changes:
+        print(f"fixed {args.pipeline} {change}", file=sys.stderr)
+    if not changes:
+        print(f"nothing to fix in {args.pipeline}", file=sys.stderr)
+
+
 def run(args) -> int:
     """Run the linter for parsed arguments. Exit 0: no errors; 2: errors found; 1: it could not run."""
     if args.expect_ruleset and args.expect_ruleset != RULESET_VERSION:
@@ -99,6 +120,8 @@ def run(args) -> int:
         if args.export_catalogue:
             pathlib.Path(args.export_catalogue).write_text(_catalogue(args).to_json(), encoding="utf-8")
             return EXIT_OK
+        if args.fix:
+            _fix(args)
         if args.from_report:
             report = Report.from_json(pathlib.Path(args.from_report).read_text(encoding="utf-8"))
             if report.ruleset_version != RULESET_VERSION and args.expect_ruleset:

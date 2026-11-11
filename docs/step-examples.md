@@ -436,11 +436,11 @@ print(datasets.release("dataset-clean"))   # after the merge: prints v1
 the platform how far it is, saves its state so an interruption does not lose hours, and writes the model.
 
 ```python
-train = step("train", gpu=True, needs=[check], hpc_time_limit="2h",
+train = step("train", gpu=True, needs=[check], walltime="2h",
              reads=["experiment", "dataset", "train"], outputs=["training-result"])
 ```
 
-`needs=[check]` makes training wait for the data check. `hpc_time_limit` is the longest run on HPC (Slurm): size it to
+`needs=[check]` makes training wait for the data check. `walltime` is the longest run on HPC (Slurm): size it to
 the longest training you expect.
 
 `app/entry.py`, a plain PyTorch loop that works with any framework's training code:
@@ -583,7 +583,7 @@ and the outputs and `training-result` code. See [Progress](progress.md) and [Lon
 | --- | --- | --- |
 | where it runs | a GPU class chosen on the run form | an HPC class chosen on the run form |
 | the data | downloaded by the step | copied next to the job before it starts |
-| the time | until the step ends | at most `hpc_time_limit`. A step that saved a checkpoint is continued, in another job |
+| the time | until the step ends | at most `walltime`. A step that saved a checkpoint is continued, in another job |
 | an interruption | the step runs again, or continues from its checkpoint | the step is told to stop shortly before the limit: it saves and exits with code 85 |
 | cores | the whole machine | on a shared node, size worker pools with `runtime.usable_cpus()` ([Run context](runtime.md)) |
 
@@ -914,7 +914,7 @@ HERE = Path(__file__).parent
 
 with pipeline("ml-pipeline") as p:
     check = step("data-check", reads=["dataset"], outputs=["data-stats"])
-    train = step("train", gpu=True, needs=[check], hpc_time_limit="2h",
+    train = step("train", gpu=True, needs=[check], walltime="2h",
                  reads=["experiment", "dataset", "train"],
                  outputs=["training-result"])
     evaluate = step("evaluate", needs=[train],

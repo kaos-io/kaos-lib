@@ -41,7 +41,7 @@ with pipeline("ml-pipeline") as p:
 | `gpu=True` | the step gets one GPU. |
 | `when="..."` | a condition on a run-form value. When it is false the step is skipped. See [conditional steps](step-examples.md#8-a-conditional-step). |
 | `disk="20Gi"` | more scratch disk than the default, as a size: digits and an optional unit (`Ki`, `Mi`, `Gi`, `Ti`, `K`, `M`, `G`, `T`). Use it for big datasets or big temporary files. |
-| `hpc_time_limit="12h"` | the longest this GPU step may run on HPC (Slurm): minutes or hours, such as `"90m"`, `"12h"` or `"720"`. Only with `gpu=True`. |
+| `walltime="12h"` | the longest this GPU step may run on HPC (Slurm): minutes or hours, such as `"90m"`, `"12h"` or `"720"`. Only with `gpu=True`. |
 | `resumable=` | GPU steps only. `True`, or a lead time such as `"20m"`: how long before the time limit the step is told to save. `False` turns continuing off. See [Long runs](checkpoint.md). |
 | `checkpoint_every=` | how often the platform copies the step's checkpoint folder: `"20m"`, `"1h"`, `20` (minutes), or `False` for never. |
 | `idle_timeout=` | how long a step may show no GPU use and no new log line before it is ended: `"40m"`, `"1h"`, `40`, or `0` for never. |
@@ -168,7 +168,7 @@ project has them, the classes of HPC (Slurm). Every step of your pipeline has th
 | --- | --- | --- |
 | which steps | every step | every step you write, when your project has HPC classes |
 | dataset | the step downloads the run's commit | the platform copies the run's commit next to the job before it starts, and kaos-lib reads that copy |
-| time | `hpc_time_limit=` does not apply | `hpc_time_limit=` sets the longest run, and the job waits in a queue first |
+| time | `walltime=` does not apply | `walltime=` sets the longest run, and the job waits in a queue first |
 | interruption | a lost machine: the step runs again, or continues from its checkpoint | the time limit: the step is told to save, and continues from its checkpoint |
 | MLflow and results repository | the same calls | the same calls |
 

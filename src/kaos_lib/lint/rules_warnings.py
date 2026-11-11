@@ -15,16 +15,16 @@ from .registry import (DECLARED, NOT_VERIFIED, OFF, Hit, LintContext, gpu_steps,
 
 @rule("L-W01", "LongGpuStepNotResumable", WARNING,
       "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten "
-      "hpc_time_limit.")
+      "walltime.")
 def long_gpu_step_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     hpc = ctx.catalogue.hpc
     for step in gpu_steps(ctx):
-        limit = parse_minutes(step.value("hpc_time_limit", None))
+        limit = parse_minutes(step.value("walltime", None))
         if limit is None or limit <= LONG_GPU_STEP_MINUTES or ctx.resumable(step) not in (OFF, NOT_VERIFIED):
             continue
         if hpc is not None and limit > hpc.lane_max_minutes:
             continue   # L-E01 reports it as an error
-        yield Hit(ctx.file, ctx.span(step.node("hpc_time_limit")),
+        yield Hit(ctx.file, ctx.span(step.node("walltime")),
                   f"Step '{step.name}' runs up to {pretty_minutes(limit)} and is not resumable "
                   f"({'set not resumable' if ctx.resumable(step) == OFF else 'the platform recorded that its last continuation did not resume'}). "
                   f"An interruption (a lost machine, the time limit) loses all its work.")

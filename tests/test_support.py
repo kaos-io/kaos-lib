@@ -128,7 +128,8 @@ def test_packaged_release_json_is_valid_and_matches_this_version():
     meta = support.packaged()
     assert support.validate_release(meta) == []
     assert meta["version"] == kaos_lib.__version__
-    assert meta["supported"] == ">=0.2" and meta["deprecated"] == [] and meta["breaking"] is False
+    assert meta["supported"] == ">=0.5" and meta["deprecated"] == [] and meta["breaking"] is True   # the step contract
+    assert meta["migration"].endswith("/migrate-to-0.5.html")
     assert support.check(kaos_lib.__version__, meta)["verdict"] == "current"
 
 

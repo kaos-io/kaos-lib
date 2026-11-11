@@ -24,7 +24,7 @@
           },
           "dynamic": false,
           "gpu": false,
-          "hpc_time_limit": null,
+          "walltime": null,
           "resumable": null,
           "disk": "20Gi"
         },
@@ -45,7 +45,7 @@
           },
           "dynamic": false,
           "gpu": true,
-          "hpc_time_limit": null,
+          "walltime": null,
           "resumable": null,
           "disk": null
         },
@@ -66,7 +66,7 @@
           },
           "dynamic": false,
           "gpu": false,
-          "hpc_time_limit": null,
+          "walltime": null,
           "resumable": null,
           "disk": null
         }

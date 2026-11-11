@@ -1,23 +1,34 @@
 """`kaosctl step run <step>`: run one step on this machine with the platform's contract (PRD-CONSOLE-1682 F-30, D-16).
 
-Why: trying a step should not need a cluster. The step is started as the platform starts it, `python -m app.entry
---params <composed params> --<upstream output> <json>`, in its own environment, with the platform's `/work` folder mapped
-into `.kaos/local/<step>/work` (outputs are `<name>.json` under `work/output`, and are copied to
-`.kaos/local/outputs/<step>/` for the next step to read). It inherits only an allowlisted environment (CON-16) and
-needs no login or network unless the step itself reaches for them.
+Why: trying a step should not need a cluster. The step is started as the platform starts it, `python -m app.entry` with
+no arguments and the step context in `$KAOS_STEP_CONTEXT`, in its own environment. What differs from the platform is
+only where things are: the `/work` folder is mapped into `.kaos/local/work/<step>`, each input is a folder under
+`.kaos/local/staged/` (a local folder, or a small sample of a dataset), the step's outputs are kept there too and are
+never uploaded, and its result is kept in `.kaos/local/results/<step>.json` for the next step. It inherits only an
+allowlisted environment (CON-16) and needs no login or network unless a sample of a dataset is asked for.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import pathlib
+import re
 import shutil
 import sys
-from typing import Optional
 
+import yaml
+
+from .. import lock
 from ..errors import KaosLibError
+from ..layouts.local import STAGED_MARKER
+from ..lint.constants import STEP_KINDS
 from . import envallow, pipeline_engine, pyenv, proc, sample, steps
 from .constants import (COMPOSE_STEP, LOCAL_DIR, LOCAL_RUN_ID, OUTPUT_PRINT_CHARS, VENV_DIR)
 from .dev import setup_step
+
+ABSENT = {"version": 1, "status": "absent"}     # what the platform hands a step for a needed step without a result
+RESULT_NAME = "kaos-result.json"
 
 WORKMAP = pathlib.Path(__file__).with_name("workmap.py")
 
@@ -70,54 +81,122 @@ def compose_params(root: pathlib.Path, args, local: pathlib.Path) -> str:
     return out.read_text(encoding="utf-8")
 
 
-def read_inputs(step: steps.StepInfo, root: pathlib.Path, given: list) -> dict:
-    """The `--<output>` arguments the platform passes: from `--input name=value|@file`, else an earlier local run of
-    the step that produces it, else `{}` (the platform's own default for an output that is not there)."""
-    wanted = {}
-    for up in step.needs:
-        upstream = steps.find(root, up)
-        for out in upstream.outputs:
-            wanted[out] = root / LOCAL_DIR / "outputs" / upstream.name / f"{out}.json"
-    values = {}
-    for item in given or []:
+def _hash(folder: pathlib.Path) -> str:
+    """A stand-in for a commit: the SHA-256 of the folder's file names and sizes."""
+    listing = "".join(f"{f.relative_to(folder).as_posix()} {f.stat().st_size}\n"
+                      for f in sorted(folder.rglob("*")) if f.is_file() and f.name != STAGED_MARKER)
+    return hashlib.sha256(listing.encode()).hexdigest()
+
+
+def _dataset_of(params: dict, name: str) -> tuple:
+    """`(repository, ref)` the config names for the input, for the ledger: what a real run would have pinned."""
+    value = params.get(name)
+    repo, _, ref = value.partition("@") if isinstance(value, str) else ("", "", "")
+    return (repo if repo.startswith("dataset-") else f"dataset-{repo or name}"), ref or "local"
+
+
+def stage_inputs(step: steps.StepInfo, args, params: dict, staged: pathlib.Path) -> list:
+    """Put every input of the step in `staged/<name>` and return the ledger reads that name them."""
+    given = {}
+    for item in args.input or []:
         name, eq, value = item.partition("=")
-        if not eq:
-            raise KaosLibError(f"--input {item!r}: write name=value or name=@file.")
-        wanted.setdefault(name, None)
-        values[name] = pathlib.Path(value[1:]).read_text(encoding="utf-8") if value.startswith("@") else value
-    for name, path in wanted.items():
-        if name not in values:
-            values[name] = path.read_text(encoding="utf-8") if path is not None and path.is_file() else "{}"
-            where = f"from {path.relative_to(root)}" if path is not None and path.is_file() else "empty ({}); give it with --input"
-            print(f"  input --{name}: {where}")
-    return values
+        if not eq or not value:
+            raise KaosLibError(f"--input {item!r}: write NAME=<folder> or NAME=<dataset>@<version>.")
+        if name not in step.inputs:
+            raise KaosLibError(f"--input {name}: {step.name} has no input '{name}'. Its inputs (inputs= in "
+                               f"pipeline.py) are: {', '.join(step.inputs) or 'none'}.")
+        given[name] = value
+    reads = []
+    for name in step.inputs:
+        if name not in given:
+            raise KaosLibError(f"{step.name} reads the input '{name}'. Give it with --input {name}=<folder> (a folder "
+                               f"on this machine) or --input {name}=<dataset>@<version> (a small sample; needs "
+                               "`kaosctl login`).")
+        target, value = staged / name, given[name]
+        shutil.rmtree(target, ignore_errors=True)
+        repo, ref = _dataset_of(params, name)
+        if pathlib.Path(value).is_dir():
+            shutil.copytree(value, target)
+            layout, where = "raw", f"the folder {value}"
+        else:
+            files, size = sample.pull_sample(value, target, args.sample_mb)
+            layout, where = sample.layout(value), f"a sample of {value} ({files} file(s), {size // 1024} KiB)"
+            repo, ref = sample.repository(value), value.partition("@")[2]
+        commit = _hash(target)
+        (target / STAGED_MARKER).write_text(json.dumps({"repo": repo, "commit": commit, "full": True,
+                                                         "layout": layout}), encoding="utf-8")
+        reads.append({"name": name, "repo": repo, "owner": None, "ref": ref, "commit": commit})
+        print(f"  input {name}: {where}")
+    return reads
 
 
-def child_env(work: pathlib.Path, dataset_dir: Optional[pathlib.Path]) -> dict:
-    """The environment of the step: the allowlist, the work-folder mapping and a run id. Nothing from the platform."""
-    env = {**envallow.allowed(os.environ), "KAOS_LOCAL_WORK": str(work), "KUBECORE_RUN_ID": LOCAL_RUN_ID,
-           "PYTHONUNBUFFERED": "1"}
-    if dataset_dir is not None:
-        env["KAOS_LOCAL_DATASET_DIR"] = str(dataset_dir)
-    return env
+def upstream_results(step: steps.StepInfo, args, results: pathlib.Path) -> dict:
+    """The result of every step this one needs: `--upstream`, else its last local run, else "did not run"."""
+    given = {}
+    for item in args.upstream or []:
+        name, eq, value = item.partition("=")
+        if not eq or name not in step.needs:
+            raise KaosLibError(f"--upstream {item!r}: write STEP=<json> or STEP=@<file>, for a step {step.name} "
+                               f"needs ({', '.join(step.needs) or 'it needs none'}).")
+        given[name] = pathlib.Path(value[1:]).read_text(encoding="utf-8") if value.startswith("@") else value
+    out = {}
+    for name in step.needs:
+        kept = results / f"{name}.json"
+        text = given.get(name) or (kept.read_text(encoding="utf-8") if kept.is_file() else None)
+        try:
+            out[name] = json.loads(text) if text else dict(ABSENT)
+        except ValueError as exc:
+            raise KaosLibError(f"the result given for {name} is not JSON ({exc}).") from None
+        where = "from --upstream" if name in given else f"from its last local run ({kept.name})" if text else \
+            "did not run here: the step sees it as not run. Run it first, or give its result with --upstream"
+        print(f"  upstream {name}: {where}")
+    return out
 
 
-def print_outputs(step: steps.StepInfo, work: pathlib.Path, kept: pathlib.Path) -> None:
-    """Print the step's outputs and copy them where the next step's run will look."""
-    out = work / "output"
-    files = sorted(out.glob("*.json")) if out.is_dir() else []
-    declared = set(step.outputs)
-    print(f"Outputs of {step.name} (the platform's /work/output, here {out}):")
-    if not files:
-        print("  none written" + (f" (declared: {', '.join(sorted(declared))})" if declared else ""))
-    kept.mkdir(parents=True, exist_ok=True)
-    for f in files:
-        text = f.read_text(encoding="utf-8", errors="replace")
-        shutil.copyfile(f, kept / f.name)
-        shown = text if len(text) <= OUTPUT_PRINT_CHARS else text[:OUTPUT_PRINT_CHARS] + f"... ({len(text)} characters)"
-        print(f"  {f.name}: {shown}")
-    for missing in sorted(declared - {f.stem for f in files}):
-        print(f"  {missing}.json: declared in pipeline.py but not written")
+def step_context(root: pathlib.Path, step: steps.StepInfo, params: dict, reads: list, upstream: dict) -> dict:
+    """The step context of a local run, in the contract's field order."""
+    if step.kind not in STEP_KINDS:
+        raise KaosLibError(f"{step.name} has no kind in pipeline.py: add kind=\"...\", one of {', '.join(STEP_KINDS)}.")
+    app = re.sub(r"[^a-z0-9-]", "-", root.name.lower()).strip("-") or "app"
+    experiment = (params.get("experiment") or {}).get("name") if isinstance(params.get("experiment"), dict) else None
+    return {"version": 1, "run": LOCAL_RUN_ID, "app": app, "project": "local", "step": step.name, "kind": step.kind,
+            "experiment": experiment if isinstance(experiment, str) and experiment else "local", "params": params,
+            "ledger": {"version": 2, "reads": reads, "writes": []},
+            "produces": [{"name": name, "type": kind,
+                          "repo": f"dataset-{name}" if kind == "dataset" else f"outputs-{app}"}
+                         for kind, name in step.produces],
+            "upstream": upstream}
+
+
+def child_env(work: pathlib.Path, staged: pathlib.Path, context: dict) -> dict:
+    """The environment of the step: the allowlist, the step context and where this machine keeps things. Nothing
+    from the platform."""
+    return {**envallow.allowed(os.environ), "KAOS_STEP_CONTEXT": lock.wire(context), "KAOS_LOCAL_WORK": str(work),
+            "KAOS_STAGED_ROOT": str(staged), "KAOS_LOCAL_OUTPUTS": str(staged), "PYTHONUNBUFFERED": "1"}
+
+
+def print_result(step: steps.StepInfo, work: pathlib.Path, results: pathlib.Path, staged: pathlib.Path) -> None:
+    """Print the step's result and keep it where the next step's run will look."""
+    file = work / "output" / RESULT_NAME
+    kept = results / f"{step.name}.json"
+    if not file.is_file():
+        kept.unlink(missing_ok=True)
+        print(f"Result of {step.name}: none written. The steps that need it would see it as not run.")
+        return
+    text = file.read_text(encoding="utf-8", errors="replace")
+    results.mkdir(parents=True, exist_ok=True)
+    kept.write_text(text, encoding="utf-8")
+    try:
+        result = json.loads(text)
+    except ValueError:
+        result = {}
+    values = json.dumps(result.get("values", {}))
+    print(f"Result of {step.name} (kept in {kept}):")
+    print("  values: " + (values if len(values) <= OUTPUT_PRINT_CHARS else values[:OUTPUT_PRINT_CHARS] + "..."))
+    for read in result.get("reads", []):
+        print(f"  read    {read.get('name')}: {read.get('repo')} at {str(read.get('commit'))[:12]}")
+    for write in result.get("writes", []):
+        print(f"  wrote   {write.get('name')} ({write.get('type')}): {staged / str(write.get('name'))}")
 
 
 def run_step(args) -> int:
@@ -126,34 +205,28 @@ def run_step(args) -> int:
     step = steps.find(root, args.step)
     py = ensure_environment(step, args)
     local = local_dir(root)
-    work = local / "work" / step.name
+    work, staged, results = local / "work" / step.name, local / "staged", local / "results"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)     # /work exists in the platform's container; /work/output does not until the step makes it
-    params = compose_params(root, args, local)
-    values = read_inputs(step, root, args.input)
-    dataset_dir = _pull_sample(args, local)
+    staged.mkdir(exist_ok=True)
+    try:
+        params = yaml.safe_load(compose_params(root, args, local)) or {}
+    except yaml.YAMLError as exc:
+        raise KaosLibError(f"the composed parameters are not YAML ({exc}).") from None
+    if not isinstance(params, dict):
+        raise KaosLibError("the composed parameters are not a mapping.")
+    context = step_context(root, step, params, stage_inputs(step, args, params, staged),
+                           upstream_results(step, args, results))
     services = envallow.platform_services_read(step.path)
     if services:
         print(f"NOTE: this step reads {', '.join(services)}, which only the platform sets. Here they are not set (no "
               f"platform secret reaches a local run), so a step that needs one stops with its own error, and one that has a fallback (config, a default) runs on it.")
-    argv = [str(py), str(WORKMAP), "app.entry", "--params", params]
-    for name, value in values.items():
-        argv += [f"--{name}", value]
-    print(f"Running {step.name}: python -m app.entry --params <{len(params)} characters of composed params>"
-          + "".join(f" --{n} ..." for n in values))
-    done = proc.stream(argv, env=child_env(work, dataset_dir), cwd=step.path)
-    print_outputs(step, work, local / "outputs" / step.name)
+    print(f"Running {step.name}: python -m app.entry (the step context holds {len(lock.wire(params))} characters of "
+          "composed params)")
+    done = proc.stream([str(py), str(WORKMAP), "app.entry"], env=child_env(work, staged, context), cwd=step.path)
+    print_result(step, work, results, staged)
     if done.returncode:
         print(f"ERROR: {step.name} exited with code {done.returncode}.", file=sys.stderr)
     else:
         print(f"Done: {step.name} exited 0. Next: kaosctl step run <the step that needs {step.name}>, or kaosctl build {step.name}")
     return done.returncode
-
-
-def _pull_sample(args, local: pathlib.Path) -> Optional[pathlib.Path]:
-    if not args.dataset:
-        return None
-    dest = local / "data" / args.dataset.replace("/", "_").replace("@", "_at_")
-    files, size = sample.pull_sample(args.dataset, dest, args.sample_mb)
-    print(f"Sample of {args.dataset}: {files} file(s), {size // 1024} KiB in {dest} (KAOS_LOCAL_DATASET_DIR)")
-    return dest

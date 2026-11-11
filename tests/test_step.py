@@ -58,7 +58,7 @@ def test_every_fixture_context_starts_a_step(monkeypatch, name):
     assert got.params == want["params"]
     assert got.ledger.to_dict() == want["ledger"]
     assert [(p.name, p.type, p.repo, p.promote) for p in got.produces] == [
-        (p["name"], p["type"], p["repo"], False) for p in want["produces"]]
+        (p["name"], p["type"], p["repo"], p.get("promote", False)) for p in want["produces"]]
     assert set(got.upstream) == set(want["upstream"])
     assert step.start() is got                                   # a second call: the same step
 
@@ -87,9 +87,9 @@ def test_fields_this_version_does_not_know_are_ignored(monkeypatch):
 
 
 def test_a_dataset_carries_whether_this_run_promotes_it(monkeypatch):
-    context = fixture("context-no-upstream")
-    context["produces"] = [dict(context["produces"][0], promote=True)]
-    assert begin(monkeypatch, context).produces[0].promote is True
+    assert begin(monkeypatch, wire("context-promote")).produces[0].promote is True
+    step.stop()
+    assert begin(monkeypatch, wire("context-no-upstream")).produces[0].promote is False    # absent means false
 
 
 def test_without_a_context_it_is_not_a_step(monkeypatch):
@@ -101,15 +101,20 @@ def test_without_a_context_it_is_not_a_step(monkeypatch):
 
 def test_a_context_over_the_cap_is_refused(monkeypatch):
     context = changed("context-no-upstream", params={"blob": "x" * step.CONTEXT_CAP})
-    with pytest.raises(StepError, match=r"the step context is \d+ bytes; the limit is 98304"):
+    with pytest.raises(StepError, match=r"the step context costs \d+; the limit is 98304"):
         begin(monkeypatch, context)
 
 
-def test_the_largest_context_that_fits_is_read(monkeypatch):
-    base = len(lock.wire(changed("context-no-upstream", params={"blob": ""})))
+def test_the_cap_counts_the_cost_and_the_largest_context_that_fits_is_read(monkeypatch):
+    base = lock.cost(lock.wire(changed("context-no-upstream", params={"blob": ""})))
     context = changed("context-no-upstream", params={"blob": "x" * (step.CONTEXT_CAP - base)})
-    assert len(lock.wire(context)) == step.CONTEXT_CAP
+    assert lock.cost(lock.wire(context)) == step.CONTEXT_CAP > len(lock.wire(context))
     assert len(begin(monkeypatch, context).params["blob"]) == step.CONTEXT_CAP - base
+    step.stop()
+    quotes = changed("context-no-upstream", params={"blob": '"' * 40000})      # 80002 bytes that cost 120002
+    assert len(lock.wire(quotes)) < step.CONTEXT_CAP
+    with pytest.raises(StepError, match="the step context costs"):
+        begin(monkeypatch, quotes)
 
 
 @pytest.mark.parametrize("text,fragment", [
@@ -383,9 +388,10 @@ def test_a_value_json_cannot_hold_is_refused_before_anything_is_saved(monkeypatc
 def test_a_result_over_the_cap_is_refused_before_anything_is_saved(monkeypatch, lake):
     begin(monkeypatch, lake.context("context-one-upstream"), lake.client())
     fill("model")
-    with pytest.raises(StepError, match=r"the result is \d+ bytes; the limit is 32768. The largest value is "
-                                        r"'table' \(\d+ bytes\): save it with step.output\(\) instead."):
-        step.result(small=1, table=["row"] * 8000)
+    with pytest.raises(StepError, match=r"the result costs \d+; the limit is 8192. The largest value is 'table' "
+                                        r"\(\d+\). A result carries a few small values: log metrics to MLflow, or "
+                                        r"write the rest into an artifact with step.output\(\) and hand on its name."):
+        step.result(small=1, table=["row"] * 1200)
     assert not result_file().exists() and lake.writes == []
 
 

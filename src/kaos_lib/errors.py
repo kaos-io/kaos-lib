@@ -6,9 +6,6 @@ class KaosLibError(Exception):
     """A user-facing failure: the message says what happened and what to do next."""
 
 
-KubecoreError = KaosLibError  # the 0.2 name; removed together with the ``kubecore`` shim
-
-
 class ConfigError(KaosLibError):
     """A required setting (lakeFS URL, ...) could not be determined."""
 

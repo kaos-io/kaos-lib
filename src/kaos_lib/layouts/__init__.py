@@ -208,6 +208,11 @@ class Layout:
             local.fetch(client, ref.repo, commit, prefixes, target, pre, strip=pre or "", owner=ref.owner,
                         include=include, keep=keep, empty_message=f"{ref} holds no files{what}.")
             data = target
+        return self.entry_of(data, target)
+
+    def entry_of(self, data: pathlib.Path, target: pathlib.Path) -> pathlib.Path:
+        """The entry of a copy that is already on disk in ``data``: the hook's (written into ``target``), or ``data``."""
+        entry = self._hook_fn("materialize")
         return pathlib.Path(entry(data, target, self)) if entry else data
 
 

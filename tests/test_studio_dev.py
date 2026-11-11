@@ -28,16 +28,18 @@ def requirements_of(repo, step):
 
 # --- reading, statically ----------------------------------------------------------------------------------------
 
-def test_should_find_every_step_with_its_outputs_and_what_it_needs(repo):
+def test_should_find_every_step_with_what_it_reads_produces_and_needs(repo):
     found = {s.name: s for s in steps.discover(repo)}
     assert set(found) == {"dataset-loading", "data-summary", "model-training", "compose-and-validate"}
-    assert found["dataset-loading"].outputs == ["dataset-info"] and found["data-summary"].needs == ["dataset-loading"]
+    load, summary = found["dataset-loading"], found["data-summary"]
+    assert (load.kind, load.inputs, load.produces) == ("transform", ["dataset"], [("dataset", "clean")])
+    assert summary.needs == ["dataset-loading"] and summary.produces == [("artifact", "summary")]
     assert found["model-training"].gpu and found["compose-and-validate"].implicit
 
 
-def test_should_read_a_steps_that_needs_only_pyyaml(repo):
+def test_should_read_a_step_that_needs_pyyaml_and_kaos_lib(repo):
     d = deps.read_step_deps(repo / "steps/data_summary")
-    assert (d.python, d.requirements, d.imports_kaos_lib, d.declares_kaos_lib_arg) == ("3.11", ["PyYAML"], False, False)
+    assert (d.python, d.requirements, d.imports_kaos_lib, d.declares_kaos_lib_arg) == ("3.11", ["PyYAML"], True, True)
 
 
 def test_should_read_the_kaos_lib_default_of_a_step_that_declares_the_argument(repo):
@@ -122,7 +124,8 @@ def test_should_refuse_a_spec_that_is_not_kaos_lib():
 
 def test_should_set_up_a_venv_per_step_with_the_requirements_and_kaos_lib_where_used(repo, venv_stub, capsys):
     assert cli.main(["dev", str(repo), "--kaos-lib", "kaos-lib[zitadel]==0.4.0rc20"]) == 0
-    assert requirements_of(repo, "data_summary") == ["PyYAML"]                       # AC-32: PyYAML only
+    summary = requirements_of(repo, "data_summary")
+    assert "PyYAML" in summary and summary[-1] == "kaos-lib[zitadel]==0.4.0rc20"
     lib = requirements_of(repo, "dataset_loading")
     assert lib[-1] == "kaos-lib[zitadel]==0.4.0rc20" and lib[0].startswith("--extra-index-url") and "kaos-lib-rc" in lib[0]
     assert not (repo / "steps/model_training/.venv").exists()                         # torch: skipped by default

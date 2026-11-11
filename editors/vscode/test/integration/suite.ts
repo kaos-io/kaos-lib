@@ -30,7 +30,7 @@ const kaosChecks: Record<string, () => Promise<void>> = {
     const doc = await pipelineDoc();
     const d = await until("L-E06 diagnostic", () => vscode.languages.getDiagnostics(doc.uri).find((x) => typeof x.code === "object" && x.code.value === "L-E06"));
     assert.equal(d.severity, vscode.DiagnosticSeverity.Error);
-    assert.match(d.message, /Fix: Use hpc_time_limit/);
+    assert.match(d.message, /Fix: Use walltime/);
     assert.match(String(typeof d.code === "object" ? d.code.target : ""), /L-E06\.html$/);
   },
   async should_offer_the_rename_quick_fix_and_apply_it() {
@@ -38,10 +38,10 @@ const kaosChecks: Record<string, () => Promise<void>> = {
     const editor = await vscode.window.showTextDocument(doc);
     const d = vscode.languages.getDiagnostics(doc.uri).find((x) => typeof x.code === "object" && x.code.value === "L-E06")!;
     const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>("vscode.executeCodeActionProvider", doc.uri, d.range, vscode.CodeActionKind.QuickFix.value);
-    const fix = actions.find((a) => a.title === "Rename 'walltime' to 'hpc_time_limit'");
+    const fix = actions.find((a) => a.title === "Rename 'walltime' to 'walltime'");
     assert.ok(fix, "the rename quick fix is offered");
     await vscode.workspace.applyEdit(fix!.edit!);
-    assert.ok(editor.document.getText().includes('hpc_time_limit="12h"'));
+    assert.ok(editor.document.getText().includes('walltime="12h"'));
     assert.ok(!editor.document.getText().includes("walltime"));
   },
   async should_lint_unsaved_text_without_a_save() {

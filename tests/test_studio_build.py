@@ -6,7 +6,7 @@ import pytest
 
 from kaos_lib import cli
 from kaos_lib.studio import build, proc, steps
-from studio_helpers import DOCKER_INFO, StubEngine, template_repo
+from studio_helpers import DOCKER_INFO, DOCKER_PLAIN, StubEngine, template_repo
 
 FX = pathlib.Path(__file__).resolve().parent / "engine_fixtures"
 
@@ -64,6 +64,8 @@ def test_should_label_with_the_dockerfile_default_when_no_spec_is_chosen(repo, m
 
 
 def test_should_not_pass_the_kaos_lib_argument_to_a_dockerfile_that_does_not_declare_it(repo, monkeypatch):
+    (repo / "steps/data_summary/Dockerfile").write_text(DOCKER_PLAIN)
+    (repo / "steps/data_summary/app/entry.py").write_text("import yaml\nprint('no kaos-lib here')\n")
     stub = healthy()
     install_engine(monkeypatch, stub)
     assert cli.main(["build", "data-summary", "--path", str(repo), "--kaos-lib", "kaos-lib==0.4.0rc20"]) == 0
