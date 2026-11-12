@@ -24,14 +24,15 @@ three names:
 - **the version id**, a long hex string of 64 characters, for example
   `37592accd6a211f20307af0db7fceebf98c50367442b65eb1391ac0e6d6d3e96`. It is the exact name: one id is one set of files.
   Logs show the first 12 characters, `37592accd6a2`.
-- **`vN`**, a label such as `v2`, on an uploaded dataset. `kaosctl dataset release dataset-x` gives the newest state of the
-  dataset the next number. It refuses when that state already has one: `nothing new to release`.
-- **`latest`**, the current state of the dataset: what it holds now. It moves when a pull request is merged into an
-  uploaded dataset, and when a run that asks for it makes a version of a produced one. `latest` can be newer than the
-  newest `vN`, because nobody has released the change yet.
+- **`vN`**, a label such as `v2`, on an uploaded dataset. `kaosctl dataset release dataset-x` gives the version `latest`
+  points to the next number. It refuses when that state already has one: `nothing new to release`.
+- **`latest`**, the name that points to the dataset's current version. It moves when a pull request is merged into an
+  uploaded dataset, and when a run that asks for it makes a version of a produced one ([how to ask](flow-datasets.md#move-latest)).
+  `latest` can be newer than the newest `vN`, because nobody has released the change yet. A version that a run sealed
+  without asking is newer than `latest` in time, but it is not `latest`: nothing reads it unless you name its id.
 
-A reference to a dataset is `dataset-<name>@<version>`, where the version is `vN`, `latest` or an id. Without a
-version it means `latest`.
+The forms of a reference to a dataset, such as `dataset-<name>@<version>`, are in the
+[Reference](reference.md#dataset-references).
 
 ## Fixed when the run starts
 
@@ -97,18 +98,26 @@ changed. The log says how many: `output 'clean': 1 file(s) to upload, 0 to delet
 of dataset-myapp-clean.` Keep each file at the same path from run to run, so that it counts as unchanged. A run that
 writes exactly the files of the last version makes no new version.
 
-## When two runs write at once
+## When a step is run again
 
-A dataset has one `latest`. When two runs ask to move it at the same time, the second finds that `latest` has moved,
-makes its version again on top of the new one, and then moves `latest`. It tries up to three times. So `latest` is always
-the complete version of one run, never a mix of two. If it still cannot, the step fails with
-`changed 3 times while this step was promoting it. Another run is writing the same dataset`, and the version it made is
-kept. Only one pipeline writes a dataset, so this is rare: it needs two runs of the same pipeline.
+The platform runs a step again when its machine was lost or its time limit was reached ([Long jobs](long-jobs.md)). Each
+attempt starts with empty output folders, and only the attempt that ends with `step.result()` makes the result. What a
+retry does with what it writes:
 
-Models and artifacts are not shared this way: each run keeps its own folder, `<name>/<experiment>/<run>/`.
+| output | what the retry does |
+|---|---|
+| a dataset | seals its version again. If the files are exactly the ones an earlier attempt of this step already sealed, that version is used: no second version. The version is kept under the name `k-<run>-<step>-<12 characters of the id>`, which the log shows as `kept as ...` |
+| a model or an artifact | replaces the folder `<name>/<experiment>/<run>/` with exactly what the retry wrote; a file of the earlier attempt that the retry did not write is gone |
+
+So a retry writes each output once. If `latest` moved while the step was away (another run asked to move it), the retry
+seals on the new `latest` and does not reuse the older seal. When two runs ask to move `latest` at the same time, see
+[Move `latest`](flow-datasets.md#move-latest). Models and artifacts are not shared that way: each run keeps its own
+folder, `<name>/<experiment>/<run>/`.
 
 ## What does not exist
 
 - A version that is edited. A new version is made instead.
 - A step that picks a version in code. The form picks it.
-- A partial version. A step that fails leaves nothing that a later step or run reads.
+- A partial version. What a failed step can leave behind is in [Principles](principles.md#what-is-saved).
+
+Next: [Glossary](glossary.md).

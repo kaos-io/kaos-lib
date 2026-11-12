@@ -21,8 +21,8 @@ The first step ends with the values. The second names the first in `needs=` and 
 ```
 
 **The run records** the values in the result of the first step. A value is text, a number, a boolean, a list or an
-object. The whole result may cost 8 KiB: bigger things go in a file ([next scenario](#files-to-the-next-step)) or in
-MLflow.
+object. The whole result has a size limit ([the limits](must-and-can.md#the-limits)): bigger things go in a file
+([next scenario](#files-to-the-next-step)) or in MLflow ([See your results](see-your-results.md)).
 
 ## Files to the next step
 
@@ -49,10 +49,10 @@ Declare an artifact in `produces=`, write into its folder, and read the folder b
 
 **You want** a step to run only when the run form asks for it, and the steps after it to work either way.
 
-`when=` names a field of the run form. The field is the path of the setting in `config/` with dashes: `extra.mode` is
-`extra-mode`. A step that is skipped leaves no result and no files. The step after it asks for them with
-`optional=True` and gets `None` when they are not there. Without `optional=True` it fails, naming the step that did
-not run.
+`when=` holds a condition on the value of a run-form field, written `{{workflow.parameters.<field>}}`. The field is named
+as in [Settings](settings.md): `extra.mode` is the field `extra-mode`. A step that is skipped leaves no result and no
+files. The step after it asks for them with `optional=True` and gets `None` when they are not there. Without
+`optional=True` it fails with `step 'x' did not run, so it left no result`.
 
 ```python title="pipeline.py"
 --8<-- "examples/flows/skip/pipeline.py"

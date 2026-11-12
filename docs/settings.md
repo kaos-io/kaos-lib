@@ -72,4 +72,6 @@ default `hello`. Change it to `greetings`, submit, and read the log of `hello-wo
 | a step gets a `KeyError` for a section | the step does not name the section in `reads=` |
 | the check on the pull request names a step and a section | `reads=` names a section that is not in `config/` |
 
-The version of a dataset is not a setting you read in code. Next: [Read data](read-data.md).
+The version of a dataset is not a setting you read in code.
+
+Next: [Read data](read-data.md).

@@ -13,9 +13,9 @@ You already pass a value. `prepare` hands one on, and `hello-world` reads it:
 `hello-world` has `needs=[prepare]` in `pipeline.py`. That makes it start after `prepare`, and it is what lets it
 call `step.upstream("prepare")`.
 
-A value is small: text, numbers, booleans, lists and objects, 8 KiB for the whole result. Anything bigger fails the
-step with `the result costs ...; the limit is 8192`. Metrics and curves belong in MLflow
-(`from kaos_lib.mlflow import mlflow`), and files belong in an output.
+A value is small: text, numbers, booleans, lists and objects. The whole result has a size limit
+([the limits](must-and-can.md#the-limits)), and a bigger one fails the step with `the result costs ...`. Metrics and
+curves belong in MLflow ([See your results](see-your-results.md)), and files belong in an output.
 
 ## Hand on a file
 
@@ -42,24 +42,21 @@ the folder with the same name:
 [hello-world] hello (my-experiment-v1): 2 files (12 bytes) in clean, 3 in the reference, 1 dropped by prepare: empty.txt
 ```
 
-## What each output is
+## A step that runs only sometimes
 
-| declared as | what it is | where it is kept |
-|---|---|---|
-| `artifact("name")` | files of one run: a report, plots, a table | the repository `outputs-<app>`, under `<name>/<experiment>/<run>/` |
-| `model("name")` | files of one run: weights | the same place |
-| `dataset("name")` | a version of a dataset | the dataset `dataset-<app>-<name>` ([page 6](produce-a-dataset.md)) |
+A step can run only when a choice on the run form says so. `when=` holds the condition, and the value of a run-form
+field is written `{{workflow.parameters.<field>}}`, where `<field>` is the field's name (the path of the setting with
+dashes, see [Settings](settings.md)):
 
-`step.input("name")` returns the folder of any of the three, for a step that names the producer in `needs=`.
+```python title="pipeline.py"
+--8<-- "examples/flows/skip/pipeline.py:8:10"
+```
 
-## Rules
+`extra` runs unless the field `extra-mode` is `off`. A skipped step leaves no result, and a step that needs it asks with
+`optional=True` and gets `None`. [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) shows all
+the code.
 
-- A step's output may not have the name of one of its inputs. `prepare` could not name its output `dataset`.
-- Every declared output must be written, and must hold a file. Otherwise `step.result()` fails and saves nothing:
-  `output 'dropped-files' was not written` or `output 'dropped-files' is empty`.
-- A step that is skipped (a `when=` that is false) leaves no result. A step that needs it gets
-  `step 'x' did not run, so it left no result`, unless it asks with `step.upstream("x", optional=True)` or
-  `step.input("name", optional=True)`: it then gets `None`.
-- Define a step above the steps that need it. `needs=` takes at most ten steps.
+`step.input("name")` returns the folder of any output of a step that you name in `needs=`. The three kinds of output,
+`artifact`, `model` and `dataset`, and where each is kept are in the [Reference](reference.md#what-produces-makes), and the rules for outputs are in [What you must and what you can](must-and-can.md#you-must).
 
 Next: [Produce a dataset](produce-a-dataset.md).

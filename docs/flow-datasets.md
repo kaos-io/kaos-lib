@@ -68,10 +68,10 @@ step may read at most 16 datasets by name ([limits](must-and-can.md#the-limits))
 ```
 
 `needs=[prepare]` is what lets `hello-world` read `clean`. When `prepare` calls `step.result()`, the folder becomes one
-version of the dataset `dataset-<app>-clean`, and `hello-world` reads that version, not whatever is newest.
+version of the dataset `dataset-<app>-clean`, and `hello-world` reads that version, not whatever `latest` points to.
 
 **The run records** a write of type `dataset` in the result of `prepare`, and a read of it in the result of
-`hello-world`. A step that makes a dataset runs on the platform's own machines for now, not on HPC (Slurm).
+`hello-world`. A step that makes a dataset runs on the platform's own machines, not on HPC (Slurm) ([HPC](hpc.md#what-differs-on-hpc-slurm)).
 
 ## A second pipeline reads the dataset
 
@@ -102,11 +102,10 @@ first pipeline writes it. The second only reads.
 
 ## Move `latest`
 
-**You want** the version a run made to become what `latest` means. A run that does not ask still makes its version,
+**You want** `latest` to point to the version a run made. A run that does not ask still makes its version,
 and leaves `latest` where it was, so an experiment never changes what other pipelines read.
 
-Until the run form has a field for it, the advanced config of the run holds the request, with the name from
-`produces=`:
+The advanced config of the run holds the request, with the name from `produces=`:
 
 ```yaml title="advanced config of the run"
 --8<-- "examples/first-pipeline/produce/runs/promote.yaml"
@@ -120,5 +119,14 @@ Until the run form has a field for it, the advanced config of the run holds the 
 
 **The run records** the version of the write. With a promotion that is the version `latest` now points to; without
 it, the version that was made. Later steps read that version either way.
+
+### When two runs ask at once {#when-two-runs-write-at-once}
+
+A dataset has one `latest`. When two runs ask to move it at the same time, the second finds that `latest` has moved,
+makes its version again on top of the new one, and then moves `latest`. It tries up to three times. So `latest` is always
+the complete version of one run, never a mix of two. If it still cannot, the step fails with
+`changed 3 times while this step was promoting it. Another run is writing the same dataset`, and the version it made is
+kept, but `latest` does not point to it. Only one pipeline writes a dataset, so this is rare: it needs two runs of the
+same pipeline.
 
 Next: [Datasets, versions and hashes](datasets-versions-hashes.md).

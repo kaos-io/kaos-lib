@@ -1,0 +1,2 @@
+# A dataset that another project shares with yours: <project>/dataset-<name>@<version>.
+dataset: "acme-vision/dataset-cats@v1"

@@ -34,9 +34,10 @@ specific to it: the dataset layout, every form field and the Slurm notes.
 
 ## A step that runs only sometimes
 
-`qat-finetune` and `model-quantization` have a `when=`. The condition refers to a field of the run form by its name: the
-path of the setting in `config/` with dashes, so `quantization.mode` is `quantization-mode`. With the default
-`quantization-mode` of `none`, both steps are skipped.
+`qat-finetune` and `model-quantization` have a `when=`. Its condition holds the value of a run-form field, written
+`{{workflow.parameters.quantization-mode}}` ([page 5](pass-things-on.md#a-step-that-runs-only-sometimes)); the field name
+is the setting's path with dashes ([page 3](settings.md)). With the default `quantization-mode` of `none`, both steps are
+skipped.
 
 A skipped step leaves no result. `model-registration` needs `model-quantization` and still runs, because it asks for
 that step's result only when it exists: `step.upstream("model-quantization", optional=True)` is `None` for a step that
@@ -48,4 +49,5 @@ Create a pipeline from the YOLO template and put a YOLO dataset in your project 
 On the run form, pick the dataset and set `data-sample_size` to `50` and `data-seed` to any number. `prepare-data` keeps 50
 images of each split, the same 50 for the same seed. The run is short. When it works, set `data-sample_size` empty and run the full dataset on a GPU or on Slurm.
 
-Next: [Reference](reference.md).
+You have now read a whole pipeline. Next: [Principles](principles.md) explains why everything works the way it does,
+and the [Reference](reference.md) holds the look-up tables.

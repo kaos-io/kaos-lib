@@ -302,6 +302,71 @@ def ledger_example(tmp: pathlib.Path) -> dict:
     return result
 
 
+def flow_metrics(tmp: pathlib.Path) -> dict:
+    """A step that logs a parameter and a curve to MLflow (a local store stands in for the project's server) and
+    saves a model: the metrics must be there, and the model folder holds the weights."""
+    app = flow_app("metrics", tmp)
+    store = tmp / "mlruns"
+    env = {"MLFLOW_TRACKING_URI": f"file://{store}", "MLFLOW_TRACKING_TOKEN": "a-token", "MLFLOW_ALLOW_FILE_STORE": "true"}
+    saved = {key: os.environ.get(key) for key in (*env, "MLFLOW_TRACKING_AUTH")}   # the call sets the last one
+    had = {name for name in sys.modules if name.split(".")[0] == "mlflow"}
+    try:
+        os.environ.update(env)
+        result, run = run_step(app, tmp / "run", "train", "train", [("model", "model")], params={"train": {"epochs": 3}})
+        from mlflow.tracking import MlflowClient
+        client = MlflowClient()
+        found = client.search_runs([client.get_experiment_by_name("my-experiment-v1").experiment_id])
+        curve = [m.value for m in client.get_metric_history(found[0].info.run_id, "loss")]
+    finally:
+        for name in [m for m in sys.modules if m.split(".")[0] == "mlflow" and m not in had]:
+            del sys.modules[name]          # the package keeps the store it was pointed at: leave no import behind
+        for key, value in saved.items():
+            os.environ.pop(key, None) if value is None else os.environ.__setitem__(key, value)
+    if curve != [1.0, 0.5, 1 / 3] or found[0].data.params != {"epochs": "3"}:
+        raise ExampleError(f"train logged {curve} and {found[0].data.params} to MLflow")
+    if (run.output("model") / "weights.txt").read_text() != "trained for 3 epochs\n" or result["values"] != {"final_loss": 1 / 3}:
+        raise ExampleError(f"train handed on {result['values']}")
+    return result
+
+
+def flow_ingest(tmp: pathlib.Path) -> dict:
+    """An `ingest` step that reads a folder standing in for the outside source, and a source with no file."""
+    app = flow_app("ingest", tmp)
+    source = _tree(tmp / "source", **{"a.csv": "1,2\n", "b.csv": "3,4\n", "notes.txt": "not data\n"})
+    result, run = run_step(app, tmp / "run", "fetch", "ingest", [("dataset", "raw")],
+                           params={"source": {"folder": str(source)}})
+    if result["values"] != {"files": 2} or sorted(p.name for p in run.output("raw").iterdir()) != ["a.csv", "b.csv"]:
+        raise ExampleError(f"fetch handed on {result['values']}")
+    from kaos_lib.errors import StepError
+    try:
+        run_step(app, tmp / "empty", "fetch", "ingest", [("dataset", "raw")],
+                 params={"source": {"folder": str(_tree(tmp / "nothing", **{"notes.txt": "x"}))}})
+    except StepError:
+        return result
+    raise ExampleError("fetch did not fail when the source gave no file")
+
+
+def packages_dockerfile(tmp: pathlib.Path) -> None:
+    """The Dockerfile of the page "Add packages", in a one-step app: no error or warning of the Dockerfile rules (L-D*);
+    L-D07 (the image runs as root) is an info for every Dockerfile of the template too."""
+    app = tmp / "app"
+    shutil.copytree(FLOWS / "metrics", app)
+    (app / "steps" / "train" / "app" / "__init__.py").touch()
+    shutil.copy(FLOWS / "packages" / "Dockerfile", app / "steps" / "train" / "Dockerfile")
+    findings = [f for f in lint(app).findings if f.rule.startswith("L-D") and f.level != "info"]
+    if findings:
+        raise ExampleError(f"the Dockerfile of the page Add packages has findings: {[f.rule for f in findings]}")
+
+
+def shared_reference() -> None:
+    """The setting of the page "Share a dataset" holds a reference to a dataset of another project."""
+    from kaos_lib.datasets import DatasetRef
+    value = yaml.safe_load((FLOWS / "shared" / "config" / "dataset.yaml").read_text(encoding="utf-8"))["dataset"]
+    ref = DatasetRef.parse(value)
+    if (ref.owner, ref.repo, ref.version) != ("acme-vision", "dataset-cats", "v1"):
+        raise ExampleError(f"{value!r} parses as {ref}")
+
+
 def check_all() -> None:
     """Every example: raises ExampleError (or the error of the step) on the first one that is wrong."""
     for state in STATES:
@@ -330,9 +395,10 @@ def check_all() -> None:
         Walk("template", pathlib.Path(tmp)).second()
     with tempfile.TemporaryDirectory() as tmp:
         ledger_example(pathlib.Path(tmp))
-    for flow in (flow_two_inputs, flow_skip, flow_fan_in):
+    for flow in (flow_two_inputs, flow_skip, flow_fan_in, flow_metrics, flow_ingest, packages_dockerfile):
         with tempfile.TemporaryDirectory() as tmp:
             flow(pathlib.Path(tmp))
+    shared_reference()
     for path in sorted(EXAMPLES.rglob("*.py")):
         compile(path.read_text(encoding="utf-8"), str(path), "exec")
     for path in sorted(EXAMPLES.rglob("*.yaml")):

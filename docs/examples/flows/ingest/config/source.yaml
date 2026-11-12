@@ -1,0 +1,2 @@
+source:
+  folder: "/data/source" # where the data comes from; the example copies from a folder

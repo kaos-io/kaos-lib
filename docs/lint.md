@@ -25,7 +25,7 @@ request they come from your project. Locally, a check that lacks them is listed 
 
 | option | does |
 |---|---|
-| (none) | built-in facts: the longest run is 2 days, a resumable step continues at most 5 times, no list of classes |
+| (none) | built-in facts: the longest run and the continuations of [the limits](must-and-can.md#the-limits), no list of classes |
 | `--context FILE` | reads the facts from your project's context file |
 | `--catalogue FILE`, `--catalogue none` | reads them from a catalogue file, or skips every check that needs one |
 | `--export-catalogue FILE` | with `--context`, writes the catalogue and stops |
@@ -82,6 +82,6 @@ prove the pipeline is right.
 | warning | [L-D08 NoCudaForGpuStep](lint/L-D08.md) | a GPU step whose image shows no CUDA support, or whose plain base sets no NVIDIA driver path |
 | info | [L-I01 NodeSharing](lint/L-I01.md) | a GPU step with no limit cannot share a node |
 | info | [L-I02 LearnedLimits](lint/L-I02.md) | a short limit may be shortened further |
-| info | [L-I03 Schedules](lint/L-I03.md) | not active yet |
+| info | [L-I03 Schedules](lint/L-I03.md) | skipped in every report: a pipeline cannot declare a schedule |
 
 The `L-D` rows read each step's `Dockerfile`, never build it. `kaosctl build` prints the same findings.

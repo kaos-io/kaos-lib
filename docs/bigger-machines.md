@@ -35,28 +35,15 @@ The name and the number depend on the class you picked.
 
 ## When the GPU is not there
 
-On the platform's GPU machines, the platform checks before your code starts that the NVIDIA driver can be used. When it
-cannot, the step fails in its first second:
+On the platform's GPU machines the step fails in its first second, with a message about the NVIDIA driver
+([the message](when-something-goes-wrong.md#a-run-fails)), when the GPU cannot be used. Pick a class that has a GPU. If
+you did, tell your platform contact. A GPU step that is given a class without a GPU runs on the CPU.
 
-```text
-KAOS: this GPU step cannot reach the NVIDIA driver (libcuda.so.1 not found: ...); the image or node is not set up for GPU
-```
+Your image decides whether torch uses the GPU. Install a CUDA-enabled torch: the default `pip install torch` wheel on
+Linux is one, and a CPU-only build never uses the GPU. `kaosctl lint` warns (`L-D08`) about a GPU step whose image shows
+no CUDA support.
 
-Pick a class that has a GPU. If you did, tell your platform contact. If a GPU step is given a class without a GPU, it
-runs on the CPU and the check is skipped.
-
-Your image decides whether torch uses the GPU:
-
-- Install a CUDA-enabled torch. The default `pip install torch` wheel on Linux is; a CPU-only build never uses the GPU.
-- Keep a shell in the image. The platform starts a GPU step through `/bin/sh`.
-- `kaosctl lint` warns (`L-D08`) about a GPU step whose Dockerfile starts from a plain base image without the NVIDIA
-  driver paths.
-
-## Rules
-
-- A step that sits idle (no GPU use and no new log line for 20 minutes) ends as idle, so the GPU stops costing money.
-  `idle_timeout="40m"` on the step changes the time, `idle_timeout=0` turns the rule off.
-- Several steps of one project on one HPC class may share a node ([page 9](hpc.md)); compute only on the GPU the
-  step is given.
+A GPU step that sits idle ends as idle, so the GPU stops costing money ([the limits](must-and-can.md#the-limits)).
+Several steps of one project may share a node on HPC ([page 9](hpc.md)).
 
 Next: [Long jobs](long-jobs.md).

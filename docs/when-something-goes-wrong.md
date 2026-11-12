@@ -22,8 +22,9 @@ the command.
 | `result value 'x' is a ...; values are text, numbers, booleans, lists and objects.` | a value that is not plain data, for example a numpy array | convert it: `int(x)`, `x.tolist()` |
 | `this app may not write dataset-...: only what the step declares in produces=[...] in pipeline.py can be written.` | the step wrote a dataset another app declares, or one it did not declare | declare it in `produces=`, or write a dataset of your own |
 | `dataset-... does not exist. The platform creates the dataset or the outputs of an app when its pipeline declares them in produces=[...]; it is there shortly after that change is merged.` | the first run started before the platform made the dataset | run again shortly: it is made soon after the change that declares it is merged |
-| `output 'x': dataset-... changed 3 times while this step was promoting it. Another run is writing the same dataset.` | two runs of this pipeline asked to move `latest` together | run again: [When two runs write at once](datasets-versions-hashes.md#when-two-runs-write-at-once) |
+| `output 'x': dataset-... changed 3 times while this step was promoting it. Another run is writing the same dataset.` | two runs of this pipeline asked to move `latest` together | run again: [When two runs ask at once](flow-datasets.md#when-two-runs-write-at-once) |
 | `lakeFS rejected the credential this step was given, or it has expired. The app cannot fix this: report it to the platform team with the run's name` | the step's sign-in was refused | report it with the run's name; your code cannot fix it |
+| `KAOS: this GPU step cannot reach the NVIDIA driver (libcuda.so.1 not found: ...); the image or node is not set up for GPU` | the GPU machine the step got has no usable driver | pick a class that has a GPU; if it has one, tell your platform contact |
 | `ERROR: this is not a pipeline step: KAOS_STEP_CONTEXT is not set. Run the step with: kaosctl step run <step>` | you started `entry.py` by hand | use `kaosctl step run`, or [a test](test-your-steps.md) |
 
 ## Messages that need no action
@@ -53,16 +54,29 @@ a page: [Lint checks](lint.md).
 
 | you see | it means |
 |---|---|
-| a step offers only machines of your project and no HPC (Slurm) class | a step that makes a dataset is not offered HPC (Slurm) classes for now. Its neighbours are |
+| a step offers only machines of your project and no HPC (Slurm) class | a step that makes a dataset is not offered HPC (Slurm) classes. Its neighbours are |
 | a step offers no GPU class | a step is offered GPU classes when it declares `gpu=True` |
 | no HPC (Slurm) class at all | your project is not connected to a site, or the allocation of that class is used up: ask your platform contact |
-| `WaitingForBudget`, `ConcurrencyLimit`, `BudgetBlocked`, `SiteLimit`, `SubmitLimit` and others | the reasons an HPC (Slurm) step waits or is refused: [HPC (Slurm)](hpc.md#why-a-step-waits-or-is-refused) |
+
+### Why an HPC (Slurm) step waits or is refused
+
+The status of a step says why. These are the reasons you can meet:
+
+| reason | meaning | what to do |
+|---|---|---|
+| `WaitingForBudget` | the project's allocation covers the step once running steps end | wait |
+| `ConcurrencyLimit` | the project runs as many Slurm jobs as it may | wait |
+| `BudgetBlocked` | the step needs more node-hours than the project's share has left this month | shorten it, or ask your platform contact |
+| `SiteLimit` | the site's monthly limit for the account is used up | ask your platform contact |
+| `SubmitLimit` | the site allows only so many queued and running jobs, and the project has that many. The step fails | run it again when jobs have ended |
+| `TooLongNotResumable`, `TooLongBeyondContinuations` | the time limit is longer than the site allows | make it resumable, or shorten it |
+| `GPUViolation` | the step used a GPU that was not its own, on a node several steps share | use only the GPU the step is given |
 
 ## On your laptop
 
 | you see | it means | do this |
 |---|---|---|
-| `To run with the settings you have, write a params.yaml (a section per config file the step reads ...) and pass --params-file params.yaml. ... no pipeline engine was given.` | `kaosctl step run` cannot compose `config/` without the platform's context file for your app, which you do not make yourself | write a `params.yaml` and pass `--params-file params.yaml`: [Try it locally](try-it-locally.md#run-steps-the-way-the-platform-does) |
+| `To run with the settings you have, write a params.yaml (a section per config file the step reads ...) and pass --params-file params.yaml. ... no pipeline engine was given.` | `kaosctl step run` needs the settings from a file you write | write a `params.yaml` and pass `--params-file params.yaml`: [Try it locally](try-it-locally.md#run-steps-the-way-the-platform-does) |
 | `--python x: no such interpreter (/path/x).` | the Python you named is not at that path. A relative path is read from the folder you run the command in | give a path that exists from there, or an absolute one |
 | `--python x cannot import kaos_lib: install kaos-lib into that ...` | that Python has no kaos-lib | install kaos-lib into it |
 | `not signed in. Run kaosctl login, or set LAKEFS_ACCESS_KEY/LAKEFS_SECRET_KEY ...` | no sign-in on this machine | run `kaosctl login` inside your app folder |

@@ -16,6 +16,9 @@ guide is built.
 | skip a step by a choice on the form, and keep the steps after it working | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
 | gather the work of several steps in one | [One step needs several steps](flow-between-steps.md#one-step-needs-several-steps) |
 | train, write a model and continue after an interruption | [Train, checkpoint and resume](flow-training.md) |
+| bring data in from outside | [Bring data in](bring-data-in.md) |
+| read a dataset that another project shares | [Share a dataset](share-a-dataset.md) |
+| log metrics and find the files and models of a run | [See your results](see-your-results.md) |
 
 For the ideas behind them, read [Principles](principles.md) and
 [Datasets, versions and hashes](datasets-versions-hashes.md).

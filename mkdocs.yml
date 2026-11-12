@@ -116,6 +116,11 @@ nav:
       - "Between steps": flow-between-steps.md
       - "Train and resume": flow-training.md
       - Test your steps: test-your-steps.md
+      - See your results: see-your-results.md
+      - Add packages to a step: add-packages.md
+      - Bring data in: bring-data-in.md
+      - Share a dataset: share-a-dataset.md
+      - Make a dataset layout: make-a-layout.md
       - When something goes wrong: when-something-goes-wrong.md
   - Reference:
       - Cheat sheet: cheat-sheet.md
