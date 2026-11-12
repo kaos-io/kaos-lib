@@ -154,6 +154,9 @@ STEP_FIX = ("This step's image must be rebuilt with a newer kaos-lib. If its Doc
             "kaos-lib itself, raise that pin and push.")
 
 
+OLD_APP = "This app was made before the current pipelines. Create it again from the template."
+
+
 def _breaking_fix(raw: str) -> str:
     """What to do when the newest release changed the contract of a step (``breaking``), else ''."""
     try:
@@ -162,9 +165,7 @@ def _breaking_fix(raw: str) -> str:
         return ""
     if not isinstance(policy, dict) or policy.get("breaking") is not True:
         return ""
-    guide = f" Follow the migration guide: {policy['migration']}." if policy.get("migration") else ""
-    return (f"The newest kaos-lib ({policy.get('version')}) changed how a step is written, so this app's code has "
-            f"to change before it can run on it: rebuilding the image with a newer kaos-lib is not enough.{guide}")
+    return OLD_APP
 
 
 def at_step_start(installed: str, environ=os.environ) -> Optional[dict]:
