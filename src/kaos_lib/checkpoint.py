@@ -46,6 +46,8 @@ import time
 import types
 from typing import Any, Callable, List, Optional, Tuple
 
+from . import runtime
+
 STOP_SIGNAL = signal.SIGUSR1
 CONTINUE_EXIT_CODE = 85            # "saved, continue me"
 OUTPUT_DIR_ENV = "KAOS_OUTPUT_DIR"
@@ -482,6 +484,9 @@ class _Registration:
             return None
         if self.every is not None:
             return float(self.every) * 60
+        asked = runtime.checkpoint_every_minutes()      # the run form's `<step>-checkpoint-every`
+        if asked:
+            return float(asked) * 60
         if not self.save_seconds:
             return DEFAULT_EVERY_SECONDS
         return min(max(max(self.save_seconds) / SAVE_OVERHEAD, MIN_EVERY_SECONDS), MAX_EVERY_SECONDS)

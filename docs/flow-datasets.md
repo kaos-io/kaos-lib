@@ -105,16 +105,14 @@ first pipeline writes it. The second only reads.
 **You want** `latest` to point to the version a run made. A run that does not ask still makes its version,
 and leaves `latest` where it was, so an experiment never changes what other pipelines read.
 
-The advanced config of the run holds the request, with the name from `produces=`:
-
-```yaml title="advanced config of the run"
---8<-- "examples/first-pipeline/produce/runs/promote.yaml"
-```
+The run form has a choice for each dataset the pipeline makes: `promote-<name>`, with the name from `produces=`
+(`promote-clean` for `dataset("clean")`). It offers `false` and `true`, and the default is `false`. Set it to `true` for
+the run that should move `latest`.
 
 | the run | the version it made | `latest` |
 |---|---|---|
-| asks to promote | new | moves to it |
-| does not ask | new | stays |
+| has `promote-clean` set to `true` | new | moves to it |
+| leaves `promote-clean` at `false` | new | stays |
 | writes the same files as `latest` already holds | none: the existing version is reused | unchanged |
 
 A run uploads only what differs from `latest` and from the newest version an earlier run sealed: a run that does not

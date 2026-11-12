@@ -17,7 +17,7 @@ it. Written 2026-11-12 with the audit fixes of PRD kaos#1911.
 | 6 | How does a client re-run, cancel or stop a run, or re-run one step? | Not in the library or the templates. The console runs them | E6 |
 | 7 | What is a machine class, what does it contain (CPU, memory, GPU), and what does it cost? | The class names come from the project's platform context, which is not in these repositories. `kaosctl lint` skips the checks that need them without `--context` | E6 |
 | 8 | Which MLflow experiment does a run belong to, when the step does not name one? | The library only logs the ledger onto the MLflow runs a step creates. The example names the experiment and the run itself | E1 |
-| 9 | Where in the console is the "advanced config" of a run that holds the request to move `latest`? | The field name `plan: {promote: {...}}` is in the examples; the place on the run form is not in these repositories | D3 |
+| 9 | Answered: the request to move `latest` is the run-form field `promote-<name>` (`false` / `true`) | The advanced config no longer holds it | D3 |
 
 ## Found while fixing, not fixed because it is outside the brief
 

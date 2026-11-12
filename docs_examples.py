@@ -35,7 +35,7 @@ FIRST = EXAMPLES / "first-pipeline"
 SECOND = EXAMPLES / "second-pipeline"
 FLOWS = EXAMPLES / "flows"
 # The folders of FIRST in the order the pages lay them over the template.
-STATES = ("template", "first-step", "settings", "read-data", "pass-on", "produce", "gpu", "long-job", "hpc", "try-locally")
+STATES = ("template", "first-step", "settings", "read-data", "pass-on", "gpu", "long-job", "hpc", "try-locally")
 DOCKERFILE = '''FROM python:3.11-slim
 WORKDIR /app
 ARG KAOS_LIB_PACKAGE="kaos-lib[zitadel]==0.5.0"
@@ -403,9 +403,9 @@ def check_all() -> None:
         compile(path.read_text(encoding="utf-8"), str(path), "exec")
     for path in sorted(EXAMPLES.rglob("*.yaml")):
         yaml.safe_load(path.read_text(encoding="utf-8"))
-    promote = yaml.safe_load((FIRST / "produce" / "runs" / "promote.yaml").read_text(encoding="utf-8"))
-    if promote != {"plan": {"promote": {"clean": True}}}:
-        raise ExampleError("runs/promote.yaml is not the run's request to move the newest version of `clean`")
+    page = (HERE / "docs" / "flow-datasets.md").read_text(encoding="utf-8")
+    if "promote-clean" not in page or "plan:" in page:
+        raise ExampleError("flow-datasets.md does not name the run-form field `promote-clean`, or still shows `plan:`")
 
 
 if __name__ == "__main__":

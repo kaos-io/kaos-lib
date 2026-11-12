@@ -58,10 +58,12 @@ def test_should_run_the_second_pipeline_on_a_dataset_the_first_one_produced(tmp_
     assert yaml.safe_load((app / "config" / "clean.yaml").read_text()) == {"clean": "dataset-myapp-clean@latest"}
 
 
-def test_should_name_in_the_run_request_a_dataset_the_pipeline_produces():
-    request = yaml.safe_load((ex.FIRST / "produce" / "runs" / "promote.yaml").read_text())
+def test_should_name_the_run_form_field_of_a_dataset_the_pipeline_produces():
+    """The form has `promote-<name>` for each dataset a step produces; the page names the one of the example."""
     produced = re.findall(r'dataset\("([a-z0-9-]+)"\)', (ex.FIRST / "template" / "pipeline.py").read_text())
-    assert list(request["plan"]["promote"]) == produced == ["clean"]
+    assert produced == ["clean"]
+    page = (DOCS / "flow-datasets.md").read_text()
+    assert "`promote-clean`" in page and "plan:" not in page and "advanced config" not in page
 
 
 def test_should_run_the_test_files_of_the_pages_long_jobs_and_try_it_locally(tmp_path):

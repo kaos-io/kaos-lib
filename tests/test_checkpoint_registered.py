@@ -296,3 +296,29 @@ def test_the_platform_folder_receives_the_checkpoints_and_is_where_a_continuatio
     other = Model()
     assert checkpoint.register(save=other.save, load=other.load) == {"epoch": 3, "step": 300}
     assert other.epoch == 3
+
+
+# ------------------------------------------------------------- the run form's interval (step context)
+
+def test_the_interval_of_the_run_form_is_the_default_and_an_explicit_one_wins(tmp_path, clean, monkeypatch):
+    monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"version": 1, "checkpoint_every": 20}))
+    m = Model(1)
+    checkpoint.register(save=m.save, load=m.load)
+    clean.now += 19 * 60
+    assert checkpoint.tick() is False
+    clean.now += 2 * 60
+    assert checkpoint.tick() is True          # 20 minutes, from the context
+    checkpoint.register(save=m.save, load=m.load, checkpoint_every=5)
+    clean.now += 6 * 60
+    assert checkpoint.tick() is True          # the step's own value wins
+
+
+def test_without_an_interval_in_the_context_the_adaptive_default_stays(tmp_path, clean, monkeypatch):
+    from kaos_lib import runtime
+    monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"version": 1}))
+    assert runtime.checkpoint_every_minutes() is None
+    for bad in (0, -3, "10", True, None):
+        monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"checkpoint_every": bad}))
+        assert runtime.checkpoint_every_minutes() is None, bad
+    monkeypatch.delenv("KAOS_STEP_CONTEXT")
+    assert runtime.checkpoint_every_minutes() is None

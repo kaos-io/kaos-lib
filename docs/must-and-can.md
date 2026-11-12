@@ -46,7 +46,7 @@ pipeline, or by the library when the step runs.
 | Limit a run on HPC (Slurm) | `walltime="12h"` | [HPC (Slurm)](hpc.md) |
 | Continue after an interruption | `checkpoint.load/save`, `resumable=`, `checkpoint_every=` | [Long jobs](long-jobs.md) |
 | End a GPU step that sits idle sooner or later | `idle_timeout=` | [Reference](reference.md#pipelinepy) |
-| Move `latest` of a dataset you make | a request in the run's advanced config | [Move `latest`](flow-datasets.md#move-latest) |
+| Move `latest` of a dataset you make | the field `promote-<name>` of the run form | [Move `latest`](flow-datasets.md#move-latest) |
 | Bring data in from outside | a step of kind `ingest` | [Bring data in](bring-data-in.md) |
 | Add Python packages to a step | `RUN pip install` in the step's `Dockerfile` | [Add packages](add-packages.md) |
 | Test a step on your laptop | `kaos_lib.testing.running`, `kaosctl step run` | [Test your steps](test-your-steps.md) |
@@ -58,7 +58,6 @@ pipeline, or by the library when the step runs.
 | Write a dataset that another app declares | only the app that declares a dataset writes it |
 | Run a step that makes a dataset on HPC (Slurm) | [it runs on the platform's own machines](hpc.md#what-differs-on-hpc-slurm) |
 | Choose the version of a dataset in code | the run form chooses it |
-| Move `latest` from a field of the run form | the advanced config of the run holds the request |
 | Make a dataset as a variant of another one (`dataset("x", of=...)`) | refused |
 | Put a pipeline on a schedule | a pipeline cannot declare one (`L-I03`) |
 | Compose your settings from `config/` on your laptop without a `params.yaml` | `kaosctl step run` needs `--params-file` ([Try it locally](try-it-locally.md#run-steps-the-way-the-platform-does)) |
