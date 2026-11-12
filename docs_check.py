@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 """Three checks of the client documentation: words, removed names, links.
 
-kaos-lib and the two pipeline templates (novelcore/hera-pipeline-template, novelcore/yolo-pipelines-template)
-form one guide and link to each other. This file is the only copy of the checks. It lives in kaos-lib and
-checks any of the three repositories:
+kaos-lib holds the one guide. The two pipeline templates (novelcore/hera-pipeline-template,
+novelcore/yolo-pipelines-template) hold no site: an app made from one keeps plain Markdown (README.md, and for yolo
+a few pages in docs/) that links to the guide, and the guide links to those files on GitHub. This file is the only
+copy of the checks and checks all three, from kaos-lib:
 
     python3 docs_check.py              this checkout (kaos-lib); also a mkdocs hook, so `mkdocs build` runs it
-    python3 docs_check.py <folder>     a checkout of a template (its scripts/check-docs.sh and the platform's
-                                       docs build of the templates do this)
     python3 docs_check.py --self-test  the checker's own cases
 
-  words          client pages never name what the platform is built from
-  removed names  nothing describes a step or a folder that no longer exists
-  links          every link of the repository resolves, in it and in the other two, and every link of the
-                 other two into it resolves
+  words          client pages never name what the platform is built from (the Markdown of all three)
+  removed names  nothing describes a step or a folder that no longer exists (the Markdown of all three)
+  links          every link of the three repositories resolves, in its own repository and in the others
 
-The other two repositories are read at their trunk: downloaded, or from a checkout named by DOCS_CHECK_KAOS_LIB,
-DOCS_CHECK_HERA or DOCS_CHECK_YOLO (kaos-lib is this checkout unless named). A download that fails is an
-error: nothing is skipped silently. DOCS_CHECK_OFFLINE=1 checks the repository alone and prints what it skipped.
-DOCS_CHECK_EXTERNAL=1 also fetches every other http(s) link.
+The templates are read at their trunk: downloaded, or from a checkout named by DOCS_CHECK_HERA or DOCS_CHECK_YOLO.
+A download that fails is an error: nothing is skipped silently. DOCS_CHECK_OFFLINE=1 checks kaos-lib alone and prints
+what it skipped. DOCS_CHECK_EXTERNAL=1 also fetches every other http(s) link.
 """
 from __future__ import annotations
 
@@ -47,12 +44,12 @@ REPOS = {
     },
     "HERA": {
         "repo": "novelcore/hera-pipeline-template", "trunk": "dev",
-        "sites": ("https://novelcore.github.io/hera-pipeline-template/", BUCKET + "template-docs/hera-pipeline-template/"),
+        "sites": (),
         "generated": (), "not_client": (),
     },
     "YOLO": {
         "repo": "novelcore/yolo-pipelines-template", "trunk": "dev",
-        "sites": ("https://novelcore.github.io/yolo-pipelines-template/", BUCKET + "template-docs/yolo-pipelines-template/"),
+        "sites": (),
         "generated": (), "not_client": (),
     },
 }
@@ -105,12 +102,11 @@ def find_root(start: pathlib.Path) -> pathlib.Path:
 
 
 def key_of(root: pathlib.Path) -> str:
-    """Which of the three repositories `root` is, from `repo_name` in its mkdocs.yml."""
+    """The repository `root` is: kaos-lib, the only one with a mkdocs.yml (its `repo_name`)."""
     m = re.search(r"^repo_name:\s*(\S+)", (root / "mkdocs.yml").read_text(encoding="utf-8"), re.M)
-    for key, spec in REPOS.items():
-        if m and m.group(1) == spec["repo"]:
-            return key
-    raise SystemExit(f"docs check: {root / 'mkdocs.yml'} names none of the three repositories in repo_name")
+    if not m or m.group(1) != REPOS["KAOS_LIB"]["repo"]:
+        raise SystemExit(f"docs check: {root / 'mkdocs.yml'} is not kaos-lib's: the checks run from kaos-lib and read the templates")
+    return "KAOS_LIB"
 
 
 def pages(root: pathlib.Path) -> list:
@@ -137,7 +133,7 @@ def check_text(root: pathlib.Path, key: str) -> tuple:
     spec = REPOS[key]
     words, removed = [], []
     code = sorted(p for p in (root / "docs" / "examples").rglob("*") if p.suffix in (".py", ".yaml"))   # shown on pages
-    for path in [*pages(root), root / "mkdocs.yml", *code]:
+    for path in [*pages(root), *([root / "mkdocs.yml"] if (root / "mkdocs.yml").is_file() else []), *code]:
         rel = path.relative_to(root).as_posix()
         if listed(rel, spec["not_client"]):
             continue
@@ -268,63 +264,55 @@ def answers(url: str) -> bool:
     return True     # still rate-limited: unknown, not broken
 
 
-def check_links(root: pathlib.Path, key: str, env) -> tuple:
-    """(broken links, what was checked, what was skipped) for the repository `key` at `root`."""
-    offline = env.get("DOCS_CHECK_OFFLINE") == "1"
+def read_trees(root: pathlib.Path, key: str, env) -> dict:
+    """{repository key: checkout}: `root` (kaos-lib) and, unless offline, the two templates at their trunk."""
     trees = {key: root}
     for other in REPOS:
-        if other != key and not offline:
+        if other != key and env.get("DOCS_CHECK_OFFLINE") != "1":
             given = env.get(f"DOCS_CHECK_{other}")
-            if given:
-                trees[other] = pathlib.Path(given).resolve()
-            elif other == "KAOS_LIB" and (HERE / "mkdocs.yml").is_file():
-                trees[other] = HERE
-            else:
-                trees[other] = fetch(other)
-            if not (trees[other] / "mkdocs.yml").is_file():
+            trees[other] = pathlib.Path(given).resolve() if given else fetch(other)
+            if not (trees[other] / "README.md").is_file():
                 raise SystemExit(f"docs check: DOCS_CHECK_{other}={given} is not a checkout of {REPOS[other]['repo']}")
+    return trees
+
+
+def check_links(root: pathlib.Path, key: str, env, trees=None) -> tuple:
+    """(broken links, what was checked, what was skipped) for the three repositories: `root` (kaos-lib) and the two
+    templates at their trunk. A link is checked wherever it is written: into its own repository or into another."""
+    offline = env.get("DOCS_CHECK_OFFLINE") == "1"
+    trees = trees or read_trees(root, key, env)
     bad, external, unchecked = [], {}, 0
-    for path in [*pages(root), root / "mkdocs.yml"]:
-        rel = path.relative_to(root).as_posix()
-        for number, target in links(path):
-            where = f"{rel}:{number}"
-            if target.startswith(("mailto:", "tel:")):
-                continue
-            if target.startswith(("http://", "https://")):
-                hit = in_repo(target)
-                if hit is None:
-                    external.setdefault(target.split("#")[0], where)
-                elif hit[0] not in trees:
-                    unchecked += 1
-                else:
-                    why = missing(trees[hit[0]], hit[0], hit[1], heading_of(target))
-                    if why:
-                        bad.append(f"{where}: {target}: {why} in {REPOS[hit[0]]['repo']} ({hit[1]})")
-                continue
-            file, _, fragment = target.partition("#")
-            dest = path if not file else (path.parent / file.split("?")[0])
-            dest_rel = os.path.relpath(dest, root).replace(os.sep, "/")
-            why = missing(root, key, dest_rel, fragment) if not dest_rel.startswith("..") else "points outside the repository"
-            if why:
-                bad.append(f"{where}: {target}: {why}")
-    for other, tree in trees.items():                         # what the other two say about this repository
-        if other == key:
-            continue
-        for path in [*pages(tree), tree / "mkdocs.yml"]:
+    for source, tree in trees.items():
+        for path in [*pages(tree), *([tree / "mkdocs.yml"] if (tree / "mkdocs.yml").is_file() else [])]:
+            rel = path.relative_to(tree).as_posix()
             for number, target in links(path):
-                hit = in_repo(target) if target.startswith("https://") else None
-                if hit and hit[0] == key:
-                    why = missing(root, key, hit[1], heading_of(target))
-                    if why:
-                        bad.append(f"{REPOS[other]['repo']}@{REPOS[other]['trunk']} {path.relative_to(tree).as_posix()}:{number} "
-                                   f"links to {target}: {why} here ({hit[1]})")
+                where = f"{rel}:{number}" if source == key else f"{REPOS[source]['repo']}@{REPOS[source]['trunk']} {rel}:{number}"
+                if target.startswith(("mailto:", "tel:")):
+                    continue
+                if target.startswith(("http://", "https://")):
+                    hit = in_repo(target)
+                    if hit is None:
+                        external.setdefault(target.split("#")[0], where)
+                    elif hit[0] not in trees:
+                        unchecked += 1
+                    else:
+                        why = missing(trees[hit[0]], hit[0], hit[1], heading_of(target))
+                        if why:
+                            bad.append(f"{where}: {target}: {why} in {REPOS[hit[0]]['repo']} ({hit[1]})")
+                    continue
+                file, _, fragment = target.partition("#")
+                dest = path if not file else (path.parent / file.split("?")[0])
+                dest_rel = os.path.relpath(dest, tree).replace(os.sep, "/")
+                why = missing(tree, source, dest_rel, fragment) if not dest_rel.startswith("..") else "points outside the repository"
+                if why:
+                    bad.append(f"{where}: {target}: {why}")
     if env.get("DOCS_CHECK_EXTERNAL") == "1":
         bad += [f"{where}: {url}: does not answer" for url, where in sorted(external.items()) if not answers(url)]
     note = f"{len(external)} other addresses" + ("" if env.get("DOCS_CHECK_EXTERNAL") == "1" else " not fetched")
     if len(trees) > 1:
         note += "; with " + ", ".join(f"{REPOS[o]['repo']} at {t}" for o, t in trees.items() if o != key)
-    skipped = (f"SKIPPED (DOCS_CHECK_OFFLINE=1): {unchecked} links of this repository into the other two, and every "
-               f"link of the other two into this one, were NOT checked") if offline else ""
+    skipped = (f"SKIPPED (DOCS_CHECK_OFFLINE=1): the two templates were NOT read: {unchecked} links of kaos-lib into "
+               f"them, and every link and word of theirs, were NOT checked") if offline else ""
     return bad, note, skipped
 
 
@@ -332,8 +320,14 @@ def check_links(root: pathlib.Path, key: str, env) -> tuple:
 def run(root: pathlib.Path, env=os.environ) -> tuple:
     """(report text, number of findings) of the three checks on the repository at `root`."""
     key = key_of(root)
-    words, removed = check_text(root, key)
-    broken, note, skipped = check_links(root, key, env)
+    trees = read_trees(root, key, env)
+    words, removed = [], []
+    for other, tree in trees.items():
+        found = check_text(tree, other)
+        prefix = "" if other == key else f"{REPOS[other]['repo']}@{REPOS[other]['trunk']} "
+        words += [prefix + f for f in found[0]]
+        removed += [prefix + f for f in found[1]]
+    broken, note, skipped = check_links(root, key, env, trees)
     out = [f"docs check of {REPOS[key]['repo']} ({root})"]
     for title, found, hint in (
             ("words", words, "client pages never name what the platform is built from"),
@@ -362,17 +356,17 @@ def on_pre_build(config, **kwargs):
 # ------------------------------------------------------------------ the checker's own cases
 def self_test() -> int:
     """Every rule on a small made-up copy of the three repositories; an AssertionError names the case that broke."""
-    global HERE
     top = pathlib.Path(tempfile.mkdtemp(prefix="docs-check-self-"))
-    kept = HERE
     try:
         for key, spec in REPOS.items():
             (top / key / "docs" / "img").mkdir(parents=True)
-            (top / key / "mkdocs.yml").write_text(f"repo_name: {spec['repo']}\nnav:\n  - Home: index.md\n")
             (top / key / "docs" / "index.md").write_text("# Home\n\n## A heading\n")
             (top / key / "docs" / "img" / "argo-run.png").write_bytes(b"")
+            (top / key / "README.md").write_text("# Readme\n")
+        (top / "KAOS_LIB" / "mkdocs.yml").write_text(f"repo_name: {REPOS['KAOS_LIB']['repo']}\nnav:\n  - Home: index.md\n")
         (top / "KAOS_LIB" / "docs_check.py").write_text("line\n")
-        (top / "YOLO" / "docs" / "into-hera.md").write_text("[gone](https://novelcore.github.io/hera-pipeline-template/gone/)\n")
+        (top / "YOLO" / "docs" / "into-lib.md").write_text(f"[gone]({BUCKET}docs/gone.html)\n")
+        (top / "YOLO" / "README.md").write_text("Run kubectl. [broken](docs/nope.md)\n")
         lines = [
             "Open Argo.", "The argoproj project.", "Set ARGO_SERVER first.", '[the form](index.md "the Argo form")',
             "Run kubectl.", "In the namespace.", "Crossplane makes it.", "On kubecore-dev-kaos-v3-gke.",          # 1-8: words
@@ -383,37 +377,44 @@ def self_test() -> int:
             "[no file](nope.md)", "[no heading](index.md#nope)", '<a href="nope-a.md">x</a>', '<img src="img/nope.png">',
             "[![a run](img/argo-run.png)](nope-outer.md)",
             "[no page](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/nope.html)",
-            "[no heading there](https://novelcore.github.io/yolo-pipelines-template/#nope)",                    # 19-25: links
+            "[no file there](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/nope.md)",
+            "[no heading there](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/index.md#nope)",  # 19-26: links
             "[ok](index.md#a-heading) <a href=\"index.md\">ok</a> [![a run](img/argo-run.png)](index.md)",
             "[lines](https://github.com/kaos-io/kaos-lib/blob/main/docs_check.py#L3-L9) "
             "[line](https://github.com/kaos-io/kaos-lib/blob/main/docs_check.py#L1)",
-            "[ok there](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html#a-heading)",      # 26-28: fine
+            "[ok there](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html#a-heading)",      # 27-29: fine
+            "[ok in yolo](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/index.md#a-heading)",
         ]
-        (top / "HERA" / "docs" / "page.md").write_text("\n".join(lines) + "\n")
+        (top / "KAOS_LIB" / "docs" / "page.md").write_text("\n".join(lines) + "\n")
         env = {f"DOCS_CHECK_{key}": str(top / key) for key in REPOS}
-        words, removed = check_text(top / "HERA", "HERA")
-        broken, _, skipped = check_links(top / "HERA", "HERA", env)
+        lib = top / "KAOS_LIB"
+        words, removed = check_text(lib, "KAOS_LIB")
+        broken, _, skipped = check_links(lib, "KAOS_LIB", env)
         at = lambda found: sorted({int(f.split(":")[1]) for f in found if f.startswith("docs/page.md:")})
         assert at(words) == [1, 2, 3, 4, 5, 6, 7, 8], f"words: {words}"
         assert at(removed) == [10, 11, 12, 13, 14, 15, 16, 17], f"removed names: {removed}"
-        assert at(broken) == [19, 20, 21, 22, 23, 24, 25], f"links: {broken}"
-        assert sum("into-hera.md:1 links to" in f for f in broken) == 1 and not skipped, f"inbound: {broken}"
-        _, _, skipped = check_links(top / "HERA", "HERA", {"DOCS_CHECK_OFFLINE": "1"})
-        assert skipped.startswith("SKIPPED (DOCS_CHECK_OFFLINE=1): 5 links"), f"offline: {skipped}"
-        HERE = top / "nowhere"                                   # no kaos-lib checkout: it must be downloaded
-        REPOS["KAOS_LIB"]["trunk"], real = "no-such-branch-docs-check-self-test", REPOS["KAOS_LIB"]["trunk"]
+        assert at(broken) == [19, 20, 21, 22, 23, 24, 25, 26], f"links: {broken}"
+        assert sum("novelcore/yolo-pipelines-template@dev docs/into-lib.md:1" in f for f in broken) == 1 and not skipped, \
+            f"a template's link into the guide: {broken}"
+        assert sum("novelcore/yolo-pipelines-template@dev README.md:1: docs/nope.md: no such file" in f for f in broken) == 1, \
+            f"a template's link inside itself: {broken}"
+        yolo_words, _ = check_text(top / "YOLO", "YOLO")
+        assert [w for w in yolo_words if w.startswith("README.md:1:")], f"words of a template: {yolo_words}"
+        _, _, skipped = check_links(lib, "KAOS_LIB", {"DOCS_CHECK_OFFLINE": "1"})
+        assert skipped.startswith("SKIPPED (DOCS_CHECK_OFFLINE=1): the two templates were NOT read: 3 links"), f"offline: {skipped}"
+        REPOS["HERA"]["trunk"], real = "no-such-branch-docs-check-self-test", REPOS["HERA"]["trunk"]
         try:
             failed = ""
             try:
                 with _no_network():
-                    check_links(top / "HERA", "HERA", {"DOCS_CHECK_YOLO": str(top / "YOLO")})
+                    check_links(lib, "KAOS_LIB", {"DOCS_CHECK_YOLO": str(top / "YOLO")})
             except SystemExit as exc:
                 failed = str(exc)
         finally:
-            REPOS["KAOS_LIB"]["trunk"] = real
-        assert "cannot download kaos-io/kaos-lib" in failed and "DOCS_CHECK_OFFLINE=1" in failed, f"fail closed: {failed!r}"
+            REPOS["HERA"]["trunk"] = real
+        assert "cannot download novelcore/hera-pipeline-template" in failed and "DOCS_CHECK_OFFLINE=1" in failed, \
+            f"fail closed: {failed!r}"
     finally:
-        HERE = kept
         shutil.rmtree(top, True)
     return 0
 
