@@ -18,10 +18,10 @@ start, do something, hand back a result.
 The platform runs the step as `python -m app.entry`, with no arguments. Your code reads no environment variable:
 `step.start()` gives you everything.
 
-## The kind of a step
+## The type of a step
 
-Every step in `pipeline.py` says what it does with `kind=`: `ingest`, `transform`, `train`, `evaluate`, `publish` or
-`control`. Each kind has a contract, for example a `train` step produces a model: [Step types](step-types.md) has them
+Every step in `pipeline.py` says what it does with its type, `kind=`: `ingest`, `transform`, `train`, `evaluate`, `publish` or
+`control`. Each type has a contract, for example a `train` step produces a model: [Step types](step-types.md) has them
 all, with an example of each.
 
 ## The name of a step and its folder

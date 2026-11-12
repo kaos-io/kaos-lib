@@ -20,7 +20,7 @@ same check on every pull request, and an error fails it. Warnings and infos neve
 
 ## Project facts
 
-Some checks need facts about your project: its compute classes and the longest run of its Slurm site. On a pull
+Some checks need facts about your project: its compute classes and the longest run of its HPC (Slurm) site. On a pull
 request they come from your project. Locally, a check that lacks them is listed as `skipped`: never as passed.
 
 | option | does |
@@ -31,7 +31,7 @@ request they come from your project. Locally, a check that lacks them is listed 
 | `--export-catalogue FILE` | with `--context`, writes the catalogue and stops |
 
 Whether a step can continue after an interruption is judged in this order: what `pipeline.py` says (`resumable=`), what the
-platform recorded for the step on the Slurm site, what the step's code shows (`kaos_lib.checkpoint`, a hooked framework),
+platform recorded for the step on the HPC (Slurm) site, what the step's code shows (`kaos_lib.checkpoint`, a hooked framework),
 and otherwise nothing: a check that needs to know stays silent rather than guess.
 
 ## Options

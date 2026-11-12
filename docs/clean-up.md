@@ -1,5 +1,8 @@
 # Clean up
 
+This page is about what a run leaves on the platform and on the HPC (Slurm) site. The data a pipeline makes (run branches and
+kept versions of its datasets) is on [What is kept, and for how long](data-retention.md).
+
 **You want** to know what your runs leave behind, what the platform removes for you and when, and what is left.
 
 You do not have to do anything: the cleanup of failed jobs runs by itself every week.
@@ -26,9 +29,9 @@ Work folders, checkpoint copies and datasets on the site count against your proj
 | The record of a finished run | 30 days after it ends |
 | The pods of a finished run, succeeded or failed, and with them the logs of its steps | 7 days after it ends. Read the log of a step within a week |
 | Work folders of failed, cancelled and idle steps; their checkpoint copies; their job output files | kept 14 days so you can look at them, then removed at the next weekly cleanup (**every Sunday at 03:17 UTC**) |
-| Checkpoint copies of a step that has been abandoned for 7 days | when the next job of your project starts on the site |
+| Checkpoint copies of a step that has been abandoned for 7 days | when the next job of your project starts on the site. On the platform's own machines, copies of a run that never finished are removed after 7 days |
 | A step image replaced by a newer build | within the hour. An image nothing has used for 14 days is removed too |
-| A dataset copy on the site | only when a newer copy needs the room; the newest copy of each dataset stays. The weekly cleanup does not remove datasets or images |
+| A dataset copy on the site | when a newer copy needs the room, or when nothing has used it for 14 days (checked when the next job of your project starts). The weekly cleanup does not remove datasets or images |
 
 ## What the weekly cleanup never removes
 

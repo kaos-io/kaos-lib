@@ -495,6 +495,17 @@ KIND_MISTAKES = (
 )
 
 
+# Warnings the train page shows: (the lines of pipeline.py, the rule, the message `kaosctl lint` gives).
+TRAIN_WARNINGS = (
+    ('train = step("train", kind="train", walltime="12h", produces=[model("model")])', "L-W06",
+     "Step 'train' is a training step with a time limit (the default on the run form) and is not resumable: a run cut by "
+     "its time limit starts over. Add resumable=True and save checkpoints."),
+    ('train = step("train", kind="train", gpu=True, walltime="12h", resumable=False, produces=[model("model")])', "L-W01",
+     "Step 'train' has a default time limit of 12 hours and is not resumable (set not resumable). An interruption (a lost "
+     "machine, the time limit) loses all its work."),
+)
+
+
 def _lint_text(tmp: pathlib.Path, body: str):
     """The findings for a pipeline with the line `body`, and the config and the folders a step needs."""
     app = tmp / "mistake"
@@ -562,6 +573,13 @@ def kind_mistakes(tmp: pathlib.Path) -> None:
         page = (HERE / "docs" / f"step-type-{kind}.md").read_text(encoding="utf-8")
         if sentence not in page:
             raise ExampleError(f"docs/step-type-{kind}.md does not show the sentence of kaosctl lint: {sentence!r}")
+    train = (HERE / "docs" / "step-type-train.md").read_text(encoding="utf-8")
+    for number, (body, rule, sentence) in enumerate(TRAIN_WARNINGS):
+        found = [f for f in _lint_text(tmp / f"warning{number}", body) if f.rule == rule and sentence in f.message]
+        if not found:
+            raise ExampleError(f"the train warning is not {rule} with the sentence on its page: {sentence!r}")
+        if sentence not in train:
+            raise ExampleError(f"docs/step-type-train.md does not show the sentence of kaosctl lint: {sentence!r}")
 
 
 def flow_gpus(tmp: pathlib.Path) -> None:

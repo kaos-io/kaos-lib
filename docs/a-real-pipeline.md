@@ -9,7 +9,7 @@ specific to it: [the steps](https://github.com/novelcore/yolo-pipelines-template
 --8<-- "examples/yolo-pipeline/pipeline.py"
 ```
 
-| step | kind | what it does | what you know from |
+| step | type | what it does | what you know from |
 |---|---|---|---|
 | `config-validation` | `control` | checks that the form values fit together, before any machine is paid for | a `control` step handles no data: no `inputs=`, no `produces=` |
 | `prepare-data` | `transform` | writes the run's dataset again as the dataset `prepared`, all of it or a sample | `inputs=` and `produces=dataset(...)` ([page 4](read-data.md), [6](produce-a-dataset.md)) |

@@ -46,12 +46,12 @@ every output: `name`, `type`, `repo`, `commit`.
 | `reads=` | sections of `config/` the step gets in `params` | a section that is not in `config/` |
 | `inputs=` | top-level `config/` values (text) that hold a dataset reference | a name that is not in `config/` or not text; a name that starts with `kaos-`; `control` steps |
 | `needs=` | earlier steps (the variables) | more steps than the limit; a step defined below; an input and a needed output of one name; two needed steps producing one name; more readable datasets than the limit |
-| `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; a kind that may not produce what is listed ([Step types](step-types.md)) |
-| `gpu=True` | one GPU | |
+| `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; a type that may not produce what is listed ([Step types](step-types.md)) |
+| `gpu=True` | the step is offered the GPU classes. On the platform's own machines it gets the GPU of its class; on HPC (Slurm) it gets one GPU when node sharing is on, and the whole node's GPUs when it is off ([GPUs on HPC (Slurm)](gpus-on-hpc.md)) | |
 | `when="..."` | a name compared with a text, written `"<name> == text"` or with `!=`. The name is a field of the run form (`"mode != off"`) or a value of a step in `needs=` (`"evaluate.passed == true"`: the keyword of that step's `step.result(passed=...)`). Join comparisons with `and` / `or` (`and` first, no parentheses, no `<` or `>`); a text with spaces is quoted. A value that is not there stops the run ([Conditions and skipping](conditions-and-skipping.md)) | a `when=` that is not written that way; a field the run form does not have; a value of a step that is not in `needs=` |
 | `walltime=` | the longest the step may run, wherever it runs: `"90m"`, `"12h"`, `"720"` (minutes). It is the default of the run-form field `<step>-walltime`; without it that default is [the limit](contract.md#the-limits) | a wrong form |
 | `resumable=` | `True` (stop signal 10 minutes before the limit), a lead time `"20m"`, or `False` | a wrong form |
-| `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every`, and `kaos_lib.checkpoint` uses the field's value as the interval of `tick()` when you set none | a wrong form |
+| `checkpoint_every=` | how often the platform copies the checkpoint your step saved: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every`, and `kaos_lib.checkpoint` uses the field's value as the interval of `tick()` when you set none | a wrong form |
 | `idle_timeout=` | minutes without GPU use and log lines before a GPU step ends as idle: `"40m"`, `40`, `0` for never; the default is in [the limits](contract.md#the-limits) | a wrong form |
 
 Refused at render, as well: `outputs=`, `hpc_time_limit=` and `disk=`; a step that produces a dataset and is pinned to

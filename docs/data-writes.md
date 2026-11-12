@@ -95,7 +95,11 @@ is `false` ([how to ask](flow-datasets.md#move-latest)).
 the end of the run the platform first checks every dataset whose field is `true`: its `latest` must still be the version the step started
 from. If one has moved, the run moves none and fails, naming the dataset that moved. Every version the run made is kept.
 Then it moves them all. Steps skipped with a condition or with `step.skip()` make nothing, so their datasets are not moved,
-and the log of the run says so.
+and the log of the run says so. The one exception is a cut-short end of the run ([below](#if-the-end-of-the-run-is-cut-short)).
+
+> The word *promote* means two things in a pipeline. The run-form field `promote-<name>` moves the `latest` of a dataset. A
+> setting such as `registration-promote_to` in a template gives a model an alias in the registry. They are separate: the
+> second never moves a dataset's `latest`.
 
 ### When two runs write at once {#when-two-runs-write-at-once}
 

@@ -3,8 +3,8 @@
 **You want** a pipeline to start from data that is not in your project: a source outside the platform that a step
 copies into a dataset.
 
-That step has the kind `ingest`. It runs on the platform's own machines and, like any step, writes a dataset by
-declaring it in `produces=`. The kind has no other requirement on the code ([the ingest type](step-type-ingest.md)).
+That step is of the type `ingest`. It runs on the platform's own machines and, like any step, writes a dataset by
+declaring it in `produces=`. The type has no other requirement on the code ([the ingest type](step-type-ingest.md)).
 
 This example copies the `.csv` files of a folder into the dataset `raw`. The folder stands in for the outside source: a
 real step writes into the same output folder what it downloads, in place of the loop.

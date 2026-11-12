@@ -15,7 +15,7 @@ A step does not name a queue or a quality of service. The platform chooses them.
 
 Slurm stops a job at its time limit. The limit is the one every step has, wherever it runs: the field `<step>-walltime`
 of the run form, whose default is `walltime=` on the step: `"90m"`, `"12h"` or `"720"` (minutes). A step that sets none
-gets `4h` ([the limits](contract.md#the-limits)). [Long jobs](long-jobs.md#the-time-limit) says what happens when
+gets `4h`. The longest limit is 30 days ([the limits](contract.md#the-limits)). [Long jobs](long-jobs.md#the-time-limit) says what happens when
 the limit is reached.
 
 ```python title="pipeline.py" hl_lines="24"
@@ -25,7 +25,7 @@ the limit is reached.
 ## What differs on HPC (Slurm)
 
 A step that produces a dataset runs on the platform's own machines, so `prepare` stays where it is. Every other step
-except the kinds `ingest`, `publish` and `control` may run on HPC. `train` reads `clean` from a copy that the platform
+except the step types `ingest`, `publish` and `control` may run on HPC. `train` reads `clean` from a copy that the platform
 puts beside the job before it starts, and `step.input()` returns that copy. The job waits in the Slurm queue first, for
 minutes or hours. Outputs, result and MLflow use the same calls as anywhere. The step code never names a place.
 
@@ -41,7 +41,7 @@ one ends at its limit.
 
 A step that asks for more time than the longest run the site allows is not cut. If it can continue, it runs as several
 capped jobs, one after the other, each from the last checkpoint. If it cannot, it is refused before it is sent: make it
-resumable, or shorten the limit in the field `<step>-walltime` of the run form (and its default, `walltime=`). `kaosctl lint` reports this before you push (`L-E01`, `L-E02`).
+resumable, or shorten the limit in the field `<step>-walltime` of the run form (`walltime=` is only its default). `kaosctl lint` reports the default before you push (`L-E01`, `L-E02`).
 
 A step that waits or is refused has a reason in its status:
 [Why an HPC (Slurm) step waits or is refused](when-something-goes-wrong.md#why-an-hpc-slurm-step-waits-or-is-refused) lists them.

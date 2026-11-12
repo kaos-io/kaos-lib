@@ -69,7 +69,7 @@ without its folder is refused, and the message names the folder to create (`L-E0
    first step. Every step of the run reads that version, even if `latest` moves while the run is going
    ([what a run reads](data-reads.md)).
 5. **It starts each step with one context.** After the steps it needs, on the machine class you chose, with its time
-   limit. The context holds the run, the app, the project, the step and its kind, the experiment, the settings of the
+   limit. The context holds the run, the app, the project, the step and its type, the experiment, the settings of the
    sections in `reads=`, the exact version of each input, what the step declared in `produces=`, and the results of the
    steps in `needs=`. It costs at most 96 KiB.
 6. **It collects one result from each step.** What the step hands on with `step.result(...)` reaches the steps that need
@@ -143,7 +143,7 @@ pipeline, and the third when a run starts.
 | `L-E06 ... when= is written with plain names, not with {{...}}` | `when=` has the `{{workflow.parameters.<field>}}` form | write the field's name instead |
 | `Step 'x' has no folder steps/x_y/. The folder of a step is steps/ plus the step's name with every hyphen written as an underscore` | the step's folder is missing or has a hyphen | create `steps/<name with underscores>/` with a `Dockerfile` and `app/entry.py` |
 | `Step 'x' has no kind=, which every step declares: one of ingest, transform, train, evaluate, publish, control.` | a step has no `kind=` | add the kind that says what the step does. "This app was made before the current pipelines" follows only when no step has a kind |
-| `kind is 'x', which is not a kind. A step is one of ingest, transform, train, evaluate, publish, control.` | a kind that does not exist | choose one of the six |
+| `kind is 'x', which is not a kind. A step is one of ingest, transform, train, evaluate, publish, control.` | a type that does not exist | choose one of the six |
 | `'clean' is both an input (inputs=) and one of its own outputs (produces=)` | a step reads and writes one name | rename the setting, for example `previous-clean`, or the produced name |
 | `... has the input 'x' and needs a step that produces 'x'`; `needs 'a' and 'b', which both produce 'x'` | a name would mean two things | rename one |
 | `the dataset name 'x' is too short. A dataset name has 3 to 40 characters` | `dataset("x")` | give it a longer name |
@@ -155,19 +155,19 @@ pipeline, and the third when a run starts.
 | `can read 17 datasets by name ...` | more than 16 datasets in one step | split the step, or join datasets |
 | `dataset(..., of=...) is reserved for a later release` | `of=` is not available yet | remove it |
 
-### When a step does not keep to its kind
+### When a step does not keep to its type
 
-A step that breaks the contract of its kind is refused with one sentence. The platform says it with a small `s`
+A step that breaks the contract of its type is refused with one sentence. The platform says it with a small `s`
 (`step 'x': ...`) and `kaosctl lint` with a capital (`Step 'x': ...`, rule `L-E07`). Each type's page shows its own.
 
 | you see | do this |
 |---|---|
-| `an ingest step brings data in, so it produces a dataset. Add produces=[dataset("name")].` | add the dataset, or choose the kind of the work the step does |
+| `an ingest step brings data in, so it produces a dataset. Add produces=[dataset("name")].` | add the dataset, or choose the type of the work the step does |
 | `a transform step turns data into something. Add produces=[...] with a dataset, a model or an artifact.` | add what it makes |
-| `a train step produces a model. Add produces=[model("name")], or give the step the kind of the work it does (ingest, transform, evaluate, publish, control).` | add the model, or change the kind |
+| `a train step produces a model. Add produces=[model("name")], or give the step the kind of the work it does (ingest, transform, evaluate, publish, control).` | add the model, or change the type |
 | `an evaluate step writes reports only, so it may not produce a dataset or a model. Use kind="transform" for a step that makes a dataset, kind="train" for one that makes a model.` | change the kind, or write an artifact |
 | `a publish step delivers a result and produces nothing here. Remove produces=, or give the step the kind of the work it does.` | remove `produces=` |
-| `a control step steers the run and handles no data, so it takes no inputs= and no produces=.` | remove them, or give the step the kind of the work it does |
+| `a control step steers the run and handles no data, so it takes no inputs= and no produces=.` | remove them, or give the step the type of the work it does |
 
 ### When a run starts
 
@@ -240,7 +240,7 @@ What a run keeps and removes, and when, is in [What is kept, and for how long](d
 | End a GPU step that sits idle sooner or later | `idle_timeout=` | [Reference](reference.md#pipelinepy) |
 | Run a step many times, once for each combination of values | see [Sweeps](sweeps.md) | [Sweeps](sweeps.md) |
 | Move `latest` of a dataset you make | the field `promote-<name>` of the run form | [Move `latest`](flow-datasets.md#move-latest) |
-| Bring data in from outside | a step of kind `ingest` | [Bring data in](bring-data-in.md) |
+| Bring data in from outside | a step of type `ingest` | [Bring data in](bring-data-in.md) |
 | Add Python packages to a step | `RUN pip install` in the step's `Dockerfile` | [Add packages](add-packages.md) |
 | Test a step on your laptop | `kaos_lib.testing.running`, `kaosctl step run` | [Test your steps](test-your-steps.md) |
 
@@ -264,8 +264,8 @@ Every number of the guide is in this table.
 | the definition of one step in `pipeline.py` | 24 KiB |
 | a dataset version in a reference | 255 characters |
 | the time limit of a step that sets no `walltime=` | 4 hours, on the platform's own machines and on HPC (Slurm). `walltime=` sets the default, and the field `<step>-walltime` of the run form sets the limit of a run. Waiting for a machine does not count |
-| the longest time limit | 30 days |
+| the longest time limit | 30 days, in the field `<step>-walltime` of the run form |
 | the longest run on HPC (Slurm) | set by the site; `kaosctl lint` assumes 2 days when it has no project facts |
-| continuations of a resumable step, on the platform's own machines and on HPC (Slurm) | 5; the time limit applies to each run of the step |
+| continuations of a resumable step, on the platform's own machines and on HPC (Slurm) | up to 5 by default, which is the platform's delivered setting; the project and the site can set another cap. The time limit applies to each run of the step |
 | a step without a checkpoint whose machine was lost | runs again from the start at most twice |
 | a GPU step with no GPU use and no new log line | ends as idle after 20 minutes (`idle_timeout=` changes it, `0` turns it off) |

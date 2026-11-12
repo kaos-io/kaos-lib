@@ -1,16 +1,16 @@
 # Step types
 
-Every step says what it is for with `kind=`. There are six kinds: `ingest`, `transform`, `train`, `evaluate`, `publish`
-and `control`. The kind is a contract. The platform checks it when it builds the pipeline, and `kaosctl lint` checks it as
-you write. A step that breaks its kind is refused with one sentence that names the step and says what to add, or which
-kind to use.
+Every step has a type. The type of a step is its `kind=` in `pipeline.py`. There are six types: `ingest`, `transform`,
+`train`, `evaluate`, `publish` and `control`. The type is a contract. The platform checks it when it builds the pipeline,
+and `kaosctl lint` checks it as you write. A step that breaks its type is refused with one sentence that names the step and
+says what to add, or which type to use.
 
-This page compares the six kinds and helps you pick one. Each kind has a page with the same headings: what it is for,
-the contract, where it runs, what the platform does, a complete example, and the mistakes with the exact messages.
+This page compares the six types and helps you pick one. Each type has a page with the same headings: what it is for, the
+contract, where it runs, what the platform does, a complete example, and the mistakes with the exact messages.
 
-## The six kinds side by side
+## The six types side by side
 
-| kind | for | `inputs=` | must produce | may produce | must not | runs on | GPU | resumable | what the platform does for this kind |
+| type | for | `inputs=` | must produce | may produce | must not | runs on | GPU | resumable | what the platform does for this type |
 |---|---|---|---|---|---|---|---|---|---|
 | [`ingest`](step-type-ingest.md) | bringing data in from outside | yes | a dataset | a model, an artifact | | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class |
 | [`transform`](step-type-transform.md) | turning data into other data | yes | something: a dataset, a model or an artifact | any of the three | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | allowed | seals a version of each dataset it makes; offers HPC only when it makes no dataset |
@@ -19,13 +19,13 @@ the contract, where it runs, what the platform does, a complete example, and the
 | [`publish`](step-type-publish.md) | delivering a result | yes | nothing | nothing | any `produces=` | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class |
 | [`control`](step-type-control.md) | steering the run | no | nothing | nothing | `inputs=`, any `produces=` | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class; a failure stops the steps that need it |
 
-Every kind keeps to the rules that every step keeps to: a name and a folder, `step.start()` first and `step.result()`
-last ([Your contract with the platform](contract.md#what-you-write)). Every kind has a time limit that is chosen on the run form (`walltime=` only sets its default), can use `when=`, and can
+Every type keeps to the rules that every step keeps to: a name and a folder, `step.start()` first and `step.result()`
+last ([Your contract with the platform](contract.md#what-you-write)). Every type has a time limit that is chosen on the run form (`walltime=` only sets its default), can use `when=`, and can
 end itself with `step.skip("reason")` ([Conditions and skipping](conditions-and-skipping.md)). A step that produces a
-dataset runs on the platform's own machines, whatever its kind ([Produce a dataset](produce-a-dataset.md#where-it-runs)).
+dataset runs on the platform's own machines, whatever its type ([Produce a dataset](produce-a-dataset.md#where-it-runs)).
 
-What the kind changes is small and the same everywhere: the check of what the step produces, the places it can run, and
-the label the platform puts on the step. The step reads its own kind with `step.start().kind`.
+What the type changes is small and the same everywhere: the check of what the step produces, the places it can run, and
+the label the platform puts on the step. The step reads its own type with `step.start().kind`.
 
 ## A step that runs many times
 
@@ -51,5 +51,5 @@ machines; if the training should run on HPC (Slurm), make the model in one step 
 that reads it ([Produce a dataset](produce-a-dataset.md#where-it-runs)). A step that trains and then scores is two steps,
 `train` and `evaluate`: the second can then be skipped, or run on a smaller machine.
 
-Next: the page of your kind. For the rules that are the same for every step, [Your contract with the
+Next: the page of your type. For the rules that are the same for every step, [Your contract with the
 platform](contract.md).

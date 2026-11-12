@@ -53,7 +53,7 @@ def test_should_list_every_call_of_the_step_api_in_the_cheat_sheet():
 
 def test_should_link_every_line_of_the_cheat_sheet_to_its_page():
     lines = [r for r in rows(CHEAT) if not r.startswith("| keyword") and not r.startswith("| call")
-             and not r.startswith("| kind |")]
+             and not r.startswith("| type |")]
     assert len(lines) >= len(constants.STEP_PARAMS)
     assert all(re.search(r"\]\([a-z0-9-]+\.md(#[a-z0-9_-]+)?\)", line) for line in lines), "a cheat sheet line has no link"
 

@@ -4,7 +4,7 @@
 |---|---|
 | app | your pipeline project: `pipeline.py`, `config/` and `steps/`. Its name is the name of the repository |
 | step | one program of the pipeline, in `steps/<name>/`, started as `python -m app.entry` |
-| kind | what a step does: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`; each has a contract ([Step types](step-types.md)) |
+| step type | what a step does, written `kind=`: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`; each has a contract ([Step types](step-types.md)) |
 | run | one start of the pipeline, with the values on the run form. It has a name, and so does each of its steps' logs |
 | experiment | a name you choose for a series of runs (the setting `experiment.name`). The files of a run are kept under it |
 | run form | the form you fill in to start a run. Every plain value in `config/` is a field on it |
@@ -20,7 +20,7 @@
 | version id | the long hex string that names one version, 64 characters |
 | `vN` | a label for a version of an uploaded dataset: `v1`, `v2`, ... |
 | `latest` | the name that points to a dataset's current version. For a produced dataset it moves only when a run asks, and only at the end of a run whose steps all went well |
-| promote | ask a run to move `latest` to the version it made. All the datasets a run is asked to promote move together, or none does |
+| promote | ask a run to move `latest` of a dataset to the version it made, with the run-form field `promote-<name>`. All the datasets a run is asked to promote move together, or none does. A template may also have a setting that promotes a model, such as `registration-promote_to`, which gives a model an alias in the registry: that is a different thing and does not touch `latest` |
 | ledger | the list of what a step read and wrote, with exact version ids |
 | checkpoint | the state a long step saves so that it can continue after an interruption |
 

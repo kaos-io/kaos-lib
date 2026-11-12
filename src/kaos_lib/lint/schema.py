@@ -59,9 +59,9 @@ _PARAMS = {
                 _value('[dataset("clean")]', "The step writes a version of the dataset `clean`.")]),
     "gpu": dict(
         type="bool", rules=("L-E06", "L-W01", "L-W02"), snippet="True",
-        doc="Run the step on a GPU: the platform gives it one. Without it the step runs on a CPU machine.",
+        doc="Run the step on a GPU class. Without it the step runs on a CPU machine. How many GPUs it gets on HPC depends on node sharing.",
         default="False",
-        values=[_value("True", "The step gets one GPU."), _value("False", "A CPU step (the default).")]),
+        values=[_value("True", "The step is offered the GPU classes."), _value("False", "A CPU step (the default).")]),
     "inputs": dict(
         type="list[str]", rules=("L-E07",), snippet='["${1:dataset}"]',
         doc="The names of the config values that hold a dataset reference, for example `\"dataset\"` for "

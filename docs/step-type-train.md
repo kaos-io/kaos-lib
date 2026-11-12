@@ -27,11 +27,11 @@ machines: the run form offers it no HPC class.
   `pipeline.py` is only its default, and without it the default is 4 hours. When the step declares `checkpoint_every=`, the
   form also has `<step>-checkpoint-every`, which `checkpoint_every=` defaults.
 - Runs a step that declares `resumable=` again, from its newest checkpoint, when it reaches its time limit, loses its
-  machine or exits with code 85: at most 5 times after the first run ([Long jobs](long-jobs.md)).
+  machine or exits with code 85: up to 5 times by default after the first run ([Long jobs](long-jobs.md)).
 - Ends a GPU step that shows no GPU use and no new log line for 20 minutes, as idle (`idle_timeout=` changes it).
 - `kaosctl lint` warns when a `train` step sets `walltime=` and cannot continue (`L-W06`).
 
-The platform does the same for any step that declares these keywords. The kind `train` adds the rule that the step
+The platform does the same for any step that declares these keywords. The type `train` adds the rule that the step
 produces a model, and the warning `L-W06`.
 
 ## A complete minimal example
@@ -64,8 +64,8 @@ the model with `needs=[train]` and `step.input("model")`.
 | the mistake | what you get |
 |---|---|
 | no model in `produces=` | `kaosctl lint`: `L-E07`, `Step 'train': a train step produces a model. Add produces=[model("name")], or give the step the kind of the work it does (ingest, transform, evaluate, publish, control).` The platform's check says the same with a small `s` |
-| a time limit and no way to continue | `L-W06`: `Step 'train' is a training step with a time limit and is not resumable: a run cut by its time limit starts over. Add resumable=True and save checkpoints.` |
-| a long GPU step that cannot continue | `L-W01`: `Step 'train' runs up to 12 h and is not resumable (...). An interruption (a lost machine, the time limit) loses all its work.` |
+| a default time limit and no way to continue | `L-W06`: `Step 'train' is a training step with a time limit (the default on the run form) and is not resumable: a run cut by its time limit starts over. Add resumable=True and save checkpoints.` |
+| a long GPU step declared `resumable=False` | `L-W01`: `Step 'train' has a default time limit of 12 hours and is not resumable (set not resumable). An interruption (a lost machine, the time limit) loses all its work.` |
 | a time limit longer than the site allows, not resumable | `L-E01` (an error) and, on the run form, the status `TooLongNotResumable` |
 | the model folder is empty | `output 'model' is empty: the step wrote no files into ...` and nothing is saved |
 | the run form's limit is not longer than the lead of `resumable=` | `train-walltime is 15 minutes, which is not longer than the 20 minutes before its limit that the step is told to save (resumable= in pipeline.py). Give the step more time.` The run is refused before it starts |

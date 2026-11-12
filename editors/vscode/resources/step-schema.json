@@ -175,13 +175,13 @@
         "default": "False",
         "gpu_only": false,
         "pattern": null,
-        "doc": "Run the step on a GPU: the platform gives it one. Without it the step runs on a CPU machine.",
+        "doc": "Run the step on a GPU class. Without it the step runs on a CPU machine. How many GPUs it gets on HPC depends on node sharing.",
         "snippet": "True",
         "values": [
           {
             "insert": "True",
             "label": "True",
-            "doc": "The step gets one GPU."
+            "doc": "The step is offered the GPU classes."
           },
           {
             "insert": "False",
