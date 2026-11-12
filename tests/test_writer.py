@@ -2,6 +2,7 @@
 retried or overlapping step leaves behind."""
 import json
 import pathlib
+import time
 
 import pytest
 
@@ -442,6 +443,111 @@ def test_an_app_that_may_not_write_says_so_and_a_rejected_credential_says_that(s
                                         r"The app cannot fix this: report it to the platform team with the run's "
                                         r"name \(hera-demo-x7k2p\)"):
         step.result()
+
+
+# ------------------------------------------------- a run that does not promote reuses what the last run sealed
+def copies(fake):
+    return sorted(path for method, path in fake.calls if method == "POST" and path.endswith("/objects/copy"))
+
+
+def test_a_second_unpromoted_run_with_the_same_files_copies_them_and_has_its_own_commit_and_tag(lake, client, tmp_path, capsys):
+    a = save(client, folder(tmp_path, ONE), run="run-a")
+    lake.writes.clear()
+    lake.calls.clear()
+    capsys.readouterr()
+    b = save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert uploads(lake) == [] and len(copies(lake)) == 3
+    assert b != a and lake.tree(REPO, b) == lake.tree(REPO, a) == ONE and lake.tree(REPO, "main") == {}
+    assert sorted(tags(lake)) == sorted([f"k-run-a-prepare-{a[:12]}", f"k-run-b-prepare-{b[:12]}"])
+    assert lake.commit_meta(REPO, b)[1]["kaos.run"] == "run-b"
+    assert (f"output 'clean': 0 file(s) to upload, 0 to delete, 0 unchanged since the last version of {REPO}, "
+            "3 reused from an earlier run (copied, not uploaded).") in capsys.readouterr().out
+
+
+def test_a_third_run_that_changes_one_file_uploads_one_and_copies_the_rest(lake, client, tmp_path):
+    save(client, folder(tmp_path, ONE), run="run-a")
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    lake.writes.clear()
+    lake.calls.clear()
+    changed = {**ONE, "a/2.bin": b"two, changed"}
+    c = save(client, folder(tmp_path, changed, "third"), run="run-c")
+    assert uploads(lake) == ["a/2.bin"] and len(copies(lake)) == 2 and lake.tree(REPO, c) == changed
+
+
+def test_a_file_with_the_same_path_and_other_content_in_the_last_sealed_version_is_uploaded(lake, client, tmp_path):
+    save(client, folder(tmp_path, {**ONE, "a/2.bin": b"other"}), run="run-a")
+    lake.writes.clear()
+    lake.calls.clear()
+    b = save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert uploads(lake) == ["a/2.bin"] and len(copies(lake)) == 2 and lake.tree(REPO, b) == ONE
+
+
+def test_the_newest_sealed_version_is_the_one_copied_from(lake, client, tmp_path):
+    save(client, folder(tmp_path, {"x": b"old"}), run="run-z")      # newest by time, not by the tag's name
+    time.sleep(1.1)          # a real server dates a commit to the second
+    newest = save(client, folder(tmp_path, {"x": b"new"}, "n"), run="run-a")
+    lake.writes.clear()
+    save(client, folder(tmp_path, {"x": b"new"}, "again"), run="run-b")
+    assert uploads(lake) == [] and len(copies(lake)) == 1 and lake.tree(REPO, newest) == {"x": b"new"}
+
+
+def test_a_copy_that_fails_uploads_the_file_and_the_step_succeeds(lake, client, tmp_path, monkeypatch, capsys):
+    save(client, folder(tmp_path, ONE), run="run-a")
+    lake.writes.clear()
+
+    def refused(*a, **k):
+        raise LakeFSError("copy failed: HTTP 404 gone", 404)
+
+    monkeypatch.setattr(client, "copy_object", refused)
+    capsys.readouterr()
+    b = save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert uploads(lake) == sorted(ONE) and lake.tree(REPO, b) == ONE
+    assert "3 of the 3 file(s) could not be copied and were uploaded." in capsys.readouterr().out
+
+
+def test_a_copied_file_that_is_not_what_the_step_wrote_is_not_sealed(lake, client, tmp_path, monkeypatch):
+    save(client, folder(tmp_path, ONE), run="run-a")
+    monkeypatch.setattr(client, "copy_object", lambda repo, branch, path, src, ref: client.upload_object(
+        repo, branch, path, folder(tmp_path, {"wrong": b"not it"}, "w") / "wrong"))
+    with pytest.raises(StepError, match="files differ between what the step wrote and what lakeFS holds"):
+        save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert set(lake.repos[REPO]["branches"]) == {"main"}
+
+
+def test_without_a_kept_version_the_run_uploads_everything_as_before(lake, client, tmp_path, capsys):
+    save(client, folder(tmp_path, ONE), run="run-a", dataset=False)      # sealed without a tag: nothing kept
+    lake.calls.clear()
+    capsys.readouterr()
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert copies(lake) == [] and len(uploads(lake)) >= 3
+    assert f"output 'clean': 3 file(s) to upload, 0 to delete, 0 unchanged since the last version of {REPO}." \
+        in capsys.readouterr().out
+
+
+def test_promoting_a_run_that_copied_every_file_moves_latest_to_a_tree_that_holds_them_all(lake, client, tmp_path):
+    save(client, folder(tmp_path, ONE), run="run-a")
+    lake.calls.clear()
+    version = save(client, folder(tmp_path, ONE, "second"), run="run-b", promote=True)
+    assert len(copies(lake)) == 3 and version == lake.head(REPO) and lake.tree(REPO, version) == ONE
+
+
+def test_a_dataset_that_main_already_holds_needs_no_copy(lake, client, tmp_path, capsys):
+    save(client, folder(tmp_path, ONE), run="run-a", promote=True)
+    lake.calls.clear()
+    capsys.readouterr()
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert copies(lake) == []
+    assert f"output 'clean': 0 file(s) to upload, 0 to delete, 3 unchanged since the last version of {REPO}." \
+        in capsys.readouterr().out
+
+
+def test_a_file_that_main_holds_and_the_last_sealed_version_changed_is_copied_over_main_s(lake, client, tmp_path):
+    save(client, folder(tmp_path, {"x": b"v1", "y": b"y"}), run="run-a", promote=True)
+    save(client, folder(tmp_path, {"x": b"v2", "y": b"y"}, "s"), run="run-b")        # sealed, not promoted
+    lake.writes.clear()
+    lake.calls.clear()
+    c = save(client, folder(tmp_path, {"x": b"v2", "y": b"y"}, "t"), run="run-c")
+    assert uploads(lake) == [] and len(copies(lake)) == 1 and lake.tree(REPO, c) == {"x": b"v2", "y": b"y"}
 
 
 # ---------------------------------------------------------------------- an earlier attempt is this run's and this step's

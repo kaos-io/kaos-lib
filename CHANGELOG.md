@@ -45,6 +45,10 @@ template.** Nothing in kaos-lib converts an old app.
   is created.
 
 ### Changed
+- A step that makes a dataset uploads only the files that differ from `latest` and from the newest version an earlier run
+  sealed in it: a file with the same path, size and content is copied inside the data store, and a file that cannot be
+  copied is uploaded. Every run still makes its own version and tag. The log line says how many were reused. Models and
+  artifacts are unchanged.
 - `runtime.context()` takes the run, app, project, step, kind and experiment from what the platform hands the step.
 - Inside a pipeline step, `datasets.resolve` and `datasets.materialize` refuse a dataset the run did not pin.
 - `kaosctl lint` reads only the repository's own files (no virtualenv, `.kaos/`, caches or ignored folders) and its

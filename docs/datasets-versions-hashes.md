@@ -91,12 +91,21 @@ kaosctl run --lock <mlflow run id> -- python my_script.py
 
 A step has a ledger on its MLflow run only if it uses MLflow (`from kaos_lib.mlflow import mlflow`).
 
-## Only the difference is stored
+## Only the difference is uploaded
 
-A new version of a dataset shares every file that did not change with the last version, and uploads only the files that
-changed. The log says how many: `output 'clean': 1 file(s) to upload, 0 to delete, 2 unchanged since the last version
-of dataset-myapp-clean.` Keep each file at the same path from run to run, so that it counts as unchanged. A run that
-writes exactly the files of the last version makes no new version.
+A new version of a dataset shares every file that did not change with the last version (`latest`), and a run uploads
+only the files that changed. A run that does not move `latest` also does not upload what the last run sealed: a file
+with the same path, size and content as in the newest version an earlier run sealed is copied inside the data store,
+not uploaded. Every run still gets its own version.
+
+The log says how many files were uploaded, how many were unchanged and how many were reused:
+`output 'clean': 1 file(s) to upload, 0 to delete, 2 unchanged since the last version of dataset-myapp-clean.` or, after
+an earlier run that did not move `latest`, `output 'clean': 0 file(s) to upload, 0 to delete, 0 unchanged since the last
+version of dataset-myapp-clean, 201 reused from an earlier run (copied, not uploaded).` If a file cannot be copied, the
+step uploads it and says so: `output 'clean': 1 of the 201 file(s) could not be copied and were uploaded.`
+
+Keep each file at the same path from run to run, so that it counts as unchanged. A run that writes exactly the files of
+the last version makes no new version.
 
 ## When a step is run again
 

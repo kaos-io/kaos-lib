@@ -176,11 +176,13 @@ class FakeLakeFS(BaseAdapter):
             return self._branches(m, repo, r, rest[1:], body, req, q)
         if kind == "commits":
             meta = next((m for _, cid, _, m in r.get("commit_log", []) if cid == rest[1]), {})
-            return (200, {"id": rest[1], "parents": r.get("parents", {}).get(rest[1], []), "metadata": meta}) \
+            return (200, {"id": rest[1], "parents": r.get("parents", {}).get(rest[1], []), "metadata": meta,
+                          "creation_date": int(rest[1][1:-8] or 0) if rest[1][1:-8].isdigit() else 0}) \
                 if rest[1] in r["commits"] else (404, {})
         if kind == "tags":
             if len(rest) == 1 and m == "GET":
-                return 200, {"results": [{"id": t, "commit_id": c} for t, c in sorted(r["tags"].items())],
+                return 200, {"results": [{"id": t, "commit_id": c} for t, c in sorted(r["tags"].items())
+                                         if t.startswith(q.get("prefix", ""))],
                              "pagination": {"has_more": False}}
             if len(rest) == 1:
                 if body["id"] in r["tags"]:                          # lakeFS: a tag is never moved
@@ -211,6 +213,11 @@ class FakeLakeFS(BaseAdapter):
             return 204, None
         if len(rest) == 1:
             return 200, {"id": rest[0], "commit_id": b["commit"]}
+        if rest[1] == "objects" and len(rest) == 3 and rest[2] == "copy":     # copyObject: inside one repository
+            src = self._view(repo, body.get("src_ref") or rest[0])[body["src_path"]]        # KeyError: 404
+            b["staged"][q["dest_path"]] = src
+            r.setdefault("mtimes", {})[q["dest_path"]] = next(self._ids)
+            return 201, {"path": q["dest_path"]}
         if rest[1] == "objects":
             self.writes.append((m, repo, rest[0], q["path"]))
             if m == "POST" and self.upload_answers:                 # a server that is busy, restarting, refusing

@@ -6,7 +6,9 @@
    last version), upload what is new or changed and delete what is gone below the output's path (so a retry
    never leaves a file of an earlier attempt), check that the branch holds exactly the folder, commit, check the
    commit again, and keep a dataset's commit with a tag. Files that did not change are shared with the last
-   version and cost nothing. Content that an earlier attempt of the same step already sealed is reused.
+   version and cost nothing. A dataset's file that differs from ``main`` but is exactly what the newest version
+   any run sealed in it holds is copied inside the repository from that version, not uploaded. Content that an
+   earlier attempt of the same step already sealed is reused.
 2. **Promote** (``promote``), only when everything is sealed. A model or an artifact is merged into ``main``. A
    dataset is merged only when the run asks, and on the condition that ``main`` is still where the seal started
    (``expected_head``); when it moved, another run promoted first, so seal again on the new head and retry.
@@ -22,17 +24,22 @@ step publishes no result. A retry of the step replaces that folder with exactly 
 """
 from __future__ import annotations
 
+import concurrent.futures as cf
 import pathlib
 import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+import requests
+
 from .errors import LakeFSError, NotFoundError, StepError
 from .lakefs import LakeFS
-from .transfer import apply_plan, local_manifest, plan_mirror
+from .transfer import apply_plan, local_manifest, plan_mirror, upload
 
 MAIN = "main"
 PROMOTE_ATTEMPTS = 3
+KEPT = "k-"               # every dataset version a run sealed is tagged with this start
+KEPT_LOOKUPS = 300        # at most this many kept versions are looked at to find the newest
 HEAD_MOVED = 412          # kaos-lake: the merge's expected head is not the branch's head any more
 
 
@@ -149,6 +156,47 @@ def _keep(s: Sealed) -> None:
     s.tag = tag
 
 
+def _previous_sealed(s: Sealed) -> Optional[str]:
+    """The commit of the newest version a run sealed in this dataset (the newest ``k-*`` tag by its commit's creation
+    time; the tag name breaks a tie), or None. One call per 1000 kept versions to list them and one more for each
+    of them, at most ``KEPT_LOOKUPS``, to read its time."""
+    kept = s.client.tags(s.repo, KEPT)[:KEPT_LOOKUPS]
+    if not kept:
+        return None
+    with cf.ThreadPoolExecutor(max_workers=min(s.client.concurrency, len(kept))) as ex:
+        made = list(ex.map(lambda t: s.client.commit_info(s.repo, t["commit_id"]).get("creation_date", 0), kept))
+    return max(zip(made, (t["id"] for t in kept), (t["commit_id"] for t in kept)))[2]
+
+
+def _reuse(s: Sealed, plan, previous: str) -> list:
+    """Move the files of ``plan.add`` that ``previous`` holds exactly (same path, size and checksum) to the list
+    this returns; the plan keeps the rest. They are copied, not uploaded."""
+    held = {o["path"]: (o.get("size_bytes"), o.get("checksum", ""))
+            for o in s.client.list_objects(s.repo, previous, s.prefix)}
+    same = [(p, path) for p, path in plan.add if held.get(path) == s.files[path]]
+    plan.add = [a for a in plan.add if a not in same]
+    return same
+
+
+def _copy_or_upload(s: Sealed, same: list, previous: str) -> int:
+    """Put each file of ``same`` on the run branch by a server-side copy from ``previous``; a file that cannot be
+    copied (gone, refused) is uploaded. Returns how many had to be uploaded."""
+    failed = []
+
+    def one(item):
+        local, path = item
+        try:
+            s.client.copy_object(s.repo, s.branch, path, path, previous)
+        except (LakeFSError, requests.RequestException):
+            failed.append(item)
+            upload(s.client, s.repo, s.branch, path, local)
+
+    with cf.ThreadPoolExecutor(max_workers=min(s.client.concurrency, max(1, len(same)))) as ex:
+        for fut in [ex.submit(one, i) for i in same]:
+            fut.result()
+    return len(failed)
+
+
 def seal(client: LakeFS, repo: str, folder: pathlib.Path, *, name: str, prefix: str = "", branch: str,
          tag_prefix: Optional[str] = None, message: str, meta: dict) -> Sealed:
     """Make ``repo`` hold ``folder`` (below ``prefix``) as one commit on ``branch``, without touching ``main``."""
@@ -169,9 +217,19 @@ def seal(client: LakeFS, repo: str, folder: pathlib.Path, *, name: str, prefix: 
         client.create_branch(repo, branch, head)
         s.open = True
         plan = plan_mirror(client, repo, branch, s.folder, prefix, local)
+        previous, same = None, []
+        if tag_prefix and plan.add:
+            try:                  # only a saving: not finding an earlier version is the same as there being none
+                if previous := _previous_sealed(s):
+                    same = _reuse(s, plan, previous)
+            except (LakeFSError, requests.RequestException):
+                previous, same = None, []
         say(f"output '{name}': {len(plan.add)} file(s) to upload, {len(plan.delete)} to delete, {plan.unchanged} "
-            f"unchanged since the last version of {repo}{f' ({prefix})' if prefix else ''}.")
+            f"unchanged since the last version of {repo}{f' ({prefix})' if prefix else ''}"
+            f"{f', {len(same)} reused from an earlier run (copied, not uploaded)' if same else ''}.")
         apply_plan(client, repo, branch, plan)
+        if same and (uploaded := _copy_or_upload(s, same, previous)):
+            say(f"output '{name}': {uploaded} of the {len(same)} file(s) could not be copied and were uploaded.")
         _check(s, branch, "Nothing was sealed.")
         s.commit = client.commit(repo, branch, message, meta, tolerate_empty=True)
         if s.commit != head:

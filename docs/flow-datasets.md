@@ -117,6 +117,9 @@ The advanced config of the run holds the request, with the name from `produces=`
 | does not ask | new | stays |
 | writes the same files as `latest` already holds | none: the existing version is reused | unchanged |
 
+A run uploads only what differs from `latest` and from the newest version an earlier run sealed: a run that does not
+promote does not upload the same files again on every run (it still makes its own version).
+
 **The run records** the version of the write. With a promotion that is the version `latest` now points to; without
 it, the version that was made. Later steps read that version either way.
 
