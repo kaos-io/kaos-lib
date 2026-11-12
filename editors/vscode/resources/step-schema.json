@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "2.0.0",
+  "ruleset_version": "2.1.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -212,10 +212,15 @@
         "default": null,
         "gpu_only": false,
         "pattern": null,
-        "doc": "A condition: the step runs only when it is true. A step that needs a conditional step is still started when the conditional step is skipped.",
-        "snippet": "\"${1:condition}\"",
+        "doc": "A condition in plain words: the name of a run-form field, `==` or `!=`, and a value, for example `\"mode != off\"`. Join comparisons with `and` / `or`. The step runs only when it is true. A step that needs a conditional step is still started when the conditional step is skipped.",
+        "snippet": "\"${1:field} != ${2:off}\"",
         "values": [],
-        "links": []
+        "links": [
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          }
+        ]
       },
       {
         "name": "walltime",

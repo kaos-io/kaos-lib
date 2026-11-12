@@ -96,6 +96,55 @@ def config_values(root: pathlib.Path) -> Optional[dict]:
     return found
 
 
+@dataclass
+class RunForm:
+    """The fields of the run form as far as the repository's own files show them: a setting's path with dashes, and
+    one field for each group folder. `sections` and `schema` are set when the app registers a structured schema
+    (an entry ending in `_schema`): its fields are declared in code, so a field of a known section is not judged."""
+    fields: set
+    sections: set
+    schema: bool
+
+
+def _leaves(node, path=""):
+    """The dotted path of every plain value of a mapping; lists are not fields."""
+    for key, value in node.items():
+        dotted = f"{path}.{key}" if path else str(key)
+        if isinstance(value, dict):
+            yield from _leaves(value, dotted)
+        elif not isinstance(value, list):
+            yield dotted
+
+
+def run_form(root: pathlib.Path) -> Optional[RunForm]:
+    """The run form's fields, or None without a config folder."""
+    cfg = root / CONFIG_DIR
+    if not cfg.is_dir() or cfg.is_symlink():
+        return None
+    found, sections, schema = set(), set(), False
+    for p in sorted(walk(cfg)):
+        rel = p.relative_to(cfg)
+        if rel.parts[0] == PLATFORM_SECTION or p.suffix not in (".yaml", ".yml"):
+            continue
+        if len(rel.parts) > 1:
+            found.add("-".join(rel.parts[:-1]))
+        if not inside(root, p) or p.stat().st_size > MAX_FILE_BYTES:
+            continue
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        if rel.as_posix() == "config.yaml":
+            schema = any(isinstance(d, str) and d.endswith("_schema") for d in doc.get("defaults") or ())
+        for dotted in _leaves({k: v for k, v in doc.items() if k != "defaults"}):
+            found.add(dotted.replace(".", "-"))
+            sections.add(dotted.split(".")[0])
+    sections.update(f.split("-")[0] for f in found)
+    return RunForm(found, sections, schema)
+
+
 def dataset_default(root: pathlib.Path) -> Optional[DatasetDefault]:
     """The top-level `dataset:` scalar of config/dataset.yaml with its position, or None."""
     try:

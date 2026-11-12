@@ -15,7 +15,7 @@ from .catalogue import Catalogue
 from .constants import DOC_BASE, TIME_PATTERN
 from .model import ERROR, INFO, WARNING, Span
 from .pipeline_reader import UNKNOWN, PipelineFacts, Step
-from .project_reader import DatasetDefault, StepSource, read_step_source
+from .project_reader import DatasetDefault, RunForm, StepSource, read_step_source
 
 REQUIRES_CLASSES, REQUIRES_HPC, REQUIRES_CONTINUATIONS = "classes", "hpc", "continuations"
 _TIME = re.compile(TIME_PATTERN)
@@ -80,6 +80,7 @@ class LintContext:
     sections: Optional[set] = None
     dataset: Optional[DatasetDefault] = None
     values: Optional[dict] = None       # top-level config value -> whether it is a plain text value; None: unknown
+    run_form: Optional[RunForm] = None  # the run form's fields; None: unknown
     _sources: dict = field(default_factory=dict)
 
     @property

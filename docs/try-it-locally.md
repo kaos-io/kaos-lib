@@ -84,7 +84,7 @@ steps/hello_world/Dockerfile:3:1: info L-D07 RootUser: The image of step 'hello-
 steps/prepare/Dockerfile:3:1: info L-D07 RootUser: The image of step 'prepare' runs as root (no USER). ...
 skipped L-E03 UnknownClass: the catalogue has no list of compute classes (give --context, the project's platform context)
 skipped L-I03 Schedules: ...
-0 errors, 0 warnings, 2 infos; 2 rules skipped. Rule set 2.0.0; facts from: built-in default.
+0 errors, 0 warnings, 2 infos; 2 rules skipped. Rule set 2.1.0; facts from: built-in default.
 ```
 
 `kaosctl lint` reads `pipeline.py`, `config/` and the Dockerfiles as text and runs nothing. With a step's `kind=` taken

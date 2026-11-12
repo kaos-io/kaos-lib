@@ -44,9 +44,9 @@ the folder with the same name:
 
 ## A step that runs only sometimes
 
-A step can run only when a choice on the run form says so. `when=` holds the condition, and the value of a run-form
-field is written `{{workflow.parameters.<field>}}`, where `<field>` is the field's name (the path of the setting with
-dashes, see [Settings](settings.md)):
+A step can run only when a choice on the run form says so. `when=` holds the condition: the name of a run-form field,
+compared with a value, written `<field> == value` or `<field> != value`. `<field>` is the field's name (the path of the
+setting with dashes, see [Settings](settings.md)):
 
 ```python title="pipeline.py"
 --8<-- "examples/flows/skip/pipeline.py:8:10"

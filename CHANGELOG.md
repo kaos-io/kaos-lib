@@ -56,6 +56,9 @@ template.** Nothing in kaos-lib converts an old app.
 - `kaosctl step run --python` with a relative path now resolves it from the folder you ran the command in, and names the
   path when no interpreter is there, instead of "exited with code 127".
 - `kaosctl step run` without `--params-file` or `--context` now starts by telling you to write a `params.yaml`.
+- `when=` of `step()` is written in plain words: the name of a run-form field, `==` or `!=`, and a value
+  (`when="quantization-mode != off"`), joined with `and` / `or`. `kaosctl lint` reports (`L-E06`) a `when=` that is
+  not written that way and a field the run form does not have. Rule set 2.1.0.
 
 ### Removed
 - `hpc_time_limit=` (use `walltime=`) and `outputs=` (use `step.result()`), with no alias.
@@ -65,6 +68,8 @@ template.** Nothing in kaos-lib converts an old app.
   `KUBECORE_STEP`, `STEP_NAME`, `OUTPUTS_REPO`, `CHECKPOINT_BUCKET`, `KUBECORE_DATASET_*`, `DATASET*` and
   `KUBECORE_STAGED_DIR`.
 - `kaosctl step run --dataset` (use `--input NAME=REPO@REF`).
+- The `{{workflow.parameters.<field>}}` form of `when=`, with no alias: it is refused with the field-name form as the
+  example.
 - A file next to every step folder that the platform keeps for itself: the marker of a downloaded or staged copy is the
   file beside the folder (`<folder>.kubecore-dataset.json`, `<folder>.kaos-ready`), never a file in it, so a step sees
   only the files of the dataset.

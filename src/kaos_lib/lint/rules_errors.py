@@ -13,6 +13,7 @@ from .constants import (COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_N
                         OLD_APP_NOTICE, OLD_ENTRY_ARGUMENT, PIPELINE_FILE, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
                         TIME_PATTERN)
+from . import when_text
 from .model import ERROR, Span
 from .pipeline_reader import UNKNOWN, literal
 from .project_reader import platform_group
@@ -217,6 +218,7 @@ def refused_argument(ctx: LintContext) -> Iterable[Hit]:
         if step.opaque:
             continue
         yield from _time_arguments(ctx, step)
+        yield from _when_argument(ctx, step)
         yield from _every_arguments(ctx, step)
 
 
@@ -239,6 +241,33 @@ def _unknown_arguments(ctx, step) -> Iterable[Hit]:
                   "keyword, so this render fails.", "Write it as a keyword, for example kind='train'.")
     if not step.opaque and "name" not in step.args:
         yield Hit(ctx.file, ctx.span(step.call), "step() is called without a name.", "Give the step a name.")
+
+
+def _when_argument(ctx, step) -> Iterable[Hit]:
+    text = step.value("when", None)
+    if text is UNKNOWN or text is None:
+        return
+    node, label = ctx.span(step.node("when")), _step_label(step)
+    if when_text.uses_workflow_syntax(text):
+        yield Hit(ctx.file, node, f"{label}: when= is written with the name of a run-form field, for example "
+                  f"{when_text.EXAMPLE}. Write the field's name instead of {{{{workflow.parameters.<field>}}}}.",
+                  f"Write the field's name: {when_text.EXAMPLE}.")
+        return
+    named = when_text.fields(text)
+    if named is None:
+        yield Hit(ctx.file, node, f"{label}: when={text!r} is not a run-form field compared with a value, for "
+                  f"example {when_text.EXAMPLE}. Join comparisons with and / or; no parentheses.",
+                  f"Write it as a field name, ==, or !=, and a value: {when_text.EXAMPLE}.")
+        return
+    form = ctx.run_form
+    for field in named:
+        if form is None or field in form.fields or (
+                form.schema and any(field == s or field.startswith(s + "-") for s in form.sections)):
+            continue
+        yield Hit(ctx.file, node, f"{label}: when={text!r} names {field!r}, which is not a field of the run form. "
+                  f"The fields are: {', '.join(sorted(form.fields))}.",
+                  "Use the name of a setting as the run form shows it: its path with dashes.")
+        return
 
 
 def _time_arguments(ctx, step) -> Iterable[Hit]:

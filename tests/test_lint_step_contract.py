@@ -203,3 +203,63 @@ def test_an_attribute_call_in_produces_is_the_same_as_a_name(tmp_path):
     assert findings(tmp_path, body) == []
     body = '    import kubecore.authoring as au\n    a = step("a", kind="train", produces=[au.model("kaos-m")])\n'
     assert any("names starting with 'kaos-'" in m for m in messages(tmp_path, body))
+
+
+# ------------------------------------------------------------------------------------- when= (L-E06)
+def when_messages(tmp_path, when, config=None, name="a"):
+    body = f'    a = step("{name}", kind="train", when={when!r})\n'
+    return [(f.line if hasattr(f, "line") else f.span.line, f.message, f.fix)
+            for f in findings(tmp_path, body, rule="L-E06", config=config)]
+
+
+@pytest.mark.parametrize("when", [
+    "experiment-name != off", "experiment-name == 'two words'", 'experiment-name == "two words"',
+    "dataset == a or dataset == b and experiment-name == 3", "train-epochs == 3", "experiment-name=='x'",
+])
+def test_a_when_in_plain_words_naming_a_form_field_is_clean(tmp_path, when):
+    assert when_messages(tmp_path, when) == []
+
+
+@pytest.mark.parametrize("when", [
+    "experiment-name = off", "experiment-name", "experiment-name ==", "(experiment-name == a)", "len(dataset) == 3",
+    "experiment-name == a && dataset == b", "experiment-name == two words", "", "experiment-name == a and",
+])
+def test_a_when_that_is_not_a_comparison_is_reported_with_an_example(tmp_path, when):
+    got = when_messages(tmp_path, when)
+    assert len(got) == 1 and got[0][0] == 4
+    assert got[0][1] == (f"Step 'a': when={when!r} is not a run-form field compared with a value, for example "
+                         f'when="mode != off". Join comparisons with and / or; no parentheses.')
+    assert got[0][2] == 'Write it as a field name, ==, or !=, and a value: when="mode != off".'
+
+
+@pytest.mark.parametrize("when", ["{{workflow.parameters.mode}} == qat", "mode == {{x}}", "{{=a == b}}"])
+def test_the_workflow_systems_own_form_in_when_is_reported(tmp_path, when):
+    got = when_messages(tmp_path, when)
+    assert len(got) == 1 and got[0][0] == 4 and got[0][1] == (
+        "Step 'a': when= is written with the name of a run-form field, for example when=\"mode != off\". "
+        "Write the field's name instead of {{workflow.parameters.<field>}}.")
+
+
+def test_a_when_naming_a_field_the_run_form_does_not_have_is_reported_with_the_fields_it_has(tmp_path):
+    got = when_messages(tmp_path, "quantization-mode != off")
+    assert len(got) == 1 and got[0][1] == (
+        "Step 'a': when='quantization-mode != off' names 'quantization-mode', which is not a field of the run form. "
+        "The fields are: dataset, experiment-name, train-epochs.")
+    assert got[0][2] == "Use the name of a setting as the run form shows it: its path with dashes."
+
+
+def test_a_field_of_a_group_and_of_a_group_file_is_a_run_form_field(tmp_path):
+    config = {**CONFIG, "config/config.yaml": "defaults:\n  - experiment\n  - dataset\n  - model: small\n",
+              "config/model/small.yaml": "model:\n  size: 1\n  nested:\n    depth: 2\n"}
+    assert when_messages(tmp_path, "model == small and model-size == 1 and model-nested-depth != 2", config) == []
+
+
+def test_with_a_structured_schema_a_field_of_a_known_section_is_not_judged(tmp_path):
+    config = {**CONFIG, "config/config.yaml": "defaults:\n  - quantization_schema\n  - train\n",
+              "config/train.yaml": "train:\n  epochs: 3\n"}
+    assert when_messages(tmp_path, "train-mode != off", config) == []
+    assert len(when_messages(tmp_path, "other-mode != off", config)) == 1
+
+
+def test_without_a_config_folder_the_field_is_not_judged(tmp_path):
+    assert when_messages(tmp_path, "anything != off", config={}) == []

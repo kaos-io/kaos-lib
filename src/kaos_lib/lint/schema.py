@@ -74,9 +74,10 @@ _PARAMS = {
             "define each step above the steps that need it.",
         values=[]),
     "when": dict(
-        type="str", rules=(), snippet='"${1:condition}"',
-        doc="A condition: the step runs only when it is true. A step that needs a conditional step is still "
-            "started when the conditional step is skipped.",
+        type="str", rules=("L-E06",), snippet='"${1:field} != ${2:off}"',
+        doc="A condition in plain words: the name of a run-form field, `==` or `!=`, and a value, for example "
+            "`\"mode != off\"`. Join comparisons with `and` / `or`. The step runs only when it is true. A step that "
+            "needs a conditional step is still started when the conditional step is skipped.",
         values=[]),
     "walltime": dict(
         type="str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-I02"), snippet='"${1:12h}"',

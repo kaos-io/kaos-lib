@@ -16,7 +16,7 @@ that explains it.
 | `needs=` | the steps that run before this one: their results and what they made | [Pass things on](pass-things-on.md) |
 | `produces=` | what the step makes: `dataset("n")`, `model("n")`, `artifact("n")` | [Reference](reference.md#what-produces-makes) |
 | `gpu=` | `True` asks for one GPU | [Bigger machines](bigger-machines.md) |
-| `when=` | a condition on the value of a run-form field; the step is skipped when it is false | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
+| `when=` | the name of a run-form field compared with a value, `"extra-mode != off"`; the step is skipped when it is false | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
 | `walltime=` | the longest run on an HPC (Slurm) class: `"90m"`, `"12h"` | [HPC (Slurm)](hpc.md#set-the-longest-run) |
 | `resumable=` | how long before the limit the step is told to save: `True`, `"20m"`, `False` | [HPC (Slurm)](hpc.md#when-the-limit-is-reached) |
 | `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `False` | [Long jobs](long-jobs.md) |

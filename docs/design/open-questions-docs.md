@@ -25,8 +25,4 @@ it. Written 2026-11-12 with the audit fixes of PRD kaos#1911.
   rule's own content, so it stays.
 - `docs/bigger-machines.md` no longer says that a GPU step must keep a shell (`/bin/sh`) in its image: the brief asked to
   keep only what the reader must do. If an image without a shell does fail a GPU step, one line in the page is missing.
-- The syntax of `when=` is `{{workflow.parameters.<field>}}`, written by the author exactly as the pipeline engine
-  reads it (`kubecore/authoring.py` passes the string on as the condition of the step). The guide calls it "the value of the
-  run-form field `<field>`" and does not name the engine. The syntax itself shows an internal name: the owner can decide
-  on a friendlier form, for example `when="extra-mode != off"`, which the engine would translate.
 - There is no module `kaos_lib.tracking`; MLflow is `kaos_lib.mlflow`.
