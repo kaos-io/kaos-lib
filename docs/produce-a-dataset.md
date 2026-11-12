@@ -28,11 +28,18 @@ You have a step that produces a dataset. `prepare` declares it, and writes the f
 To make the step fail when the folder holds too few files, call `step.check("clean", min_files=10)` before
 `step.result()` ([Reference](reference.md#step-api-kaos_libstep)).
 
+## Where it runs
+
+A step that produces a dataset runs on the cluster. The run form offers it no HPC (Slurm) class, and `gpu=True` does not
+change that. To use HPC for the heavy work, make that step produce an `artifact` and let a cheap second step copy it into
+the dataset ([HPC (Slurm)](hpc.md)). The check `L-W07` warns about a GPU step that produces a dataset.
+
 ## Move `latest`
 
-The name `latest` moves to the new version only when the run asks (this is called promoting). A run without the request
-still seals its version, and `latest` stays where it is, so an experiment does not change what other pipelines read.
-[Move `latest`](flow-datasets.md#move-latest) shows the field of the run form that asks.
+The step only seals its version. The name `latest` moves to it when the run ends, if every step went well and the run
+asked (this is called promoting). A run without the request still seals its version, and `latest` stays where it is, so an
+experiment does not change what other pipelines read. [Move `latest`](flow-datasets.md#move-latest) shows the field of the
+run form that asks, and what happens when a pipeline makes more than one dataset.
 
 ## Read it from another pipeline
 

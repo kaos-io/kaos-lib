@@ -7,7 +7,7 @@ rule-set version bump, never a literal buried in a rule.
 # The rule-set version: every report carries it, the PR gate and `kaosctl lint` must agree on it. Bump the major
 # for a rule removed or a level raised, the minor for a rule added or a message-only change that needs a note,
 # the patch for a fix that changes no finding on valid input.
-RULESET_VERSION = "2.2.0"
+RULESET_VERSION = "2.3.0"
 
 # Where a rule's page lives. The site is a plain public bucket, so every link names its .html file.
 DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
@@ -40,6 +40,7 @@ PRODUCE_TYPES = ("model", "artifact", "dataset")
 RESERVED_NAME_PREFIX = "kaos-"
 RESERVED_STEP_NAMES = ("main", "compose-and-validate")   # also hpc-follower, which L-E04 reports
 RESERVED_STEP_SUFFIX = "-hpc"
+MIN_DATASET_NAME = 3                 # characters of a dataset name (dataset-<app>-<name> must be a repository id)
 NAME_MAX = 40                        # characters of a step name, an input name and a produces name
 MAX_READABLE = 16                    # datasets a step can read by name: its inputs and what its needed steps produce
 MAX_NEEDS = 10                       # steps in one step's needs=: each may hand on a result of up to 8 KiB

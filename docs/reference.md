@@ -10,7 +10,9 @@ Every failure is a `kaos_lib.errors.StepError`; the step fails and hands no resu
 |---|---|---|
 | `start()` | the step: `run`, `app`, `project`, `step`, `kind`, `experiment`, `params`, `produces` | outside a run: `ERROR: this is not a pipeline step`; a context that cannot be read: `ERROR: the step context ...` (one line, exit code 1) |
 | `input(name, optional=False, writable=False)` | a folder (`pathlib.Path`), read-only | `'<name>' is not an input of step '<step>'. Its inputs are: ...`; `input '<name>' of step '<step>' is not there, and <x> did not run`; `input '<name>': commit ... does not exist any more`; `input '<name>': <dataset> holds no files at the version this run read`. `optional=True` returns `None` for a step that did not run. `writable=True` returns a private full copy |
-| `upstream(step, optional=False)` | `Upstream`: `values`, `reads`, `writes` | `step '<x>' is not upstream of '<step>'`; `step '<x>' did not run, so it left no result`. `optional=True` returns `None` |
+| `upstream(step, optional=False)` | `Upstream`: `values`, `reads`, `writes` | `step '<x>' is not upstream of '<step>'`; `step '<x>' did not run, so it left no result` or `step '<x>' was skipped (<reason>), so it left no result`. `optional=True` returns `None` |
+| `skipped(step)` | the reason the earlier step gave to `skip()`; `""` when it did not run; `None` when it ran and left a result | `step '<x>' is not upstream of '<step>'` |
+| `skip(reason)` | nothing: writes a skipped result, saves no output and ends the step with exit code 0. The steps that need it still run | `step.skip() needs the reason, as text`; `the reason of step.skip() has N characters; the limit is 300`; `step.result() or step.skip() was already called` |
 | `output(name)` | an empty folder, emptied the first time it is asked for in an attempt | `'<name>' is not produced by step '<step>'. It produces: ...`; the folder is a link |
 | `workdir()` | a scratch folder, emptied at each attempt, never saved | |
 | `check(name, layout=None, min_files=1)` | nothing; checked inside `result()` | `output '<name>' failed its check:` |
@@ -31,6 +33,7 @@ artifact. A step never reads another dataset: reading one by name in code is ref
 | `params` | what `step.start().params` holds, for example `{"prepare": {"min_bytes": 1}}` | `step.start().params` |
 | `inputs` | input name to a folder | `step.input("dataset")` |
 | `upstream` | step name to the values it handed on, or `None` for a step that did not run | `step.upstream("prepare").values` |
+| `upstream_skipped` | step name to the reason that step gave to `step.skip()` | `step.skipped("prepare")`, `step.upstream("prepare", optional=True)` |
 | `upstream_writes` | step name to `{output name: folder}`, or `{output name: {"folder": ..., "type": "model" or "artifact" or "dataset", "commit": ...}}` | `step.input("clean")` |
 | `upstream_reads` | step name to `{input name: "repository@version"}` or `{"repo": ..., "ref": ..., "commit": ...}` | `step.upstream("prepare").reads` |
 | `produces` | list of `("model" or "artifact" or "dataset", name)`, the outputs the step declares | `step.output("clean")` |
@@ -39,7 +42,7 @@ It yields a run: `run.result` (what the step handed on, or `None`) and `run.outp
 
 ### The result
 
-`{"version": 1, "status": "ok", "values": {...}, "reads": [...], "writes": [...]}`. `reads` names every declared input,
+`{"version": 1, "status": "ok", "values": {...}, "reads": [...], "writes": [...]}`. A step that ended itself with `step.skip(reason)` has `{"version": 1, "status": "skipped", "reason": "..."}` instead. `reads` names every declared input,
 opened or not, and each dataset of an earlier step that the step read: `name`, `repo`, `ref`, `commit`. `writes` names
 every output: `name`, `type`, `repo`, `commit`.
 
@@ -57,7 +60,7 @@ every output: `name`, `type`, `repo`, `commit`.
 | `needs=` | earlier steps (the variables) | more steps than the limit; a step defined below; an input and a needed output of one name; two needed steps producing one name; more readable datasets than the limit |
 | `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; a kind that may not produce what is listed ([Step kinds](step-kinds.md)) |
 | `gpu=True` | one GPU | |
-| `when="..."` | the name of a run-form field `<field>` compared with a value, written `"<field> == value"` or with `!=`; join comparisons with `and` / `or` (`and` first, no parentheses); a value with spaces is quoted | a `when=` that is not written that way; a field the run form does not have |
+| `when="..."` | a name compared with a text, written `"<name> == text"` or with `!=`. The name is a field of the run form (`"mode != off"`) or a value of a step in `needs=` (`"evaluate.passed == true"`: the keyword of that step's `step.result(passed=...)`). Join comparisons with `and` / `or` (`and` first, no parentheses, no `<` or `>`); a text with spaces is quoted. A value that is not there stops the run ([Conditions and skipping](conditions-and-skipping.md)) | a `when=` that is not written that way; a field the run form does not have; a value of a step that is not in `needs=` |
 | `walltime=` | the longest the step may run, wherever it runs: `"90m"`, `"12h"`, `"720"` (minutes). It is the default of the run-form field `<step>-walltime`; without it that default is [the limit](must-and-can.md#the-limits) | a wrong form |
 | `resumable=` | `True` (stop signal 10 minutes before the limit), a lead time `"20m"`, or `False` | a wrong form |
 | `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every`, and `kaos_lib.checkpoint` uses the field's value as the interval of `tick()` when you set none | a wrong form |
@@ -131,7 +134,7 @@ Every option is on the [generated commands page](generated/cli.md).
 | `kaosctl lint` | checks `pipeline.py` ([Lint checks](lint.md)) |
 | `kaosctl dev` | a Python environment for each step |
 | `kaosctl step run <step>` | runs a step on your machine ([page 10](try-it-locally.md), [flags](#kaosctl-step-run)) |
-| `kaosctl render --context FILE` | renders `pipeline.py`, as the check on a pull request does |
+| `kaosctl render --engine-wheel 'URL#sha256=...'` (or `--context FILE`) | renders `pipeline.py`, as the check on a pull request does. It needs the platform's engine release, which your platform team gives you: without one, the check of your pull request renders it for you |
 | `kaosctl build [step]` | builds a step's image with your container engine |
 | `kaosctl run --lock <mlflow run> -- <command>` | runs a command on the data a past run read |
 | `kaosctl upgrade [--dry-run]`, `kaosctl vscode install`, `kaosctl --version` | version and editor tools |

@@ -222,6 +222,12 @@ def test_a_when_in_plain_words_naming_a_form_field_is_clean(tmp_path, when):
     assert when_messages(tmp_path, when) == []
 
 
+FORMS = ('when="mode != off" (a field of the run form) or when="evaluate.passed == true" (a value that the step '
+         '"evaluate", which this step needs, handed on with step.result(passed=...))')
+ALLOWED = ("A condition compares one name with a text, with == or != and nothing else, for example " + FORMS + ". "
+           "Join comparisons with and / or; no parentheses, no < or >.")
+
+
 @pytest.mark.parametrize("when", [
     "experiment-name = off", "experiment-name", "experiment-name ==", "(experiment-name == a)", "len(dataset) == 3",
     "experiment-name == a && dataset == b", "experiment-name == two words", "", "experiment-name == a and",
@@ -229,17 +235,15 @@ def test_a_when_in_plain_words_naming_a_form_field_is_clean(tmp_path, when):
 def test_a_when_that_is_not_a_comparison_is_reported_with_an_example(tmp_path, when):
     got = when_messages(tmp_path, when)
     assert len(got) == 1 and got[0][0] == 4
-    assert got[0][1] == (f"Step 'a': when={when!r} is not a run-form field compared with a value, for example "
-                         f'when="mode != off". Join comparisons with and / or; no parentheses.')
-    assert got[0][2] == 'Write it as a field name, ==, or !=, and a value: when="mode != off".'
+    assert got[0][1] == (f"Step 'a': when={when!r} is not a condition the platform can read. {ALLOWED}")
+    assert got[0][2] == f"Write it as a name, == or !=, and a value: {FORMS}."
 
 
 @pytest.mark.parametrize("when", ["{{workflow.parameters.mode}} == qat", "mode == {{x}}", "{{=a == b}}"])
 def test_the_workflow_systems_own_form_in_when_is_reported(tmp_path, when):
     got = when_messages(tmp_path, when)
     assert len(got) == 1 and got[0][0] == 4 and got[0][1] == (
-        "Step 'a': when= is written with the name of a run-form field, for example when=\"mode != off\". "
-        "Write the field's name instead of {{workflow.parameters.<field>}}.")
+        f"Step 'a': when= is written with plain names, not with {{{{...}}}}. {ALLOWED}")
 
 
 def test_a_when_naming_a_field_the_run_form_does_not_have_is_reported_with_the_fields_it_has(tmp_path):

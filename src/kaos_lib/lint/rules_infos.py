@@ -9,7 +9,7 @@ from typing import Iterable
 
 from .constants import SHORT_LIMIT_MINUTES
 from .model import INFO
-from .registry import Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule
+from .registry import Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule, step_label
 
 
 @rule("L-I01", "NodeSharing", INFO,
@@ -18,7 +18,7 @@ def node_sharing(ctx: LintContext) -> Iterable[Hit]:
     for step in gpu_steps(ctx):
         if step.value("walltime", None) is None:
             yield Hit(ctx.file, ctx.span(step.call),
-                      f"Step '{step.name}' declares no time limit, so it cannot be offered as a guest on a node "
+                      f"{step_label(step)} declares no time limit, so it cannot be offered as a guest on a node "
                       f"another job already holds on the HPC (Slurm) site.")
 
 
@@ -29,8 +29,22 @@ def learned_limits(ctx: LintContext) -> Iterable[Hit]:
         limit = parse_minutes(step.value("walltime", None))
         if limit is not None and limit < SHORT_LIMIT_MINUTES:
             yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"Step '{step.name}' has a limit of {pretty_minutes(limit)}. After a few runs the platform "
+                      f"{step_label(step)} has a limit of {pretty_minutes(limit)}. After a few runs the platform "
                       f"may ask the site for a shorter limit, to fit the step in sooner.")
+
+
+@rule("L-I04", "StepsBuiltInALoop", INFO,
+      "Nothing to fix. To have every check read a step, write it out with a literal name; or run the pipeline file "
+      "through kaosctl render, which builds the steps.")
+def steps_built_in_a_loop(ctx: LintContext) -> Iterable[Hit]:
+    """The checks that read a step's arguments (the kind it declares, the datasets it reads and writes, its folder)
+    cannot read a step whose name is not a literal. Say so once, so that a clean report is not taken for more."""
+    unread = [s for s in ctx.pipeline.steps if not isinstance(s.name, str)]
+    if unread:
+        lines = ", ".join(str(s.call.lineno) for s in unread[:5]) + (", ..." if len(unread) > 5 else "")
+        yield Hit(ctx.file, ctx.span(unread[0].call),
+                  f"{len(unread)} step(s) are built in a loop or a call (line {lines}), so their name is not known "
+                  f"here and the checks that read a step's arguments did not look at them.")
 
 
 @rule("L-I03", "Schedules", INFO, "Nothing to fix.",

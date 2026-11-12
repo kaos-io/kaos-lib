@@ -5,9 +5,10 @@ the parameters locally exactly as CI does, kaosctl fetches the engine release th
 its SHA-256, and installs it into `.kaos/engine/.venv` inside the repository (git-ignored). Nothing is installed
 outside the repository and nothing is run from the app's own folders as engine code.
 
-Which engine, first that exists: `--engine-wheel URL#sha256=<64 hex>`, `$KAOS_ENGINE_WHEEL` (same form), then the
-`engine:` block of the platform's pipeline-context file (`--context`): `wheel` and `wheelSha256`. A wheel without a
-SHA-256 is refused: the checksum is what makes a download the platform's release.
+Which engine, first that exists: `--engine-wheel URL#sha256=<64 hex>`, `$KAOS_ENGINE_WHEEL` (same form), the
+`engine:` block of the platform's pipeline-context file (`--context`): `wheel` and `wheelSha256`, then the `engine`
+block of this kaos-lib release's own `_release.json` (`wheel`, `sha256`, `version`) when the release names one. A wheel
+without a SHA-256 is refused: the checksum is what makes a download the platform's release.
 """
 from __future__ import annotations
 
@@ -38,8 +39,10 @@ RAW_TEMPLATE = "out/raw-workflow-template.yaml"
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _WHEEL_RE = re.compile(r"^[A-Za-z0-9_.+-]+\.whl$")
 
-HOW_TO_PIN = ("Give the engine release: --context <pipeline-context.yaml> (the platform's file for your app; it has "
-              "an `engine:` block), or --engine-wheel 'URL#sha256=<checksum>', or set $%s." % WHEEL_ENV)
+HOW_TO_PIN = ("This kaos-lib release names no engine of its own. Ask your platform team for the engine release and give it: "
+              "--engine-wheel 'URL#sha256=<checksum>' or $%s (or --context <pipeline-context.yaml>, the platform's file "
+              "for your app, which has an `engine:` block). Without it, the check of your pull request renders the "
+              "pipeline for you." % WHEEL_ENV)
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,17 @@ def _context_pin(path: Optional[str]) -> Optional[EnginePin]:
                     str(block.get("version") or ""))
 
 
+def _release_pin() -> Optional[EnginePin]:
+    """The engine this kaos-lib release names in its own `_release.json` (`engine`: `wheel`, `sha256`, `version`), or
+    None when it names none (the case until the release process fills it)."""
+    from .. import support
+    block = (support.packaged() or {}).get("engine")
+    if not isinstance(block, dict) or not block.get("wheel"):
+        return None
+    return _checked(str(block["wheel"]), str(block.get("sha256") or ""), "this kaos-lib release",
+                    str(block.get("version") or ""))
+
+
 def resolve_pin(flag: Optional[str] = None, context: Optional[str] = None, environ=None) -> EnginePin:
     """Choose the engine release (see the module text for the order); KaosLibError says how to give one."""
     environ = os.environ if environ is None else environ
@@ -102,6 +116,8 @@ def resolve_pin(flag: Optional[str] = None, context: Optional[str] = None, envir
     found = _context_pin(context)
     if found:
         return found
+    if not context and (named := _release_pin()):
+        return named
     if context:
         raise KaosLibError(f"the context file {context} has no `engine:` block with a wheel: the platform has not "
                            "pinned an engine for this app yet. " + HOW_TO_PIN)

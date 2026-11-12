@@ -1,0 +1,2 @@
+# Pin a version to read the same data in every run. `latest` is read as it is when the run starts.
+dataset: "dataset-myapp-clean@v3"

@@ -1,0 +1,2 @@
+evaluate:
+  threshold: 0.3 # the score a model needs to be published

@@ -347,10 +347,9 @@ def result_file():
     return pathlib.Path(step.RESULT_FILE)
 
 
-@pytest.mark.parametrize("context,promoted", [("context-no-upstream", False), ("context-promote", True)])
-def test_a_step_that_produces_a_dataset_seals_it_and_promotes_only_when_the_run_asks(started, lake, context, promoted):
+def test_a_step_that_produces_a_dataset_seals_it_and_never_moves_latest(started, lake):
     first = lake.head("dataset-hera-demo-embeddings")
-    started(context)
+    started("context-no-upstream")
     step.input("raw")
     (step.output("embeddings") / "e.npy").write_bytes(b"emb")
     step.result(rows=1)
@@ -359,20 +358,19 @@ def test_a_step_that_produces_a_dataset_seals_it_and_promotes_only_when_the_run_
     assert got["writes"] == [{"name": "embeddings", "type": "dataset", "repo": "dataset-hera-demo-embeddings",
                               "commit": commit}]
     assert lake.tree("dataset-hera-demo-embeddings", commit) == {"e.npy": b"emb"}
-    assert (lake.head("dataset-hera-demo-embeddings") == commit) is promoted
-    assert (lake.head("dataset-hera-demo-embeddings") == first) is not promoted
+    assert lake.head("dataset-hera-demo-embeddings") == first != commit
     _, meta = lake.commit_meta("dataset-hera-demo-embeddings", commit)
     assert meta["kaos.read.raw"] == lake.head("dataset-raw-images") and meta["kaos.step"] == "prepare"
 
 
 def two_outputs(c):
-    c["produces"] = [{"name": "embeddings", "type": "dataset", "repo": "dataset-hera-demo-embeddings", "promote": True},
+    c["produces"] = [{"name": "embeddings", "type": "dataset", "repo": "dataset-hera-demo-embeddings"},
                      {"name": "second", "type": "dataset", "repo": "dataset-missing"}]
     return c
 
 
 def test_a_step_that_fails_while_sealing_moves_no_latest(started, lake):
-    """The first output is promoted only after every output is sealed: the second one cannot be, so nothing moves."""
+    """Every output is sealed before anything is promoted: the second one cannot be, so nothing moves."""
     first = lake.head("dataset-hera-demo-embeddings")
     started(edit=two_outputs)
     (step.output("embeddings") / "e.npy").write_bytes(b"emb")
@@ -381,32 +379,6 @@ def test_a_step_that_fails_while_sealing_moves_no_latest(started, lake):
         step.result()
     assert lake.head("dataset-hera-demo-embeddings") == first and lake.tree("dataset-hera-demo-embeddings", "main") == {}
     assert not result_file().exists() and set(lake.repos["dataset-hera-demo-embeddings"]["branches"]) == {"main"}
-
-
-def test_a_step_that_fails_while_promoting_the_second_dataset_has_moved_the_first(started, lake, monkeypatch):
-    """The one case that cannot be undone (two repositories, two merges): documented, and the step still fails."""
-    lake.add_repo("dataset-second", metadata={"kaos.kind": "dataset"})
-    first, real = lake.head("dataset-hera-demo-embeddings"), lake.client
-
-    def edit(c):
-        two_outputs(c)["produces"][1].update(repo="dataset-second", promote=True)
-        return c
-
-    def client():
-        c = real()
-        merge = c.merge
-        c.merge = lambda repo, *a, **k: (_ for _ in ()).throw(LakeFSError("down", 500)) if repo == "dataset-second" \
-            else merge(repo, *a, **k)
-        return c
-
-    monkeypatch.setattr(step, "_connect", client)
-    started(edit=edit)
-    (step.output("embeddings") / "e.npy").write_bytes(b"emb")
-    (step.output("second") / "s").write_bytes(b"s")
-    with pytest.raises(LakeFSError):
-        step.result()
-    assert lake.head("dataset-hera-demo-embeddings") != first and not result_file().exists()
-    assert lake.tree("dataset-second", "main") == {}
 
 
 def test_a_model_holds_only_the_files_of_the_attempt_that_made_the_result(started, lake):
@@ -805,43 +777,3 @@ def test_a_tag_of_this_run_and_step_is_reused_only_when_it_is_exact_and_names_th
     lake.repos[REPO]["tags"].pop(a.tag)
     lake.repos[REPO]["tags"][f"k-{writer._stamp(START)}-{prefix[2:]}-{'0' * 12}"] = a.commit
     assert _seal_as(client, folder(tmp_path, {"f": b"1"}, "o3"), "r1", "p").commit != a.commit
-
-
-def test_a_model_merged_before_a_failing_dataset_promotion_stays_on_main_under_its_run_folder_until_a_retry(
-        started, lake, monkeypatch):
-    """Order of promotion, as documented: models and artifacts reach `main` first, then datasets. When a dataset's
-    merge fails the model stays under `<name>/<experiment>/<run>/`, no result names it, and a retry replaces that
-    folder with exactly what the retry wrote."""
-    first, real = lake.head("dataset-hera-demo-embeddings"), lake.client
-
-    def edit(c):
-        c["produces"] = [{"name": "embeddings", "type": "dataset", "repo": "dataset-hera-demo-embeddings",
-                          "promote": True},
-                         {"name": "model", "type": "model", "repo": "outputs-hera-demo"}]
-        return c
-
-    def failing():
-        c = real()
-        merge = c.merge
-        c.merge = lambda repo, *a, **k: (_ for _ in ()).throw(LakeFSError("down", 500)) \
-            if repo == "dataset-hera-demo-embeddings" else merge(repo, *a, **k)
-        return c
-
-    folder = "model/baseline/hera-demo-x7k2p/"
-    monkeypatch.setattr(step, "_connect", failing)
-    started(edit=edit, attempt=1)
-    (step.output("embeddings") / "e.npy").write_bytes(b"emb")
-    (step.output("model") / "first.bin").write_bytes(b"1")
-    (step.output("model") / "gone-after-retry.bin").write_bytes(b"1")
-    with pytest.raises(LakeFSError):
-        step.result()
-    assert lake.head("dataset-hera-demo-embeddings") == first and not result_file().exists()      # the dataset did not move
-    assert sorted(lake.tree("outputs-hera-demo", "main")) == [folder + "first.bin", folder + "gone-after-retry.bin"]
-    step.stop()
-    lock.reset()
-    monkeypatch.setattr(step, "_connect", lambda: real())
-    started(edit=edit, attempt=2)
-    (step.output("embeddings") / "e.npy").write_bytes(b"emb")
-    (step.output("model") / "retry.bin").write_bytes(b"2")
-    step.result()
-    assert sorted(lake.tree("outputs-hera-demo", "main")) == [folder + "retry.bin"]

@@ -16,7 +16,7 @@ that explains it.
 | `needs=` | the steps that run before this one: their results and what they made | [Pass things on](pass-things-on.md) |
 | `produces=` | what the step makes: `dataset("n")`, `model("n")`, `artifact("n")` | [Reference](reference.md#what-produces-makes) |
 | `gpu=` | `True` asks for one GPU | [Bigger machines](bigger-machines.md) |
-| `when=` | the name of a run-form field compared with a value, `"extra-mode != off"`; the step is skipped when it is false | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
+| `when=` | a run-form field or a value of a needed step, compared with a text: `"extra-mode != off"`, `"evaluate.passed == true"`; the step is skipped when it is false | [Conditions and skipping](conditions-and-skipping.md) |
 | `walltime=` | the longest the step may run, anywhere: `"90m"`, `"12h"`; the default of the run-form field `<step>-walltime` | [Long jobs](long-jobs.md#the-time-limit) |
 | `resumable=` | how long before the limit the step is told to save: `True`, `"20m"`, `False` | [HPC (Slurm)](hpc.md#when-the-limit-is-reached) |
 | `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `False` | [Long jobs](long-jobs.md) |
@@ -30,6 +30,7 @@ The exact refusals of each keyword are in the [Reference](reference.md#pipelinep
 |---|---|---|
 | `step.start()` | first call: the run, the step, the experiment and `params` | [Your first step](first-step.md) |
 | `step.input(name, optional=False, writable=False)` | the folder of a dataset input, or of what a needed step made; `writable=True` is a private copy | [Read data](read-data.md) |
+| `step.skip(reason)` | ends the step as skipped (exit code 0, nothing saved); `step.skipped(name)` is the reason an earlier step gave | [Conditions and skipping](conditions-and-skipping.md) |
 | `step.output(name)` | the empty folder for an output you declared; saved by `step.result()` | [Pass things on](pass-things-on.md#hand-on-a-file) |
 | `step.upstream(step, optional=False)` | the result of a needed step: `.values`, `.reads`, `.writes` | [Values to the next step](flow-between-steps.md#values-to-the-next-step) |
 | `step.check(name, layout=None, min_files=1)` | a condition on an output, checked before anything is saved | [Reference](reference.md#step-api-kaos_libstep) |

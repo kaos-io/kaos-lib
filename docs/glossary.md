@@ -19,8 +19,8 @@
 | version | a snapshot of all the files of a dataset. Its exact name is the version id |
 | version id | the long hex string that names one version, 64 characters |
 | `vN` | a label for a version of an uploaded dataset: `v1`, `v2`, ... |
-| `latest` | the name that points to a dataset's current version. For a produced dataset it moves only when a run asks |
-| promote | ask a run to move `latest` to the version it made |
+| `latest` | the name that points to a dataset's current version. For a produced dataset it moves only when a run asks, and only at the end of a run whose steps all went well |
+| promote | ask a run to move `latest` to the version it made. All the datasets a run is asked to promote move together, or none does |
 | ledger | the list of what a step read and wrote, with exact version ids |
 | checkpoint | the state a long step saves so that it can continue after an interruption |
 

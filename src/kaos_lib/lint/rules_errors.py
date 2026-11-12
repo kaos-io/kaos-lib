@@ -9,25 +9,24 @@ import ast
 import re
 from typing import Iterable
 
-from .constants import (COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, NAME_MAX,
+from .constants import (COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, MIN_DATASET_NAME, NAME_MAX,
                         OLD_APP_NOTICE, OLD_ENTRY_ARGUMENT, PIPELINE_FILE, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
-                        TIME_PATTERN)
+                        STEPS_DIR, TIME_PATTERN)
 from . import when_text
 from .model import ERROR, Span
 from .pipeline_reader import UNKNOWN, literal
-from .project_reader import platform_group
+from .project_reader import platform_group, step_folder
 from .registry import (DECLARED, NOT_VERIFIED, OFF, REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, STATIC,
                        VERIFIED, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes,
-                       rule, runs_needed)
+                       rule, runs_needed, step_label)
 
 _STEP_NAME, _TIME = re.compile(STEP_NAME_PATTERN), re.compile(TIME_PATTERN)
 _EVERY = re.compile(r"^([0-9]+)([mh]?)$")
 _DEPENDS_TOKEN = re.compile(r"([A-Za-z0-9_][A-Za-z0-9_-]*)(?:\.(?:Succeeded|Failed|Skipped|Omitted|Errored|Daemoned))?")
 
 
-def _step_label(step) -> str:
-    return f"Step '{step.name}'" if isinstance(step.name, str) else "A step"
+_step_label = step_label
 
 
 @rule("L-E01", "TooLongNotResumable", ERROR,
@@ -243,24 +242,43 @@ def _unknown_arguments(ctx, step) -> Iterable[Hit]:
         yield Hit(ctx.file, ctx.span(step.call), "step() is called without a name.", "Give the step a name.")
 
 
+def _needed_steps(ctx, step) -> set:
+    """The names of the steps in this step's needs=[...] that can be read: step variables of the same pipeline."""
+    node = step.node("needs")
+    names = {el.id for el in getattr(node, "elts", ()) if isinstance(el, ast.Name)}
+    return {s.name for s in ctx.pipeline.steps if s.var in names and isinstance(s.name, str)}
+
+
 def _when_argument(ctx, step) -> Iterable[Hit]:
     text = step.value("when", None)
     if text is UNKNOWN or text is None:
         return
     node, label = ctx.span(step.node("when")), _step_label(step)
     if when_text.uses_workflow_syntax(text):
-        yield Hit(ctx.file, node, f"{label}: when= is written with the name of a run-form field, for example "
-                  f"{when_text.EXAMPLE}. Write the field's name instead of {{{{workflow.parameters.<field>}}}}.",
-                  f"Write the field's name: {when_text.EXAMPLE}.")
+        yield Hit(ctx.file, node, f"{label}: when= is written with plain names, not with {{{{...}}}}. "
+                  f"{when_text.ALLOWED}", f"Write the name: {when_text.EXAMPLE}.")
         return
     named = when_text.fields(text)
     if named is None:
-        yield Hit(ctx.file, node, f"{label}: when={text!r} is not a run-form field compared with a value, for "
-                  f"example {when_text.EXAMPLE}. Join comparisons with and / or; no parentheses.",
-                  f"Write it as a field name, ==, or !=, and a value: {when_text.EXAMPLE}.")
+        yield Hit(ctx.file, node, f"{label}: when={text!r} is not a condition the platform can read. "
+                  f"{when_text.ALLOWED}",
+                  f"Write it as a name, == or !=, and a value: {when_text.FORMS}.")
         return
-    form = ctx.run_form
+    form, needed = ctx.run_form, _needed_steps(ctx, step)
+    declared = {s.name for s in ctx.pipeline.steps if isinstance(s.name, str)}
     for field in named:
+        head, dot, key = field.partition(".")
+        if dot and head in needed:
+            if not when_text.VALUE_KEY.match(key):
+                yield Hit(ctx.file, node, f"{label}: when= names the value {key!r} of step {head!r}, which is not a "
+                          f"name step.result() could have been given (letters, digits and _).",
+                          f"Write {head}.<value> with the keyword you gave step.result(<value>=...).")
+                return
+            continue
+        if dot and head in declared:
+            yield Hit(ctx.file, node, f"{label}: when= reads a value of step {head!r}, which this step does not need.",
+                      f"Add {head} to needs=[...] of this step: a step sees the result of the steps in its needs= only.")
+            return
         if form is None or field in form.fields or (
                 form.schema and any(field == s or field.startswith(s + "-") for s in form.sections)):
             continue
@@ -310,9 +328,11 @@ def step_declaration(ctx: LintContext) -> Iterable[Hit]:
             if step.opaque:
                 continue
             yield from _step_name(ctx, step)
+            yield from _folder(ctx, step)
             yield from _kind(ctx, step, any_kind)
             inputs = yield from _inputs(ctx, step)
             produced = yield from _produces(ctx, step)
+            yield from _input_is_output(ctx, step, inputs, produced)
             yield from _control_handles_no_data(ctx, step, inputs, produced)
             yield from _kind_contract(ctx, step)
             yield from _same_name_twice(ctx, step, inputs, made)
@@ -337,6 +357,29 @@ def _step_name(ctx, step) -> Iterable[Hit]:
         yield Hit(ctx.file, ctx.span(step.node("name")), f"The step name '{name}' is the platform's: it keeps "
                   f"{', '.join(RESERVED_STEP_NAMES)} for itself and names the HPC (Slurm) variant of a step "
                   f"'<step>{RESERVED_STEP_SUFFIX}'.", "Rename the step and its steps/<folder>.")
+
+
+def _folder(ctx, step) -> Iterable[Hit]:
+    """Every step has its folder steps/<name with underscores>/ (checked in a repository that has a steps/ folder)."""
+    name = step.name
+    if not isinstance(name, str) or not (ctx.root / STEPS_DIR).is_dir() or (ctx.root / step_folder(name)).is_dir():
+        return
+    folder = step_folder(name)
+    hyphen = f"{STEPS_DIR}/{name}"
+    found = f" There is a folder {hyphen}/: rename it to {folder}/." if (ctx.root / hyphen).is_dir() else ""
+    yield Hit(ctx.file, ctx.span(step.node("name")),
+              f"Step '{name}' has no folder {folder}/. The folder of a step is steps/ plus the step's name with every "
+              f"hyphen written as an underscore.{found}",
+              f"Create {folder}/ with a Dockerfile and app/entry.py.")
+
+
+def _input_is_output(ctx, step, inputs, produced) -> Iterable[Hit]:
+    """The step reads an input and writes an output by name, into folders of that name: one name is one thing."""
+    for name in sorted({n for _, n in produced} & set(inputs)):
+        yield Hit(ctx.file, ctx.span(step.node("produces")), f"{_step_label(step)}: '{name}' is both an input "
+                  f"(inputs=) and one of its own outputs (produces=): the step reads and writes by name, so the two "
+                  f"must differ.", f"Rename the config value (for example 'previous-{name}', in inputs= and in "
+                  f"config/) or the produced name.")
 
 
 def _kind(ctx, step, any_kind) -> Iterable[Hit]:
@@ -469,6 +512,10 @@ def _produces(ctx, step):
         if not isinstance(name, str) or not _NAME.match(name) or name.startswith(RESERVED_NAME_PREFIX):
             yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: {name!r} is not a name for what a step "
                       f"produces. " + _NAMES, "Rename it.")
+        elif kind == "dataset" and len(name) < MIN_DATASET_NAME:
+            yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: the dataset name {name!r} is too short. A dataset "
+                      f"name has {MIN_DATASET_NAME} to {NAME_MAX} characters: it is stored as dataset-<app>-<name>.",
+                      "Give the dataset a longer name, for example dataset(\"embeddings\").")
         elif name in seen:
             yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)} produces '{name}' twice.",
                       "Give each thing the step produces its own name.")

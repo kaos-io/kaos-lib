@@ -56,17 +56,16 @@ Once the checks pass, `step.result()` saves in two stages, and a failure in a st
 1. **Seal.** Every output is uploaded and checked, and no model, artifact or `latest` changes. A failure here changes
    nothing that anyone reads, except that a dataset version already sealed for an earlier output of the same step
    stays in its dataset, kept under a name that starts `k-` and the time it was sealed, followed by the run and the step. It is not `latest`.
-2. **Promote.** Models and artifacts are saved first, then the datasets that the run asked to move `latest` for. When a
-   promotion fails, a model or artifact that was already saved stays under its folder `<name>/<experiment>/<run>/`;
-   no result refers to it. A dataset whose promotion failed keeps its sealed version, and `latest` does not move. If a
-   step moves two datasets, the second can fail after the first has moved: that one case cannot be undone.
+2. **Promote.** Models and artifacts are saved. When that fails, a model or artifact that was already saved stays
+   under its folder `<name>/<experiment>/<run>/`; no result refers to it. A dataset is never promoted by its step: its
+   `latest` moves once, when the run ends and every step went well ([Move `latest`](flow-datasets.md#move-latest)).
 
 In every case the step fails and hands on no result, so the steps that need it do not start.
 [When a step is run again](datasets-versions-hashes.md#when-a-step-is-run-again) says what a retry does with it.
 
 ## 8. A version never changes after it is made
 
-Making a version never edits an older one. What moves is the name `latest`, and only when the run asks for it.
+Making a version never edits an older one. What moves is the name `latest`, and only when the run asks for it and every step of the run went well.
 
 ## 9. Only the app that declares a dataset writes it
 

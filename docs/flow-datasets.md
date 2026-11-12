@@ -102,8 +102,9 @@ first pipeline writes it. The second only reads.
 
 ## Move `latest`
 
-**You want** `latest` to point to the version a run made. A run that does not ask still makes its version,
-and leaves `latest` where it was, so an experiment never changes what other pipelines read.
+**You want** `latest` to point to the version a run made. A step only makes its version. `latest` moves once, at the
+end of the run, and only when the whole run went well. A run that does not ask still makes its version, and leaves
+`latest` where it was, so an experiment never changes what other pipelines read.
 
 The run form has a choice for each dataset the pipeline makes: `promote-<name>`, with the name from `produces=`
 (`promote-clean` for `dataset("clean")`). It offers `false` and `true`, and the default is `false`. Set it to `true` for
@@ -111,23 +112,38 @@ the run that should move `latest`.
 
 | the run | the version it made | `latest` |
 |---|---|---|
-| has `promote-clean` set to `true` | new | moves to it |
-| leaves `promote-clean` at `false` | new | stays |
+| has `promote-clean` set to `true`, and every step ended well | new | moves to it, at the end of the run |
+| has `promote-clean` set to `true`, and a step failed | new, kept | stays |
+| leaves `promote-clean` at `false` | new, kept | stays |
 | writes the same files as `latest` already holds | none: the existing version is reused | unchanged |
+| has a step that was skipped, and the skipped step makes the dataset | none | unchanged |
 
 A run uploads only what differs from `latest` and from the newest version an earlier run sealed: a run that does not
 promote does not upload the same files again on every run (it still makes its own version).
 
-**The run records** the version of the write. With a promotion that is the version `latest` now points to; without
-it, the version that was made. Later steps read that version either way.
+**All or nothing.** When a pipeline makes two datasets and both are ticked, the run moves both `latest` names, or
+neither. At the end of the run the platform first checks every ticked dataset: its `latest` must still be the version
+the step started from. If one has moved, the run moves none and fails, naming the dataset that moved. Every version the
+run made is kept. Then it moves them all. Steps skipped with a condition or with `step.skip()` make nothing, so their
+datasets are not moved, and the log of the run says so.
+
+**The run records** the version the step made, in the step's result. Later steps of the run read that version, whether or
+not `latest` moves.
 
 ### When two runs ask at once {#when-two-runs-write-at-once}
 
-A dataset has one `latest`. When two runs ask to move it at the same time, the second finds that `latest` has moved,
-makes its version again on top of the new one, and then moves `latest`. It tries up to three times. So `latest` is always
-the complete version of one run, never a mix of two. If it still cannot, the step fails with
-`changed 3 times while this step was promoting it. Another run is writing the same dataset`, and the version it made is
-kept, but `latest` does not point to it. Only one pipeline writes a dataset, so this is rare: it needs two runs of the
-same pipeline.
+A dataset has one `latest`. When two runs of the same pipeline both ask to move it, the first to finish moves it. The
+second finds that `latest` has moved while it was running, moves nothing and fails, and says which dataset moved. Its
+versions are kept. Start the run again: it then starts from the new `latest`. Only one pipeline writes a dataset, so this
+needs two runs of the same pipeline at the same time.
+
+### If the end of the run is cut short {#if-the-end-of-the-run-is-cut-short}
+
+Moving two or more `latest` names is two or more actions, and one of them can fail after another succeeded (the data
+store is not reachable, or another run moved a dataset in the instant between the check and the move). Then the datasets
+that were already moved stay moved, and the others do not. The run fails and the log names both lists. Nothing is lost:
+every version the run made is kept. The platform tries the last task again by itself when its machine is lost, and a
+dataset that already points to this run's version is recognised and left alone. In every other case, start the run
+again: it starts from the `latest` of each dataset as it is then.
 
 Next: [Datasets, versions and hashes](datasets-versions-hashes.md).

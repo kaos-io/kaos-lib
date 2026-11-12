@@ -27,7 +27,7 @@ three names:
 - **`vN`**, a label such as `v2`, on an uploaded dataset. `kaosctl dataset release dataset-x` gives the version `latest`
   points to the next number. It refuses when that state already has one: `nothing new to release`.
 - **`latest`**, the name that points to the dataset's current version. It moves when a pull request is merged into an
-  uploaded dataset, and when a run that has its `promote-<name>` field set to `true` makes a version of a produced one ([how to ask](flow-datasets.md#move-latest)).
+  uploaded dataset, and, at the end of a run whose steps all went well, when the run has its `promote-<name>` field set to `true` for a produced one ([how to ask](flow-datasets.md#move-latest)).
   `latest` can be newer than the newest `vN`, because nobody has released the change yet. A version that a run sealed
   without asking is newer than `latest` in time, but it is not `latest`: nothing reads it unless you name its id.
 
@@ -47,8 +47,8 @@ step made, by its id.
 
 | where | what you see |
 |---|---|
-| the log of a step that makes a dataset | `output 'clean': dataset-myapp-clean is now at b2e7b6573672 (latest).` |
-| | `output 'clean': sealed dataset-myapp-clean at b2e7b6573672 (kept as ...); latest was not moved.` |
+| the log of a step that makes a dataset | `output 'clean': sealed dataset-myapp-clean at b2e7b6573672 (kept as ...). It becomes the latest when the whole run has ended well, if the run form's promote-clean is ticked.` |
+| the last task of the run | `dataset 'clean': dataset-myapp-clean is now at 91c0e0aa1f3d (latest), the version step 'prepare' sealed (b2e7b6573672).` |
 | | `output 'clean': the same content as the last version of dataset-myapp-clean (b2e7b6573672); no new version.` |
 | the result of a step | the full id, 64 characters, in `reads` and `writes` ([below](#what-a-run-records)) |
 | `kaosctl step run` on your laptop | `read    clean: dataset-myapp-clean at b2e7b6573672` |
@@ -61,8 +61,7 @@ data store gives the version.
 
 | the step | the id of the write |
 |---|---|
-| made new files and the run asked to move `latest` | the version `latest` now points to |
-| made new files and the run did not ask | the version that was made. `latest` did not move |
+| made new files | the version that was made, whether or not the run moves `latest` at its end |
 | made the same files as the last version | the last version: no new version exists |
 
 ## What a run records
@@ -118,7 +117,7 @@ retry does with what it writes:
 | a dataset | seals its version again. If the files are exactly the ones an earlier attempt of this step already sealed, that version is used: no second version. The version is kept under the name `k-<time>-<run>-<step>-<12 characters of the id>`, where the time is when the step sealed it, such as `20261112T093015Z`, which the log shows as `kept as ...` |
 | a model or an artifact | replaces the folder `<name>/<experiment>/<run>/` with exactly what the retry wrote; a file of the earlier attempt that the retry did not write is gone |
 
-So a retry writes each output once. If `latest` moved while the step was away (another run asked to move it), the retry
+So a retry writes each output once. If `latest` moved while the step was away (another run moved it), the retry
 seals on the new `latest` and does not reuse the older seal. When two runs ask to move `latest` at the same time, see
 [Move `latest`](flow-datasets.md#move-latest). Models and artifacts are not shared that way: each run keeps its own
 folder, `<name>/<experiment>/<run>/`.

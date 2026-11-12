@@ -5,7 +5,7 @@ import pathlib
 import pytest
 
 from kaos_lib.lint import ALL_RULES, lint_project
-from lint_corpus import CASES, write_repo
+from lint_corpus import CASES, PLAIN_STEP, repo, write_repo
 
 DOCS = pathlib.Path(__file__).resolve().parent.parent / "docs" / "lint"
 LEVELS = {"E": "error", "W": "warning", "I": "info"}
@@ -158,3 +158,74 @@ def test_w03_leaves_the_default_version_in_config_alone(tmp_path, config):
 @pytest.mark.parametrize("kw", ['walltime="2h"', "resumable=True", 'checkpoint_every="20m"', 'idle_timeout="40m"'])
 def test_a_step_without_a_gpu_may_declare_what_the_engine_accepts_for_every_step(tmp_path, kw):
     assert messages(tmp_path, f'    a = step("a", kind="evaluate", {kw})\n', rule="L-E06") == []
+
+
+# --- authoring flows: folders, names, one-name rule, conditions on a step's value, loops ------------------------
+
+def test_a_dataset_name_under_three_characters_is_refused_before_render(tmp_path):
+    out = messages(tmp_path, '    a = step("a", kind="ingest", produces=[dataset("x")])\n', {"a": ""}, rule="L-E07")
+    assert any("the dataset name 'x' is too short. A dataset name has 3 to 40 characters" in m for m in out), out
+
+
+def test_an_input_that_is_also_an_output_of_the_same_step_is_refused_with_the_fix(tmp_path):
+    body = '    a = step("a", kind="transform", inputs=["dataset"], produces=[dataset("dataset")])\n'
+    found = [f for f in run(tmp_path, repo(body, {"a": ""}), None).findings if f.rule == "L-E07"]
+    assert any("'dataset' is both an input (inputs=) and one of its own outputs (produces=)" in f.message
+               and "previous-dataset" in f.fix for f in found), found
+
+
+def test_a_step_without_its_folder_names_the_folder_and_the_underscore_rule(tmp_path):
+    found = [f for f in run(tmp_path, repo('    a = step("model-eval", kind="evaluate")\n', {"other": ""}), None).findings
+             if f.rule == "L-E07" and "folder" in f.message]
+    assert found and "has no folder steps/model_eval/." in found[0].message
+    assert "every hyphen written as an underscore" in found[0].message and "Create steps/model_eval/" in found[0].fix
+
+
+def test_a_hyphen_folder_is_named_in_the_message(tmp_path):
+    files = repo('    a = step("model-eval", kind="evaluate")\n', {"other": ""})
+    files["steps/model-eval/Dockerfile"] = "FROM scratch\n"
+    found = [f for f in run(tmp_path, files, None).findings if f.rule == "L-E07" and "folder" in f.message]
+    assert found and "There is a folder steps/model-eval/: rename it to steps/model_eval/." in found[0].message
+
+
+def test_a_step_with_its_folder_and_a_repository_without_steps_are_not_judged(tmp_path):
+    ok = repo('    a = step("model-eval", kind="evaluate")\n', {"model-eval": ""})
+    assert not [f for f in run(tmp_path / "a", ok, None).findings if "no folder" in f.message]
+    bare = {k: v for k, v in repo('    a = step("model-eval", kind="evaluate")\n').items() if not k.startswith("steps/")}
+    assert not [f for f in run(tmp_path / "b", bare, None).findings if "no folder" in f.message]
+
+
+def test_a_config_file_with_several_top_level_keys_gives_each_one_as_a_section(tmp_path):
+    config = {"config/config.yaml": "defaults:\n  - scenarios\n", "config/scenarios.yaml": "source:\n  a: 1\ntrain:\n  b: 2\n"}
+    body = '    a = step("a", kind="evaluate", reads=["source", "train"])\n'
+    assert not messages(tmp_path / "a", body, {"a": ""}, rule="L-E05", config=config)
+    assert any("does not exist in config/" in m for m in
+               messages(tmp_path / "b", '    a = step("a", kind="evaluate", reads=["nope"])\n', {"a": ""}, rule="L-E05", config=config))
+
+
+def test_a_train_step_that_declares_checkpoint_every_is_not_told_it_is_not_resumable(tmp_path):
+    body = '    t = step("work", kind="train", walltime="12h", checkpoint_every="10m", produces=[model("m")])\n'
+    assert not messages(tmp_path, body, {"work": PLAIN_STEP}, rule="L-W06")
+
+
+def test_a_step_built_in_a_loop_is_named_by_its_line_not_by_a_python_object(tmp_path):
+    out = messages(tmp_path, '    for i in range(2):\n        step(f"t-{i}", kind="evaluate", gpu=True)\n', rule="L-I01")
+    assert out and all("The step built at line 5 declares no time limit" in m and "object" not in m for m in out), out
+
+
+@pytest.mark.parametrize("when,expect", [
+    ("evaluate.passed == true", None),
+    ("evaluate.passed == true and experiment-name != off", None),
+    ("score > 0.5", "is not a condition the platform can read. A condition compares one name with a text, with == or != and nothing else"),
+    ("evaluate.pass-rate == 1", "is not a name step.result() could have been given"),
+    ("other.passed == true", "reads a value of step 'other', which this step does not need"),
+])
+def test_when_on_a_value_of_a_needed_step(tmp_path, when, expect):
+    body = (f'    e = step("evaluate", kind="evaluate")\n    o = step("other", kind="evaluate")\n'
+            f'    p = step("publish", kind="publish", needs=[e], when="{when}")\n')
+    out = messages(tmp_path, body, {"evaluate": "", "other": "", "publish": ""}, rule="L-E06") \
+        + messages(tmp_path / "x", body, {"evaluate": "", "other": "", "publish": ""}, rule="L-E07")
+    if expect is None:
+        assert not [m for m in out if "when" in m], out
+    else:
+        assert any(expect in m for m in out), out

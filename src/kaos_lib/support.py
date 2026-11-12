@@ -58,6 +58,10 @@ def validate_release(meta) -> list:
             SpecifierSet(meta["supported"])
         except InvalidSpecifier:
             errors.append(f"supported: {meta['supported']!r} is not a PEP 440 specifier")
+    engine = meta.get("engine")
+    if engine is not None and not (isinstance(engine, dict) and all(isinstance(engine.get(k), str) and engine[k]
+                                                                   for k in ("wheel", "sha256"))):
+        errors.append("engine: optional; when present an object with the text keys wheel and sha256 (and version)")
     for i, entry in enumerate(meta.get("deprecated") if isinstance(meta.get("deprecated"), list) else []):
         if not isinstance(entry, dict) or not isinstance(entry.get("range"), str):
             errors.append(f"deprecated[{i}]: needs a range (PEP 440 specifier)")

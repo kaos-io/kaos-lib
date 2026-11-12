@@ -195,3 +195,17 @@ def test_an_upstream_read_without_a_version_is_refused(tmp_path):
     with pytest.raises(ValueError, match="repository@version"):
         with testing.running(tmp_path, upstream_reads={"p": {"dataset": "dataset-raw"}}):
             pass
+
+
+def test_a_step_that_skips_itself_leaves_a_skipped_result_and_a_needed_skipped_step_is_seen_as_skipped(tmp_path):
+    def entry():
+        step.start()
+        if step.skipped("evaluate"):
+            step.skip(f"evaluate was skipped: {step.skipped('evaluate')}")
+        step.result()
+
+    with testing.running(tmp_path, kind="publish", name="publish", upstream_skipped={"evaluate": "score too low"}) as run:
+        with pytest.raises(SystemExit) as stop:
+            entry()
+    assert stop.value.code == 0
+    assert run.result == {"version": 1, "status": "skipped", "reason": "evaluate was skipped: score too low"}

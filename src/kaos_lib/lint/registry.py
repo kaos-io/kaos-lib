@@ -146,6 +146,11 @@ def runs_needed(limit: int, lane_max: int) -> int:
     return math.ceil(limit / lane_max)
 
 
+def step_label(step: Step) -> str:
+    """"Step 'x'", or, for a step whose name is not a literal (built in a loop or a call), where it is built."""
+    return f"Step '{step.name}'" if isinstance(step.name, str) else f"The step built at line {step.call.lineno}"
+
+
 def gpu_steps(ctx: LintContext) -> Iterable[Step]:
     """Steps that are certainly GPU steps (gpu=True)."""
     return (s for s in ctx.pipeline.steps if s.is_gpu is True)

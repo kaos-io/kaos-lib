@@ -375,6 +375,83 @@ def flow_control(tmp: pathlib.Path) -> dict:
     raise ExampleError("check did not end a run with 0 epochs")
 
 
+def _run_ending(app, work, name, kind, produces, **kwargs):
+    """One step started with `kaos_lib.testing.running` that may end by itself (`step.skip`): (exit code or None, run)."""
+    from kaos_lib import testing
+    work.mkdir(parents=True, exist_ok=True)
+    code = None
+    with testing.running(work, kind=kind, name=name, app="myapp", experiment="my-experiment-v1",
+                         produces=list(produces), **kwargs) as run, contextlib.redirect_stdout(io.StringIO()):
+        try:
+            load(app, name.replace("-", "_")).main()
+        except SystemExit as exc:
+            code = exc.code
+    return code, run
+
+
+def flow_conditions(tmp: pathlib.Path) -> dict:
+    """`when=` on a value of a needed step and `step.skip()`: run the whole pipeline three ways (the model passes and
+    publish delivers; it passes and publish skips itself; it does not pass and publish does not run)."""
+    app = flow_app("conditions", tmp)
+    summary = {}
+    for case, epochs, name, line in (
+            ("delivered", 5, "my-model", "score 0.5: published as my-model"),
+            ("skipped", 5, "", "score 0.5: not published, no registry name is set in config/registry.yaml"),
+            ("failed", 2, "my-model", "score 0.2: not published, the model did not pass")):
+        base = tmp / case
+        trained, trun = run_step(app, base / "train", "train", "train", [("model", "model")], params={"train": {"epochs": epochs}})
+        evaluated, erun = run_step(app, base / "evaluate", "evaluate", "evaluate", [("artifact", "verdict")],
+                                   params={"evaluate": {"threshold": 0.3}}, upstream={"train": trained["values"]},
+                                   upstream_writes={"train": {"model": trun.output("model")}})
+        if evaluated["values"] != {"passed": epochs / 10 >= 0.3, "score": epochs / 10}:
+            raise ExampleError(f"evaluate handed on {evaluated['values']}")
+        kwargs = {}
+        if case == "failed":                      # the condition `evaluate.passed == true` is false: publish never starts
+            publish_upstream = {"publish": None}
+        else:
+            code, prun = _run_ending(app, base / "publish", "publish", "publish", [], params={"registry": {"name": name}},
+                                     upstream={"evaluate": evaluated["values"]})
+            if case == "delivered" and (code is not None or prun.result["values"] != {"delivered": "my-model"}):
+                raise ExampleError(f"publish ended with {code!r} and {prun.result}")
+            if case == "skipped":
+                reason = "no registry name is set in config/registry.yaml"
+                if code != 0 or prun.result != {"version": 1, "status": "skipped", "reason": reason}:
+                    raise ExampleError(f"publish did not skip itself cleanly: {code!r} {prun.result}")
+                kwargs["upstream_skipped"] = {"publish": reason}
+                publish_upstream = {}
+            else:
+                publish_upstream = {"publish": prun.result["values"]}
+        result, run = run_step(app, base / "summary", "summary", "evaluate", [("artifact", "summary-report")],
+                               upstream={"evaluate": evaluated["values"], **publish_upstream}, **kwargs)
+        if (run.output("summary-report") / "summary.txt").read_text() != line + "\n":
+            raise ExampleError(f"summary wrote another line in the case {case}")
+        summary[case] = result["values"]
+    if summary != {"delivered": {"published": True}, "skipped": {"published": False}, "failed": {"published": False}}:
+        raise ExampleError(f"summary handed on {summary}")
+    return summary
+
+
+def flow_sweep(tmp: pathlib.Path) -> dict:
+    """A sweep as a loop inside one step: it tries every rate of the setting and keeps the best."""
+    app = flow_app("sweep", tmp)
+    result, run = run_step(app, tmp / "run", "train", "train", [("model", "best-model")],
+                           params={"train": {"epochs": 3, "learning_rates": "0.1,0.01,0.001"}})
+    if result["values"]["best_learning_rate"] != 0.01 or result["values"]["tried"] != 3:
+        raise ExampleError(f"train handed on {result['values']}")
+    if (run.output("best-model") / "weights.txt").read_text() != "learning rate 0.01\n":
+        raise ExampleError("train did not keep the best model")
+    return result
+
+
+def rerun_pin() -> None:
+    """The setting of the page "Re-running" pins a version of a dataset of the same project."""
+    from kaos_lib.datasets import DatasetRef
+    value = yaml.safe_load((FLOWS / "rerun" / "config" / "dataset.yaml").read_text(encoding="utf-8"))["dataset"]
+    ref = DatasetRef.parse(value)
+    if (ref.repo, ref.version) != ("dataset-myapp-clean", "v3"):
+        raise ExampleError(f"{value!r} parses as {ref}")
+
+
 def packages_dockerfile(tmp: pathlib.Path) -> None:
     """The Dockerfile of the page "Add packages", in a one-step app: no error or warning of the Dockerfile rules (L-D*);
     L-D07 (the image runs as root) is an info for every Dockerfile of the template too."""
@@ -425,10 +502,11 @@ def check_all() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         ledger_example(pathlib.Path(tmp))
     for flow in (flow_two_inputs, flow_skip, flow_fan_in, flow_metrics, flow_ingest, flow_publish, flow_control,
-                 packages_dockerfile):
+                 flow_conditions, flow_sweep, packages_dockerfile):
         with tempfile.TemporaryDirectory() as tmp:
             flow(pathlib.Path(tmp))
     shared_reference()
+    rerun_pin()
     for path in sorted(EXAMPLES.rglob("*.py")):
         compile(path.read_text(encoding="utf-8"), str(path), "exec")
     for path in sorted(EXAMPLES.rglob("*.yaml")):

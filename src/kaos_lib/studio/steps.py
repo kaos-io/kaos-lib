@@ -7,7 +7,10 @@ repository without a readable pipeline.py still works through its `steps/*/Docke
 from __future__ import annotations
 
 import ast
+import json
 import pathlib
+import subprocess
+import sys
 from dataclasses import dataclass, field
 
 from ..errors import KaosLibError
@@ -53,6 +56,55 @@ def repo_root(path) -> pathlib.Path:
     return root
 
 
+# Runs pipeline.py with a stand-in for the platform's authoring module that only records the step() calls, so the steps
+# a loop builds are known by name. Used only when the static reading found a step whose name it could not read.
+_RECORDER = r"""
+import json, os, runpy, sys, types
+steps = []
+class _Pipeline:
+    def __init__(self, name): self.name = name
+    def __enter__(self): return self
+    def __exit__(self, *exc): return False
+    def write(self, *a, **k): pass
+class _Step:
+    def __init__(self, name): self.name = name
+def step(name, **kw):
+    steps.append({"name": name, "kind": kw.get("kind") or "", "reads": list(kw.get("reads") or []),
+                  "inputs": list(kw.get("inputs") or []), "needs": [n.name for n in (kw.get("needs") or [])],
+                  "gpu": bool(kw.get("gpu")), "produces": [[p.type, p.name] for p in (kw.get("produces") or [])]})
+    return _Step(name)
+def _produced(kind):
+    return lambda name, **kw: types.SimpleNamespace(type=kind, name=name)
+authoring = types.ModuleType("kubecore.authoring")
+authoring.pipeline, authoring.step = _Pipeline, step
+authoring.model, authoring.artifact, authoring.dataset = _produced("model"), _produced("artifact"), _produced("dataset")
+package = types.ModuleType("kubecore")
+package.authoring, package.__path__ = authoring, []
+sys.modules["kubecore"], sys.modules["kubecore.authoring"] = package, authoring
+sys.path.insert(0, os.getcwd())
+runpy.run_path("pipeline.py", run_name="__main__")
+sys.stdout.write("\n@@KAOS-STEPS@@" + json.dumps(steps) + "\n")
+"""
+RECORD_TIMEOUT = 30
+
+
+def _recorded_steps(root: pathlib.Path) -> list:
+    """The steps pipeline.py builds, as it builds them (loops included), or [] when it cannot be run that way."""
+    try:
+        done = subprocess.run([sys.executable, "-I", "-c", _RECORDER], cwd=root, capture_output=True, text=True,
+                              timeout=RECORD_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    marker = done.stdout.rpartition("@@KAOS-STEPS@@")[2]
+    try:
+        found = json.loads(marker) if done.returncode == 0 and marker.strip() else []
+    except ValueError:
+        return []
+    return [StepInfo(f["name"], folder_of(f["name"]), root, list(f["needs"]), list(f["reads"]), bool(f["gpu"]),
+                     kind=f["kind"], inputs=list(f["inputs"]), produces=[tuple(p) for p in f["produces"]])
+            for f in found if isinstance(f.get("name"), str)]
+
+
 def _pipeline_steps(root: pathlib.Path) -> list:
     try:
         src = read_text(root, root / PIPELINE_FILE, PIPELINE_FILE)
@@ -61,6 +113,8 @@ def _pipeline_steps(root: pathlib.Path) -> list:
     if src is None or parse_python(src) is None:
         return []
     facts = read_pipeline(src)
+    if any(s.name is UNKNOWN for s in facts.steps) and (built := _recorded_steps(root)):
+        return built
     by_var = {s.var: s for s in facts.steps if s.var and s.name is not UNKNOWN}
     out = []
     for s in facts.steps:

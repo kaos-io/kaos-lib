@@ -103,16 +103,15 @@ def say(line: str) -> None:
     print(line, flush=True)
 
 
-def report(s: Sealed, saved: str, promoted: bool) -> None:
+def report(s: Sealed, saved: str) -> None:
     """The last line of an output: where it ended up. ``saved`` is the commit ``promote`` returned (or ``s.commit``)."""
     if s.tag_prefix is None:
         say(f"output '{s.name}': saved at {saved[:12]}.")
     elif s.commit == s.head:
         say(f"output '{s.name}': the same content as the last version of {s.repo} ({saved[:12]}); no new version.")
-    elif promoted:
-        say(f"output '{s.name}': {s.repo} is now at {saved[:12]} (latest).")
     else:
-        say(f"output '{s.name}': sealed {s.repo} at {saved[:12]} (kept as {s.tag}); latest was not moved.")
+        say(f"output '{s.name}': sealed {s.repo} at {saved[:12]} (kept as {s.tag}). It becomes the latest when the "
+            f"whole run has ended well, if the run form's promote-{s.name} is ticked.")
 
 
 def _differences(client: LakeFS, repo: str, ref: str, files: dict, prefix: str) -> list:

@@ -10,6 +10,7 @@ A step is ``python -m app.entry`` with no arguments. The platform gives it one v
     out = step.output("report")      # a folder to write into; saved when result() is called
     prev = step.upstream("prepare")  # an earlier step's result: prev.values, prev.reads, prev.writes
     step.result(rows=1200)           # save the outputs and hand the result on: the last call of the step
+    step.skip("not good enough")     # or: end the step as skipped, with the reason; nothing is saved
 
 A step names its inputs and outputs; it never names a version. Which version of a dataset an input is was
 chosen when the run was submitted and reached the step as an exact commit. ``pipeline.py`` declares the names:
@@ -40,6 +41,7 @@ ENV = runtime.STEP_CONTEXT_ENV
 VERSION = 1                         # of the context and of the result
 CONTEXT_CAP = 96 * 1024             # the most a context may cost (lock.cost)
 RESULT_CAP = 8 * 1024               # the most a result may cost
+SKIP_REASON_MAX = 300               # characters of the reason of step.skip()
 KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 WORK = "/work"                      # the step's working folder
 RESULT_FILE = "/work/output/kaos-result.json"
@@ -59,11 +61,10 @@ def _work(path: str) -> pathlib.Path:
 
 @dataclass(frozen=True)
 class Produce:
-    """One thing the step declares in ``produces=``. ``promote`` (datasets): this run moves the dataset's latest."""
+    """One thing the step declares in ``produces=``."""
     name: str
     type: str
     repo: str
-    promote: bool = False
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,7 @@ class Step:
     ledger: lock.DataLock = field(compare=False, repr=False, default_factory=lock.DataLock)
     produces: tuple = ()
     upstream: dict = field(default_factory=dict)    # step name -> Upstream, or None when that step left no result
+    skipped: dict = field(default_factory=dict)     # step name -> the reason it gave to step.skip(); "" when it did not run
 
 
 # --------------------------------------------------------------------------------------------------- the context
@@ -99,14 +101,21 @@ def _found(value) -> str:
     return "it is missing" if value is None else f"found {type(value).__name__} {str(value)[:40]!r}"
 
 
-def _result_of(name: str, entry) -> Optional[Upstream]:
+def _result_of(name: str, entry) -> tuple:
+    """``(Upstream or None, reason)``: ``None`` and ``""`` for a step that did not run (absent), ``None`` and its
+    reason for a step that ended itself with ``step.skip()``."""
     where = f"the step context: upstream.{name}"
     if not isinstance(entry, dict) or entry.get("version") != VERSION:
         _fail(f"{where} is not a result at version {VERSION} ({_found(entry)}).")
     if entry.get("status") == "absent":
-        return None
+        return None, ""
+    if entry.get("status") == "skipped":
+        reason = entry.get("reason")
+        if not isinstance(reason, str) or not reason:
+            _fail(f"{where} is skipped and has no reason ({_found(reason)}).")
+        return None, reason
     if entry.get("status") != "ok":
-        _fail(f"{where} has status {entry.get('status')!r}; a result is 'ok' or 'absent'.")
+        _fail(f"{where} has status {entry.get('status')!r}; a result is 'ok', 'skipped' or 'absent'.")
     if not isinstance(entry.get("values"), dict):
         _fail(f"{where} has no values ({_found(entry.get('values'))}).")
     try:
@@ -114,7 +123,7 @@ def _result_of(name: str, entry) -> Optional[Upstream]:
                                     "writes": entry.get("writes")}, where)
     except LockError as exc:
         _fail(str(exc))
-    return Upstream(name, entry["values"], tuple(part.reads), tuple(part.writes))
+    return Upstream(name, entry["values"], tuple(part.reads), tuple(part.writes)), ""
 
 
 def _produces(entries) -> tuple:
@@ -132,7 +141,7 @@ def _produces(entries) -> tuple:
                 or not NAME.match(entry["name"]):
             _fail(f"{where}: the name {entry['name']!r} is reserved, used twice or not a name (lowercase "
                   f"letters, digits and hyphens, at most {NAME_MAX} characters).")
-        out.append(Produce(entry["name"], entry["type"], entry["repo"], entry.get("promote") is True))
+        out.append(Produce(entry["name"], entry["type"], entry["repo"]))
     return tuple(out)
 
 
@@ -169,9 +178,11 @@ def parse(text: str) -> Step:
         _fail(str(exc))
     if not isinstance(data.get("upstream"), dict):
         _fail(f"the step context has no upstream ({_found(data.get('upstream'))}).")
+    results = {name: _result_of(name, entry) for name, entry in data["upstream"].items()}
     return Step(data["run"], data["app"], data["project"], data["step"], data["kind"], data["experiment"],
                 data["params"], ledger, _produces(data.get("produces")),
-                {name: _result_of(name, entry) for name, entry in data["upstream"].items()})
+                {name: found for name, (found, _) in results.items()},
+                {name: reason for name, (found, reason) in results.items() if found is None})
 
 
 # ------------------------------------------------------------------------------------------------ the running step
@@ -306,14 +317,14 @@ def _find(name: str, optional: bool) -> Optional[pathlib.Path]:
     read = _pinned(step).named(name)
     write = None if read else _upstream_write(step, name)
     if read is None and write is None:
-        absent = [s for s, up in step.upstream.items() if up is None]
+        absent = [s for s, up in step.upstream.items() if up is None]     # did not run, or skipped itself
         if absent and optional:
             return None
         known = [r.name for r in _pinned(step).reads] + [w.name for up in step.upstream.values() if up
                                                          for w in up.writes]
         if absent:
-            _fail(f"input '{name}' of step '{step.step}' is not there, and {_names(absent)} did not run: a step "
-                  f"that did not run produced nothing. Use input('{name}', optional=True) if this step can run "
+            _fail(f"input '{name}' of step '{step.step}' is not there, and {_names(absent)} did not run or was skipped: "
+                  f"a step that did not run produced nothing. Use input('{name}', optional=True) if this step can run "
                   f"without it. What is there: {_names(known)}.")
         _fail(f"'{name}' is not an input of step '{step.step}'. Its inputs are: {_names(known)}. "
               "Add it to inputs=[...] in pipeline.py.")
@@ -363,17 +374,28 @@ def _artifact(run: _Running, name: str, write: lock.Write) -> pathlib.Path:
 def upstream(step: str, optional: bool = False) -> Optional[Upstream]:
     """The result of the earlier step ``step`` (a step named in ``needs=``).
 
-    A step that did not run (it was skipped) left no result: that raises, naming it. With ``optional=True`` it
-    returns None instead, for a step that can work without it.
+    A step that did not run (its ``when=`` was false) or ended itself with ``step.skip()`` left no result: that
+    raises, naming it (and the reason it gave). With ``optional=True`` it returns None instead, for a step that can
+    work without it. ``step.skipped(name)`` tells which: the reason it gave, or None.
     """
     mine = _need().step
     if step not in mine.upstream:
         _fail(f"step '{step}' is not upstream of '{mine.step}'. Add needs=['{step}'] in pipeline.py.")
     found = mine.upstream[step]
     if found is None and not optional:
-        _fail(f"step '{step}' did not run, so it left no result, and '{mine.step}' needs it. "
+        why = f"was skipped ({mine.skipped[step]})" if mine.skipped.get(step) else "did not run"
+        _fail(f"step '{step}' {why}, so it left no result, and '{mine.step}' needs it. "
               f"Use upstream('{step}', optional=True) if this step can run without it.")
     return found
+
+
+def skipped(step: str) -> Optional[str]:
+    """The reason the earlier step ``step`` (named in ``needs=``) gave to ``step.skip()``; ``""`` when it did not
+    run at all (its ``when=`` was false); None when it ran and left a result."""
+    mine = _need().step
+    if step not in mine.upstream:
+        _fail(f"step '{step}' is not upstream of '{mine.step}'. Add needs=['{step}'] in pipeline.py.")
+    return mine.skipped.get(step) if mine.upstream[step] is None else None
 
 
 # ------------------------------------------------------------------------------------------------------ outputs
@@ -477,8 +499,10 @@ def _seal(run: _Running, produce: Produce) -> writer.Sealed:
 
 def _save(run: _Running) -> list:
     """Save every output; returns their ledger writes. Seal all of them first, promote only then: a step that
-    fails while writing moves no ``main``. Models and artifacts are promoted before datasets, so that the one
-    case that cannot be undone (two datasets promoted, the second merge failing) is as narrow as it can be."""
+    fails while writing moves no ``main``. A dataset is only sealed, never promoted here: its ``latest`` moves
+    once, when the whole run has ended well (the platform's final task of the run, which the run form's
+    ``promote-<name>`` choice controls). A model or an artifact is merged into ``main`` of the outputs repository
+    under its run-unique path; nothing refers to it before this step's result does."""
     if os.environ.get(LOCAL_WORK_ENV):
         root = pathlib.Path(os.environ[local.STAGED_ENV])
         return [lock.Write(p.name, p.type, p.repo, _keep_locally(p, run.outputs[p.name], root))
@@ -488,11 +512,10 @@ def _save(run: _Running) -> list:
         for produce in run.step.produces:
             repo = produce.repo
             sealed.append((produce, _seal(run, produce)))
-        for produce, s in sorted(sealed, key=lambda item: item[0].type == "dataset"):
+        for produce, s in sealed:
             repo = produce.repo
-            promoted = produce.type != "dataset" or produce.promote
-            commit = writer.promote(s) if promoted else s.commit
-            writer.report(s, commit, promoted)
+            commit = s.commit if produce.type == "dataset" else writer.promote(s)
+            writer.report(s, commit)
             writes.append(lock.Write(produce.name, produce.type, produce.repo, commit))
     except PermissionDenied as exc:
         _fail(f"this app may not write {repo}: only what the step declares in produces=[...] in pipeline.py can "
@@ -555,6 +578,29 @@ def result(**values) -> None:
     partial.write_text(text, encoding="ascii")
     os.replace(partial, target)
     run.done = True
+
+
+def skip(reason: str) -> None:
+    """End the step as skipped: it hands on no result values and saves nothing, and the process ends with exit code
+    0 (it is not a failure). ``reason`` (text, at most 300 characters) is what the run shows and what the steps that
+    need this one are told. Steps that need it still run; they find it with ``step.skipped(name)`` or
+    ``step.upstream(name, optional=True)``. A dataset this step produces gets no new version, so it is not promoted."""
+    run = _need()
+    if run.done:
+        _fail("step.result() or step.skip() was already called.")
+    if not isinstance(reason, str) or not reason.strip():
+        _fail("step.skip() needs the reason, as text, for example step.skip('the verdict is not good enough to publish').")
+    if len(reason) > SKIP_REASON_MAX:
+        _fail(f"the reason of step.skip() has {len(reason)} characters; the limit is {SKIP_REASON_MAX}. Say it shorter.")
+    text = lock.wire({"version": VERSION, "status": "skipped", "reason": reason})
+    target = _work(RESULT_FILE)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_name(target.name + ".part")
+    partial.write_text(text, encoding="ascii")
+    os.replace(partial, target)
+    run.done = True
+    print(f"step '{run.step.step}' skipped: {reason}", flush=True)
+    sys.exit(0)
 
 
 def _ledger_on_mlflow() -> None:

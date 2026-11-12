@@ -22,5 +22,30 @@ the image and read it with a dataset instead (`L-D06`), and give the image no `-
 its page in [Lint checks](lint.md). Only the step whose folder changed is built again when you send a change in
 ([page 2](first-step.md#send-the-change-in)).
 
+## Add a system package
+
+A system package such as `libgl1` is installed with `apt-get` in its own `RUN` line. Install without the recommended
+extras, and remove the package lists in the same line, so that the layer stays small (`L-D06` warns otherwise):
+
+```dockerfile title="steps/<name>/Dockerfile"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+Put it before the lines for the Python packages. Pin nothing here, and install only what the step uses.
+
+## Share code between steps {#share-code-between-steps}
+
+Each image is built from the folder of its step alone. So `COPY ../common ./common` is refused (`L-D04`): the build
+cannot see the folder next to yours. Two ways to share a helper module:
+
+1. **Copy it into each step.** Put `helpers.py` in `steps/a/app/` and in `steps/b/app/`, and import it as
+   `from app import helpers`. It is simple. When you change it, change both.
+2. **Make it a package.** Put it in its own repository, and install it in the `Dockerfile` of each step, pinned, like any
+   other package: `RUN pip install --no-cache-dir "my-helpers==1.4.0"`. One change, then a new version, then a new pin.
+
+Use the copy for a small file. Use a package once three steps share it.
+
 To build the image on your machine before you push, run `kaosctl build <step>`. It needs a container engine, and prints
 the same findings as `kaosctl lint`.

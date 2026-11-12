@@ -24,6 +24,23 @@ Every step in `pipeline.py` says what it does with `kind=`: `ingest`, `transform
 `control`. Each kind has a contract, for example a `train` step produces a model: [Step kinds](step-kinds.md) has them
 all, with an example of each.
 
+## The name of a step and its folder
+
+A step's name in `pipeline.py` is also its folder: `steps/` plus the name **with every hyphen written as an underscore**.
+
+| the step | its folder |
+|---|---|
+| `step("hello-world", ...)` | `steps/hello_world/` |
+| `step("prepare", ...)` | `steps/prepare/` |
+| `step("model-eval", ...)` | `steps/model_eval/` |
+
+Some names are not available for a step: `main`, a name that starts with `kaos-`, and a name that
+ends with `-hpc` (the platform names the variant of a step that runs on HPC that way). The render refuses them with a
+message that lists the rule.
+
+The folder holds the `Dockerfile` and `app/entry.py`. A folder with the hyphen, `steps/model-eval/`, is not found. When the
+folder is missing, `kaosctl lint`, the render of `pipeline.py` and `kaosctl step run` all name the folder to create.
+
 ## Change the step
 
 Hand on the size of the files as well as their number. Four lines change:

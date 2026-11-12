@@ -217,6 +217,60 @@ def test_a_step_that_ends_without_a_result_fails_here_as_it_would_on_the_platfor
     assert "none written" in capsys.readouterr().out
 
 
+def test_a_step_that_skips_itself_is_shown_as_skipped_and_exits_0_here(repo, capsys):
+    (repo / "steps/data_summary/app/entry.py").write_text(
+        "from kaos_lib import step\nstep.start()\nstep.skip('nothing new to summarise')\n")
+    assert cli.main(["step", "run", "data-summary", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "Result of data-summary (kept in" in out and "skipped. nothing new to summarise" in out
+    assert "Done: data-summary exited 0." in out
+    kept = json.loads((repo / ".kaos/local/results/data-summary.json").read_text())
+    assert kept == {"version": 1, "status": "skipped", "reason": "nothing new to summarise"}
+
+
+LOOP_PIPELINE = """from kubecore.authoring import dataset, pipeline, step
+
+with pipeline("p") as p:
+    prep = step("prep", kind="transform", inputs=["dataset"], produces=[dataset("clean")])
+    trials = [step(f"trial-{i}", kind="evaluate", needs=[prep], reads=["train"]) for i in range(2)]
+    step("pick", kind="evaluate", needs=trials)
+if __name__ == "__main__":
+    p.write("out/x.yaml")
+"""
+
+
+def test_a_step_built_in_a_loop_is_found_by_running_the_pipeline_file_and_gets_its_inputs(repo, capsys):
+    (repo / "pipeline.py").write_text(LOOP_PIPELINE)
+    for name in ("prep", "trial_0", "trial_1", "pick"):
+        folder = repo / "steps" / name
+        (folder / "app").mkdir(parents=True, exist_ok=True)
+        (folder / "app/__init__.py").write_text("")
+        (folder / "Dockerfile").write_text("FROM python:3.12\n")
+        (folder / "app/entry.py").write_text("from kaos_lib import step\nstep.start()\nstep.result(ok=True)\n")
+    found = {s.name: s for s in steps.discover(repo)}
+    assert found["trial-1"].needs == ["prep"] and found["trial-1"].reads == ["train"] and found["trial-1"].kind == "evaluate"
+    assert found["prep"].inputs == ["dataset"] and found["prep"].produces == [("dataset", "clean")]
+    assert found["pick"].needs == ["trial-0", "trial-1"], "the steps the list holds are the ones needed"
+    (repo / "steps/prep/app/entry.py").write_text(
+        "from kaos_lib import step\nstep.start()\n(step.output('clean') / 'x.txt').write_text('x')\nstep.result(ok=True)\n")
+    fake_venv(repo / "steps" / "prep")
+    data = repo / "data"
+    data.mkdir()
+    (data / "a.txt").write_text("a")
+    assert cli.main(["step", "run", "prep", str(repo), "--input", f"dataset={data}"]) == 0, capsys.readouterr().err
+
+
+def test_a_step_without_its_folder_says_which_folder_to_make_instead_of_exit_code_127(repo, capsys):
+    (repo / "pipeline.py").write_text(
+        "from kubecore.authoring import pipeline, step\nwith pipeline('p') as p:\n    step('model-eval', kind='evaluate')\n")
+    assert cli.main(["step", "run", "model-eval", str(repo)]) == 1
+    err = capsys.readouterr().err
+    assert "step 'model-eval' has no folder steps/model_eval/." in err and "every hyphen written as an underscore" in err
+    (repo / "steps" / "model-eval").mkdir()
+    assert cli.main(["step", "run", "model-eval", str(repo)]) == 1
+    assert "There is a folder steps/model-eval/: rename it to steps/model_eval/." in capsys.readouterr().err
+
+
 def test_should_name_the_known_steps_for_an_unknown_one(repo, capsys):
     assert cli.main(["step", "run", "nope", str(repo)]) == 1
     assert "Steps: dataset-loading" in capsys.readouterr().err

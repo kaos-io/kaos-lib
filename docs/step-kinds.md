@@ -14,7 +14,9 @@ pipeline, and `kaosctl lint` checks it as you write.
 
 A step that breaks its kind is refused when the pipeline is built, with one sentence that names the step and says what
 to add or which kind it should have ([the sentences](when-something-goes-wrong.md#refused-when-the-pipeline-is-built)).
-Every step, whatever its kind, can set `walltime=`, the longest it may run ([Long jobs](long-jobs.md)).
+Every step, whatever its kind, can set `walltime=`, the longest it may run ([Long jobs](long-jobs.md)), and `when=`, or
+end itself with `step.skip("reason")` ([Conditions and skipping](conditions-and-skipping.md)). A step that produces a dataset
+runs on the cluster, whatever its kind ([Produce a dataset](produce-a-dataset.md#where-it-runs)).
 
 What a step hands on is the same for all kinds: the values of `step.result(...)` reach the steps that need it
 (`step.upstream("name")`), and what it wrote into its `produces=` folders is saved when `step.result()` runs. The
@@ -91,7 +93,9 @@ it writes changes what other pipelines read.
 ## publish
 
 **For** a step that delivers a result: registers a model, calls a service, copies files out. It writes nothing the
-platform keeps, so it produces nothing. It reads what the step before it made and hands on what was delivered.
+platform keeps, so it produces nothing. It reads what the step before it made and hands on what was delivered. The
+record of the delivery (an address, an id) goes in the values of `step.result(delivered=...)`, not in a file. A `publish`
+step is often run only when the evaluation passed: `when="evaluate.passed == true"` ([Conditions and skipping](conditions-and-skipping.md)).
 
 ```python title="pipeline.py"
 --8<-- "examples/flows/publish/pipeline.py"

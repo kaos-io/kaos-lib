@@ -180,6 +180,10 @@ def print_result(step: steps.StepInfo, work: pathlib.Path, results: pathlib.Path
         result = json.loads(text)
     except ValueError:
         result = {}
+    if result.get("status") == "skipped":
+        print(f"Result of {step.name} (kept in {kept}): skipped. {result.get('reason')}")
+        print("  The steps that need it still run and see it as skipped (kaos_lib.step.skipped).")
+        return
     values = json.dumps(result.get("values", {}))
     print(f"Result of {step.name} (kept in {kept}):")
     print("  values: " + (values if len(values) <= OUTPUT_PRINT_CHARS else values[:OUTPUT_PRINT_CHARS] + "..."))
@@ -193,6 +197,12 @@ def run_step(args) -> int:
     """The `kaosctl step run` command. Returns the step's own exit code, or 1 when it could not be started."""
     root = steps.repo_root(args.path)
     step = steps.find(root, args.step)
+    if not step.path.is_dir():
+        hyphen = root / "steps" / step.name
+        raise KaosLibError(
+            f"step '{step.name}' has no folder {step.folder}/. The folder of a step is steps/ plus the step's name with "
+            f"every hyphen written as an underscore. Create {step.folder}/ with a Dockerfile and app/entry.py."
+            + (f" There is a folder steps/{step.name}/: rename it to {step.folder}/." if hyphen.is_dir() else ""))
     py = ensure_environment(step, args)
     local = local_dir(root)
     work, staged, results = local / "work" / step.name, local / "staged", local / "results"

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "2.2.0",
+  "ruleset_version": "2.3.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -552,6 +552,13 @@
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I02.html"
     },
     {
+      "id": "L-I04",
+      "name": "StepsBuiltInALoop",
+      "level": "info",
+      "fix": "Nothing to fix. To have every check read a step, write it out with a literal name; or run the pipeline file through kaosctl render, which builds the steps.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I04.html"
+    },
+    {
       "id": "L-I03",
       "name": "Schedules",
       "level": "info",
@@ -597,8 +604,15 @@
       "id": "L-W06",
       "name": "TrainTimeLimitNotResumable",
       "level": "warning",
-      "fix": "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its time limit then continues instead of starting over (see 'Long runs on HPC (Slurm)' in the guide).",
+      "fix": "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its time limit then continues instead of starting over (see the page 'Long jobs' of the guide).",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W06.html"
+    },
+    {
+      "id": "L-W07",
+      "name": "DatasetProducerStaysOnCluster",
+      "level": "warning",
+      "fix": "Nothing is wrong, but the step will run on the cluster, not on an HPC (Slurm) site. To use HPC for the heavy work, make it an artifact (or a model) in one step and copy it into the dataset in a cheap second step.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W07.html"
     }
   ]
 }

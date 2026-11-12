@@ -68,8 +68,7 @@ def test_every_fixture_context_starts_a_step(monkeypatch, name):
         want[k] for k in ("run", "app", "project", "step", "kind", "experiment"))
     assert got.params == want["params"]
     assert got.ledger.to_dict() == want["ledger"]
-    assert [(p.name, p.type, p.repo, p.promote) for p in got.produces] == [
-        (p["name"], p["type"], p["repo"], p.get("promote", False)) for p in want["produces"]]
+    assert [(p.name, p.type, p.repo) for p in got.produces] == [(p["name"], p["type"], p["repo"]) for p in want["produces"]]
     assert set(got.upstream) == set(want["upstream"])
     assert step.start() is got                                   # a second call: the same step
 
@@ -97,10 +96,31 @@ def test_fields_this_version_does_not_know_are_ignored(monkeypatch):
     assert begin(monkeypatch, context).step == "train"
 
 
-def test_a_dataset_carries_whether_this_run_promotes_it(monkeypatch):
-    assert begin(monkeypatch, wire("context-promote")).produces[0].promote is True
-    step.stop()
-    assert begin(monkeypatch, wire("context-no-upstream")).produces[0].promote is False    # absent means false
+def test_a_skipped_upstream_has_its_reason_and_an_absent_one_has_none(monkeypatch):
+    context = changed("context-skipped-upstream")
+    context["upstream"]["export"] = fixture("result-skipped")
+    got = begin(monkeypatch, json.dumps(context))
+    assert got.upstream["export"] is None and got.skipped == {"export": fixture("result-skipped")["reason"]}
+    assert step.skipped("export") == fixture("result-skipped")["reason"] and step.skipped("train") is None
+    with pytest.raises(StepError, match=r"step 'export' was skipped \(the verdict was not good enough to publish\), "
+                                         r"so it left no result, and 'evaluate' needs it."):
+        step.upstream("export")
+    assert step.upstream("export", optional=True) is None
+
+
+def test_a_step_that_did_not_run_is_skipped_with_no_reason(monkeypatch):
+    begin(monkeypatch, wire("context-skipped-upstream"))
+    assert step.skipped("export") == "" and step.skipped("train") is None
+    with pytest.raises(StepError, match="step 'export' did not run, so it left no result"):
+        step.upstream("export")
+    with pytest.raises(StepError, match="step 'nothere' is not upstream of 'evaluate'"):
+        step.skipped("nothere")
+
+
+def test_a_skipped_result_without_a_reason_is_refused(monkeypatch, capsys):
+    context = changed("context-skipped-upstream")
+    context["upstream"]["export"] = {"version": 1, "status": "skipped"}
+    assert "is skipped and has no reason" in refused(capsys, monkeypatch, context)
 
 
 def test_without_a_context_it_is_not_a_step_one_line_and_exit_1(monkeypatch, capsys):
@@ -347,7 +367,7 @@ def test_a_needed_step_without_a_result_fails_the_consumer_naming_it(monkeypatch
 
 def test_an_input_a_step_that_did_not_run_would_have_produced(monkeypatch):
     begin(monkeypatch, wire("context-skipped-upstream"))
-    with pytest.raises(StepError, match=r"input 'exported' of step 'evaluate' is not there, and export did not run: "
+    with pytest.raises(StepError, match=r"input 'exported' of step 'evaluate' is not there, and export did not run or was skipped: "
                                         r"a step that did not run produced nothing. Use input\('exported', "
                                         r"optional=True\) if this step can run without it. What is there: model."):
         step.input("exported")
@@ -585,6 +605,8 @@ EXITS = [   # body, exit code, whether a result file exists, whether the "ended 
     ("import sys\nsys.excepthook = lambda *a: print('custom hook')\nraise RuntimeError('x')", 1, False, True),
     ("try:\n    raise RuntimeError('train failed')\nexcept Exception as e:\n    print('error', e)", 1, False, True),
     ("step.result(a=1)", 0, True, False),
+    ("step.skip('nothing to publish')", 0, True, False),
+    ("step.skip('nothing to publish')\nraise RuntimeError('never reached')", 0, True, False),
     ("step.result(a=1)\nraise RuntimeError('late')", 1, True, False),
     ("step.result(a=1)\nstep.result(a=2)", 1, True, False),
     ("from kaos_lib import checkpoint; checkpoint.exit_for_restart()", 85, False, False),
@@ -678,40 +700,43 @@ def _write_dataset(monkeypatch, lake, context, files, capsys):
     return lines
 
 
-def test_the_log_says_what_a_first_version_uploaded_and_that_it_is_the_latest(monkeypatch, lake, capsys):
-    lines = _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"b"}, capsys)
-    head = lake.head("dataset-hera-demo-embeddings")
+REPO = "dataset-hera-demo-embeddings"
+
+
+def _newest_seal(lake):
+    tags = lake.repos[REPO]["tags"]
+    tag = max(t for t in tags if t.startswith("k-"))
+    return tag, tags[tag]
+
+
+def test_the_log_says_what_a_first_version_uploaded_and_that_it_is_sealed_not_latest(monkeypatch, lake, capsys):
+    before = lake.head(REPO)
+    lines = _write_dataset(monkeypatch, lake, "context-no-upstream", {"a.bin": b"a", "b.bin": b"b"}, capsys)
+    tag, sealed = _newest_seal(lake)
+    assert lake.head(REPO) == before != sealed, "a step never moves latest"
     assert lines == [
         "output 'embeddings': 2 file(s) to upload, 1 to delete, 0 unchanged since the last version of "
         "dataset-hera-demo-embeddings.",
-        f"output 'embeddings': dataset-hera-demo-embeddings is now at {head[:12]} (latest)."]
+        f"output 'embeddings': sealed dataset-hera-demo-embeddings at {sealed[:12]} (kept as {tag}). It becomes the "
+        "latest when the whole run has ended well, if the run form's promote-embeddings is ticked."]
 
 
 def test_the_log_says_when_a_run_changed_one_file_and_when_it_changed_nothing(monkeypatch, lake, capsys):
-    _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"b"}, capsys)
-    first = lake.head("dataset-hera-demo-embeddings")
-    lines = _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"changed"}, capsys)
-    second = lake.head("dataset-hera-demo-embeddings")
-    assert second != first and lines[0] == (
-        "output 'embeddings': 1 file(s) to upload, 0 to delete, 1 unchanged since the last version of "
-        "dataset-hera-demo-embeddings.")
-    assert lines[1] == f"output 'embeddings': dataset-hera-demo-embeddings is now at {second[:12]} (latest)."
-    lines = _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"changed"}, capsys)
+    """latest does not move in a step, so what 'last version' means is what main holds: here, the content the
+    test's lake starts with (nothing)."""
+    lines = _write_dataset(monkeypatch, lake, "context-no-upstream", {"a.bin": b"a", "b.bin": b"b"}, capsys)
+    assert lines[0].startswith("output 'embeddings': 2 file(s) to upload")
+    lake.repos[REPO]["branches"]["main"]["commit"] = _newest_seal(lake)[1]       # as the final task of that run would have moved it
+    head = lake.head(REPO)
+    lines = _write_dataset(monkeypatch, lake, "context-no-upstream", {"a.bin": b"a", "b.bin": b"changed"}, capsys)
+    assert lines[0] == ("output 'embeddings': 1 file(s) to upload, 0 to delete, 1 unchanged since the last version of "
+                        "dataset-hera-demo-embeddings.")
+    lines = _write_dataset(monkeypatch, lake, "context-no-upstream", {"a.bin": b"a", "b.bin": b"b"}, capsys)
     assert lines == [
         "output 'embeddings': 0 file(s) to upload, 0 to delete, 2 unchanged since the last version of "
         "dataset-hera-demo-embeddings.",
         f"output 'embeddings': the same content as the last version of dataset-hera-demo-embeddings "
-        f"({second[:12]}); no new version."]
-
-
-def test_the_log_says_a_run_that_does_not_promote_kept_its_version_and_left_latest(monkeypatch, lake, capsys):
-    before = lake.head("dataset-hera-demo-embeddings")
-    lines = _write_dataset(monkeypatch, lake, "context-no-upstream", {"a.bin": b"new"}, capsys)
-    tag = next(t for t in lake.repos["dataset-hera-demo-embeddings"]["tags"] if t.startswith("k-"))
-    sealed = lake.repos["dataset-hera-demo-embeddings"]["tags"][tag]
-    assert lake.head("dataset-hera-demo-embeddings") == before != sealed
-    assert lines[1] == (f"output 'embeddings': sealed dataset-hera-demo-embeddings at {sealed[:12]} (kept as {tag}); "
-                        "latest was not moved.")
+        f"({head[:12]}); no new version."]
 
 
 def test_the_log_says_where_a_model_was_saved(monkeypatch, lake, capsys):
@@ -725,3 +750,38 @@ def test_the_log_says_where_a_model_was_saved(monkeypatch, lake, capsys):
         "output 'model': 1 file(s) to upload, 0 to delete, 0 unchanged since the last version of outputs-hera-demo "
         "(model/baseline/hera-demo-x7k2p/).",
         f"output 'model': saved at {commit[:12]}."]
+
+
+# ------------------------------------------------------------------------------------------------------- step.skip
+def test_a_step_that_skips_itself_ends_with_exit_0_and_a_skipped_result_and_saves_nothing(tmp_path):
+    got, err, file, out = run_entry(tmp_path, "step.skip('the verdict is not good enough to publish')",
+                                    context="context-no-upstream", stdout=True)
+    assert got == 0 and err == "" and "step 'prepare' skipped: the verdict is not good enough to publish" in out
+    assert json.loads(file.read_text()) == {"version": 1, "status": "skipped",
+                                            "reason": "the verdict is not good enough to publish"}
+    assert not (tmp_path / "work" / "kaos" / "outputs").exists(), "a step that declares a dataset needs write nothing"
+
+
+def test_the_skipped_result_is_the_fixture_of_the_contract(tmp_path):
+    got, _, file = run_entry(tmp_path, f"step.skip({fixture('result-skipped')['reason']!r})", context="context-no-upstream")
+    assert got == 0 and file.read_text() == wire("result-skipped")
+
+
+@pytest.mark.parametrize("reason,message", [
+    ("", "step.skip() needs the reason, as text"),
+    ("   ", "step.skip() needs the reason, as text"),
+    (None, "step.skip() needs the reason, as text"),
+    ("x" * 301, "the reason of step.skip() has 301 characters; the limit is 300"),
+])
+def test_a_skip_without_a_usable_reason_fails_the_step_and_says_how_to_write_it(monkeypatch, reason, message):
+    begin(monkeypatch, wire("context-no-upstream"))
+    with pytest.raises(StepError, match=re.escape(message)):
+        step.skip(reason)
+    assert not result_file().exists()
+
+
+def test_a_step_cannot_skip_after_it_handed_on_its_result(monkeypatch):
+    begin(monkeypatch, changed("context-no-upstream", produces=[]))
+    step.result()
+    with pytest.raises(StepError, match=re.escape("step.result() or step.skip() was already called.")):
+        step.skip("too late")

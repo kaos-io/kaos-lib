@@ -34,7 +34,8 @@ pipeline, or by the library when the step runs.
 | Hand small values to the next step | `step.result(**values)`, `step.upstream("x").values` | [Values and files](flow-between-steps.md) |
 | Hand files to the next step | `artifact("name")` in `produces=` | [Values and files](flow-between-steps.md#files-to-the-next-step) |
 | Make a dataset, a model or an artifact | `dataset("n")`, `model("n")`, `artifact("n")` in `produces=` | [Pass things on](pass-things-on.md) |
-| Skip a step by a choice on the form | `when=` | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
+| Skip a step by a choice on the form, or by a value an earlier step handed on | `when=` | [Conditions and skipping](conditions-and-skipping.md) |
+| End a step as skipped while it runs | `step.skip("reason")` | [Conditions and skipping](conditions-and-skipping.md) |
 | Cope with a skipped step | `step.upstream("x", optional=True)`, `step.input("x", optional=True)` | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
 | Need several steps at once | `needs=[a, b]` | [Fan-in](flow-between-steps.md#one-step-needs-several-steps) |
 | Check an output before it is saved | `step.check("name", min_files=10)`, or `layout=` | [Produce a dataset](produce-a-dataset.md) |
