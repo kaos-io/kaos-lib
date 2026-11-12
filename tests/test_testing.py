@@ -129,3 +129,69 @@ def test_an_upstream_step_that_only_wrote_needs_no_values(tmp_path):
     with testing.running(tmp_path, upstream_writes={"train": {"checkpoints": ckpt}}):
         step.start()
         assert step.upstream("train").values == {} and (step.input("checkpoints") / "best.pt").exists()
+
+
+def test_an_upstream_write_given_as_a_mapping_carries_its_type_and_repository(tmp_path):
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    (prepared / "a.txt").write_text("a")
+    with testing.running(tmp_path, app="yolo", upstream_writes={
+            "prepare-data": {"prepared": {"folder": prepared, "type": "dataset"}}}):
+        step.start()
+        (write,) = step.upstream("prepare-data").writes
+        assert (write.name, write.type, write.repo) == ("prepared", "dataset", "dataset-yolo-prepared") and write.commit
+        assert (step.input("prepared") / "a.txt").read_text() == "a"
+
+
+def test_an_upstream_write_can_name_its_commit_and_need_no_folder(tmp_path):
+    with testing.running(tmp_path, app="yolo", upstream_writes={
+            "train": {"checkpoints": {"type": "model", "commit": "c" * 40}}}):
+        step.start()
+        (write,) = step.upstream("train").writes
+        assert (write.type, write.repo, write.commit) == ("model", "outputs-yolo", "c" * 40)
+
+
+def test_an_upstream_write_with_neither_folder_nor_commit_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="checkpoints.*folder or a commit"):
+        with testing.running(tmp_path, upstream_writes={"train": {"checkpoints": {"type": "model"}}}):
+            pass
+
+
+def test_an_upstream_write_of_an_unknown_type_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="type"):
+        with testing.running(tmp_path, upstream_writes={"train": {"x": {"commit": "c" * 40, "type": "table"}}}):
+            pass
+
+
+def test_what_an_upstream_step_read_is_given_as_repository_and_version(tmp_path):
+    with testing.running(tmp_path, upstream_reads={"prepare-data": {"dataset": "dataset-raw@v2"}}):
+        step.start()
+        (read,) = step.upstream("prepare-data").reads
+        assert (read.name, read.repo, read.ref) == ("dataset", "dataset-raw", "v2")
+        assert len(read.commit) == 64 and set(read.commit) <= set("0123456789abcdef")
+
+
+def test_the_commit_of_an_upstream_read_is_the_same_each_time_and_can_be_named(tmp_path):
+    with testing.running(tmp_path / "a", upstream_reads={"p": {"dataset": "dataset-raw@v2"}}):
+        step.start()
+        first = step.upstream("p").reads[0].commit
+    with testing.running(tmp_path / "b", upstream_reads={"p": {"dataset": "dataset-raw@v2"}}):
+        step.start()
+        assert step.upstream("p").reads[0].commit == first
+    named = {"repo": "dataset-raw", "ref": "v2", "commit": "a" * 40}
+    with testing.running(tmp_path / "c", upstream_reads={"p": {"dataset": named}}):
+        step.start()
+        assert step.upstream("p").reads[0].commit == "a" * 40
+
+
+def test_an_upstream_that_only_read_needs_no_values_or_writes(tmp_path):
+    with testing.running(tmp_path, upstream_reads={"p": {"dataset": "dataset-raw@v2"}}):
+        step.start()
+        up = step.upstream("p")
+        assert up.values == {} and not up.writes
+
+
+def test_an_upstream_read_without_a_version_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="repository@version"):
+        with testing.running(tmp_path, upstream_reads={"p": {"dataset": "dataset-raw"}}):
+            pass

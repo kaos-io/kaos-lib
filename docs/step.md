@@ -183,7 +183,8 @@ def test_count_files(tmp_path):
 | `params` | what `step.start().params` holds |
 | `inputs` | input name to a folder of files |
 | `upstream` | step name to the values it handed on, or to `None` for a step that did not run |
-| `upstream_writes` | step name to what it wrote, `{"train": {"checkpoints": folder}}`: `step.input("checkpoints")` returns that folder and `step.upstream("train").writes` names it |
+| `upstream_writes` | step name to what it wrote, `{"train": {"checkpoints": folder}}`: `step.input("checkpoints")` returns that folder and `step.upstream("train").writes` names it. A write can be a mapping instead of a folder, `{"folder": folder, "type": "dataset", "commit": "..."}`: `type` is `model`, `artifact` (the default) or `dataset` (its repository is then `dataset-<app>-<name>`, otherwise `outputs-<app>`); the commit is computed from the folder unless you give one; a commit alone, with no folder, is enough |
+| `upstream_reads` | step name to what that step read, `{"prepare-data": {"dataset": "dataset-raw@v2"}}`: `step.upstream("prepare-data").reads` names that repository and version, with a commit computed from the two. To choose the commit, write the read as `{"repo": "dataset-raw", "ref": "v2", "commit": "..."}` |
 | `produces` | a list of `("model" or "artifact" or "dataset", name)` |
 | `kind`, `name`, `app`, `experiment` | the step's own fields |
 
