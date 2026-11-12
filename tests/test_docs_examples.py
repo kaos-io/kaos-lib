@@ -106,3 +106,39 @@ def test_should_include_only_files_that_exist():
             if name.startswith("generated/"):  # written by docs_gen.py at build time, not kept in git
                 continue
             assert (DOCS / name).is_file() or (REPO / name).is_file(), f"{page.name} includes {target}"
+
+
+def test_should_compare_two_versions_of_a_dataset_read_by_one_step(tmp_path):
+    result = ex.flow_two_inputs(tmp_path)
+    assert [r["name"] for r in result["reads"]] == ["before", "after"]  # in the order of inputs=
+
+
+def test_should_let_the_step_after_a_skipped_step_run_with_and_without_its_result(tmp_path):
+    assert ex.flow_skip(tmp_path)["values"] == {"extra_ran": True}
+
+
+def test_should_run_the_tests_of_the_step_that_copes_with_a_skipped_step(tmp_path):
+    app = ex.flow_app("skip", tmp_path)
+    run = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "step_tests"], cwd=app,
+                         capture_output=True, text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    assert run.returncode == 0 and "2 passed" in run.stdout, run.stdout + run.stderr
+
+
+def test_should_keep_the_model_of_the_better_of_two_steps_a_step_needs(tmp_path):
+    assert ex.flow_fan_in(tmp_path)["values"]["winner"] == "large"
+
+
+def test_should_name_a_setting_of_the_run_form_in_the_condition_of_a_skipped_step():
+    text = (ex.FLOWS / "skip" / "pipeline.py").read_text()
+    field = re.search(r"workflow\.parameters\.([a-z-]+)\}\}", text).group(1)
+    config = yaml.safe_load((ex.FLOWS / "skip" / "config" / "extra.yaml").read_text())
+    assert field == "-".join(["extra", *config["extra"]])  # config path with dashes: extra.mode is extra-mode
+
+
+def test_should_show_the_result_a_step_hands_on_with_what_it_read_and_wrote(tmp_path):
+    import json
+    shown = json.loads((ex.EXAMPLES / "ledger" / "hello-world-result.json").read_text())
+    assert ex.ledger_example(tmp_path) == shown
+    assert [r["name"] for r in shown["reads"]] == ["reference", "clean"]  # the inputs first, then what else it opened
+    assert [(w["name"], w["type"]) for w in shown["writes"]] == [("report", "artifact")]
+    assert all(len(x["commit"]) == 64 for x in shown["reads"] + shown["writes"])

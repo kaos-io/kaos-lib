@@ -41,7 +41,8 @@ config holds the request, with the name from `produces=`:
 
 A run without it still seals its version, and `latest` stays where it is. An experiment does not change what other
 pipelines read. When two runs ask at once, the second one writes its version again on top of the first and then moves
-`latest`: `latest` is always one run's complete version.
+`latest`, up to three times: `latest` is always one run's complete version, and a run that cannot get its turn
+fails. [Datasets, versions and hashes](datasets-versions-hashes.md#when-two-runs-write-at-once) has the details.
 
 A step that produces a dataset runs on the platform's own machines for now. Its neighbours may run on HPC
 ([page 9](hpc.md)).

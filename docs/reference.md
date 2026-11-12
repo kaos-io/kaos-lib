@@ -1,4 +1,4 @@
-# 12. Reference
+# Reference
 
 Terse and complete. The generated pages: [Commands](generated/cli.md), [Python API](api.md), [Lint checks](lint.md).
 
@@ -50,7 +50,7 @@ every output: `name`, `type`, `repo`, `commit`.
 
 | keyword | meaning | the platform refuses |
 |---|---|---|
-| `name` | lowercase letters, digits, hyphens | more than 40 characters; `main`, `hpc-follower`; a name ending in `-hpc` or starting with `kaos-`; a repeated name |
+| `name` | lowercase letters, digits, hyphens | more than 40 characters; `main`, `hpc-follower`, and the other names the refusal lists; a name ending in `-hpc` or starting with `kaos-`; a repeated name |
 | `kind=` | `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`. Required | a missing or unknown kind |
 | `reads=` | sections of `config/` the step gets in `params` | a section that is not in `config/` |
 | `inputs=` | top-level `config/` values (text) that hold a dataset reference | a name that is not in `config/` or not text; a name that starts with `kaos-`; `control` steps |
@@ -72,31 +72,15 @@ is created again from the template.
 
 | form | meaning |
 |---|---|
-| `dataset-<name>` | the newest version |
+| `dataset-<name>` | `latest`: what the dataset holds now |
 | `dataset-<name>@v1` | a named version |
-| `dataset-<name>@latest` | the newest version, spelled out |
+| `dataset-<name>@latest` | what the dataset holds now. It can be newer than the newest `vN` ([Datasets, versions and hashes](datasets-versions-hashes.md#what-a-version-is)) |
 | `dataset-<name>@<commit>` | a commit |
 | `dataset-<app>-<name>` | a dataset the app `<app>` produces with `dataset("<name>")` |
 | `<owner>/dataset-<name>@<version>` | a dataset another project shares with yours (read-only) |
 
-`kaosctl dataset pull` also takes `<repository>@<branch or tag>`. The newest version of a produced dataset moves
+`kaosctl dataset pull` also takes `<repository>@<branch or tag>`. `latest` of a produced dataset moves
 only when the run asks: `plan: {promote: {<name>: true}}` in the run's advanced config.
-
-## Limits
-
-| what | limit |
-|---|---|
-| a step, input or output name | 40 characters of `a-z`, `0-9`, `-`; no `kaos-` at the start |
-| an app name | 55 characters |
-| a dataset repository | `dataset-` and 3 to 48 characters of `a-z0-9-` |
-| steps in `needs=` | 10 |
-| datasets one step reads | 16 (its inputs and what its needed steps produce) |
-| the result of a step | 8 KiB |
-| what a step receives (settings and results of needed steps) | 96 KiB |
-| the advanced config of a run | 16 KiB |
-| a dataset version in a reference | 255 characters |
-| continuations of a resumable step on Slurm | 5 |
-| the longest Slurm run | set by the site (the linter assumes 2 days when it has no project facts) |
 
 ## Run tools
 
@@ -145,20 +129,6 @@ kaosctl dataset create birds --layout sounds --classes robin,wren
 `publish` opens a pull request that adds the layout to your project's layouts; once it is merged, everyone in the project can
 use the name `sounds`.
 
-## Messages you can meet
-
-| you see | do |
-|---|---|
-| `cannot determine the lakeFS URL ...` | run inside your app folder, or pass `--url` |
-| `not signed in. Run kaosctl login ...` | `kaosctl login`, inside your app folder |
-| `your kaosctl login session has expired: run kaosctl login again.` (a 401 from MLflow too) | `kaosctl login` again, inside your app folder |
-| `<repo> has no version v3. Available: v1, v2.` | `kaosctl dataset versions <repo>`; release a version after the pull request is merged |
-| `nothing new to release: the head of <repo> main is already v2.` | merge a pull request first |
-| `'x' is not a dataset reference: write <repository>@<ref>` | write `dataset-name@v1` |
-| `dataset failed validation (N problem(s))` (exit code 2) | fix the files the lines above name, and run `kaosctl dataset validate <dir>` |
-| `unknown layout 'x'. Known: raw, yolo.` | `kaosctl layout list` |
-| `kaos_lib.mlflow needs the mlflow extra` | install `kaos-lib[mlflow]` |
-
 ## Commands
 
 Every option is on the [generated commands page](generated/cli.md).
@@ -180,7 +150,7 @@ Every option is on the [generated commands page](generated/cli.md).
 | `kaosctl run --lock <mlflow run> -- <command>` | runs a command on the data a past run read |
 | `kaosctl upgrade [--dry-run]`, `kaosctl vscode install`, `kaosctl --version` | version and editor tools |
 
-Exit codes: `0` ok, `1` a mistake of yours (one `ERROR:` line), `2` an invalid dataset or a lint error.
+Exit codes and error messages: [When something goes wrong](when-something-goes-wrong.md#datasets-and-commands).
 
 ## Versions and upgrades
 

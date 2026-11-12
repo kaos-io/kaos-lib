@@ -17,8 +17,8 @@ You have one input. `prepare` reads a dataset, and `pipeline.py` and `config/dat
 `step.input("dataset")` returns a folder that holds the files of the dataset.
 
 - `inputs=["dataset"]` names a top-level value of `config/` that holds a dataset reference.
-- A reference is `dataset-<name>` or `dataset-<name>@<version>`. The version is `v1`, `v2`, ..., `latest` (the newest
-  version) or a commit.
+- A reference is `dataset-<name>` or `dataset-<name>@<version>`. The version is `v1`, `v2`, ..., `latest` (what the
+  dataset holds now, see [Datasets, versions and hashes](datasets-versions-hashes.md#what-a-version-is)) or a commit.
 - `step.input("dataset")` takes the name and nothing else. There is no version in code, so there is no way to read a
   different version from the one the run chose.
 
