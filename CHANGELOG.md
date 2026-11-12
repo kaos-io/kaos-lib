@@ -48,7 +48,10 @@ template.** Nothing in kaos-lib converts an old app.
 - A step that makes a dataset uploads only the files that differ from `latest` and from the newest version an earlier run
   sealed in it: a file with the same path, size and content is copied inside the data store, and a file that cannot be
   copied is uploaded. Every run still makes its own version and tag. The log line says how many were reused. Models and
-  artifacts are unchanged.
+  artifacts are unchanged. An output of less than 1 MiB to upload does not look for a version to copy from.
+- The tag that keeps a sealed dataset version is now `k-<time>-<run>-<step>-<12 characters of the commit>`, the time being
+  when the step sealed it (`20261112T093015Z`), so the newest version is found by name in a few calls. Tags of the
+  old form `k-<run>-<step>-<commit>` are never used as a source of copies.
 - A step that fails for a reason kaos-lib explains (an input that holds no files, an output that was not written, a
   refused write) prints one line, `ERROR: <what happened and what to do>`, and the line of the step's code it came
   from, with no traceback. A failure of the step's own code keeps its traceback.

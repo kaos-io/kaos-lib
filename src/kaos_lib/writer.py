@@ -25,6 +25,7 @@ step publishes no result. A retry of the step replaces that folder with exactly 
 from __future__ import annotations
 
 import concurrent.futures as cf
+import datetime as dt
 import pathlib
 import re
 from dataclasses import dataclass, field
@@ -39,7 +40,10 @@ from .transfer import apply_plan, local_manifest, plan_mirror, upload
 MAIN = "main"
 PROMOTE_ATTEMPTS = 3
 KEPT = "k-"               # every dataset version a run sealed is tagged with this start
-KEPT_LOOKUPS = 300        # at most this many kept versions are looked at to find the newest
+KEPT_TIMED = "k-2"        # ... followed by the UTC time it was sealed (years 2000-2999), so the newest is the last name
+KEPT_NAME = re.compile(r"k-(\d{8}T\d{6}Z)-.+-([0-9a-f]{12})")
+LOOK_BACK_DAYS = (1, 7, 35, 365)   # how far back, in turn, the newest kept version is looked for
+MIN_REUSE_BYTES = 1 << 20          # below this many bytes to upload, looking for a version to copy from costs more
 HEAD_MOVED = 412          # kaos-lake: the merge's expected head is not the branch's head any more
 
 
@@ -53,8 +57,17 @@ def run_branch(run: str, step: str, name: str) -> str:
 
 
 def keep_prefix(run: str, step: str) -> str:
-    """What the tags that keep a step's sealed versions start with: ``k-<run>-<step>``."""
+    """The part of a kept version's tag that names the run and the step: ``k-<run>-<step>``. The tag is
+    ``k-<time>-<run>-<step>-<12 characters of the commit>`` (see ``_keep``)."""
     return _name(f"k-{run}-{step}")
+
+
+def _now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def _stamp(when: dt.datetime) -> str:
+    return when.strftime("%Y%m%dT%H%M%SZ")
 
 
 @dataclass
@@ -129,10 +142,10 @@ def _earlier(s: Sealed) -> Optional[dict]:
     the head ``main`` has now (so promoting it cannot mix in what another run changed), or None.
 
     Run and step names have hyphens, so a tag name alone does not say whose it is. A tag is a candidate only when it
-    is exactly ``<prefix>-<12 hex>``, those 12 characters start the commit it points at, and that commit's metadata
-    names this very run and step."""
-    own = re.compile(re.escape(s.tag_prefix) + "-([0-9a-f]{12})")
-    for tag in s.client.tags(s.repo):
+    is exactly ``k-<time>-<run>-<step>-<12 hex>``, those 12 characters start the commit it points at, and that
+    commit's metadata names this very run and step."""
+    own = re.compile(r"k-\d{8}T\d{6}Z-" + re.escape(s.tag_prefix[len(KEPT):]) + "-([0-9a-f]{12})")
+    for tag in s.client.tags(s.repo, KEPT_TIMED):
         found = own.fullmatch(tag["id"])
         commit = tag["commit_id"]
         if found and commit.startswith(found.group(1)):
@@ -146,8 +159,9 @@ def _earlier(s: Sealed) -> Optional[dict]:
 
 
 def _keep(s: Sealed) -> None:
-    """Tag the sealed commit ``k-<run>-<step>-<its first 12 characters>``: unique, so a retry never collides."""
-    tag = f"{s.tag_prefix}-{s.commit[:12]}"
+    """Tag the sealed commit ``k-<UTC time>-<run>-<step>-<its first 12 characters>`` (time as ``20261112T093015Z``):
+    unique, so a retry never collides, and the names sort by the time the versions were sealed."""
+    tag = f"k-{_stamp(_now())}-{s.tag_prefix[len(KEPT):]}-{s.commit[:12]}"
     try:
         s.client.create_tag(s.repo, tag, s.commit)
     except LakeFSError as exc:
@@ -157,15 +171,17 @@ def _keep(s: Sealed) -> None:
 
 
 def _previous_sealed(s: Sealed) -> Optional[str]:
-    """The commit of the newest version a run sealed in this dataset (the newest ``k-*`` tag by its commit's creation
-    time; the tag name breaks a tie), or None. One call per 1000 kept versions to list them and one more for each
-    of them, at most ``KEPT_LOOKUPS``, to read its time."""
-    kept = s.client.tags(s.repo, KEPT)[:KEPT_LOOKUPS]
-    if not kept:
-        return None
-    with cf.ThreadPoolExecutor(max_workers=min(s.client.concurrency, len(kept))) as ex:
-        made = list(ex.map(lambda t: s.client.commit_info(s.repo, t["commit_id"]).get("creation_date", 0), kept))
-    return max(zip(made, (t["id"] for t in kept), (t["commit_id"] for t in kept)))[2]
+    """The commit of the newest version a run sealed in this dataset, or None: the last tag by name, because the
+    names start with the time. The tags are listed from one day back, then seven, 35 and 365 days (``after`` names
+    where the listing starts), so a dataset sealed lately costs one call and the worst case is four calls plus
+    one more per 1000 tags in the window that found one. No version is read."""
+    now = _now()
+    for days in LOOK_BACK_DAYS:
+        found = [t for t in s.client.tags(s.repo, KEPT_TIMED, after=KEPT + _stamp(now - dt.timedelta(days=days)))
+                 if (m := KEPT_NAME.fullmatch(t["id"])) and t["commit_id"].startswith(m.group(2))]
+        if found:
+            return max(found, key=lambda t: t["id"])["commit_id"]
+    return None
 
 
 def _reuse(s: Sealed, plan, previous: str) -> list:
@@ -173,8 +189,10 @@ def _reuse(s: Sealed, plan, previous: str) -> list:
     this returns; the plan keeps the rest. They are copied, not uploaded."""
     held = {o["path"]: (o.get("size_bytes"), o.get("checksum", ""))
             for o in s.client.list_objects(s.repo, previous, s.prefix)}
-    same = [(p, path) for p, path in plan.add if held.get(path) == s.files[path]]
-    plan.add = [a for a in plan.add if a not in same]
+    same, rest = [], []
+    for item in plan.add:
+        (same if held.get(item[1]) == s.files[item[1]] else rest).append(item)
+    plan.add = rest
     return same
 
 
@@ -218,7 +236,7 @@ def seal(client: LakeFS, repo: str, folder: pathlib.Path, *, name: str, prefix: 
         s.open = True
         plan = plan_mirror(client, repo, branch, s.folder, prefix, local)
         previous, same = None, []
-        if tag_prefix and plan.add:
+        if tag_prefix and sum(s.files[path][0] for _, path in plan.add) >= MIN_REUSE_BYTES:
             try:                  # only a saving: not finding an earlier version is the same as there being none
                 if previous := _previous_sealed(s):
                     same = _reuse(s, plan, previous)

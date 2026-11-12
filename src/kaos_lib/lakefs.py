@@ -115,8 +115,7 @@ class LakeFS:
             return NotFoundError(f"not found ({what}): {detail}", status)
         return LakeFSError(f"{what} failed: HTTP {status} {detail}", status)
 
-    def _pages(self, path: str, params: Optional[dict] = None) -> Iterator[dict]:
-        after = ""
+    def _pages(self, path: str, params: Optional[dict] = None, after: str = "") -> Iterator[dict]:
         while True:
             body = self._call("GET", path, params={**(params or {}), "after": after, "amount": 1000}).json()
             yield from body.get("results", [])
@@ -208,9 +207,10 @@ class LakeFS:
         """Where kaos-lake wants new repositories (``GET /kaos/v1/dataset-templates``), or None if it does not say."""
         return (self.dataset_templates() or {}).get("storage_namespace_prefix") or None
 
-    def tags(self, repo: str, prefix: str = "") -> list:
-        """Every tag (those whose name starts with ``prefix``): dicts with ``id`` (name) and ``commit_id``."""
-        return list(self._pages(f"/repositories/{_q(repo)}/tags", {"prefix": prefix} if prefix else None))
+    def tags(self, repo: str, prefix: str = "", after: str = "") -> list:
+        """The tags in name order (those whose name starts with ``prefix`` and sorts after ``after``): dicts with
+        ``id`` (name) and ``commit_id``."""
+        return list(self._pages(f"/repositories/{_q(repo)}/tags", {"prefix": prefix} if prefix else None, after))
 
     def tag_commit(self, repo: str, tag: str) -> str:
         return self._call("GET", f"/repositories/{_q(repo)}/tags/{_q(tag)}",

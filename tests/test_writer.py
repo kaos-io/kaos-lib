@@ -1,5 +1,6 @@
 """The writer: seal an output on a run branch, promote it onto main on an expected head, and what a failing,
 retried or overlapping step leaves behind."""
+import datetime as dt
 import json
 import pathlib
 import time
@@ -12,6 +13,37 @@ from kaos_lib.errors import AuthError, LakeFSError, StepError
 REPO = "dataset-clean"
 FIXTURES = pathlib.Path(__file__).with_name("contract_fixtures")
 ONE = {"a/1.bin": b"one", "a/2.bin": b"two", "b/3.bin": b"three"}
+START = dt.datetime(2026, 11, 12, 10, 0, 0, tzinfo=dt.timezone.utc)
+
+
+class Clock:
+    """The time a run seals at: the names of the kept versions carry it. Moves only when a test says so."""
+    def __init__(self):
+        self.now = START
+
+    def __call__(self):
+        return self.now
+
+    def stamp(self, when=None):
+        return writer._stamp(when or self.now)
+
+
+def kept(run, commit, step="prepare", stamp=writer._stamp(START)):
+    """The tag a sealed version is kept under."""
+    return f"k-{stamp}-{run}-{step}-{commit[:12]}"
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch):
+    c = Clock()
+    monkeypatch.setattr(writer, "_now", c)
+    return c
+
+
+@pytest.fixture
+def small_files_count(monkeypatch):
+    """The tests use files of a few bytes: look for a version to copy from whatever the size."""
+    monkeypatch.setattr(writer, "MIN_REUSE_BYTES", 0)
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +95,7 @@ def test_a_promoted_run_makes_main_hold_exactly_the_folder_and_keeps_the_sealed_
     assert set(lake.repos[REPO]["branches"]) == {"main"}                           # the run branch is gone
     assert all(branch == "run-run-1-prepare-clean" for _, _, branch, _ in lake.writes)   # nothing written to main
     (tag, commit), = tags(lake).items()
-    assert tag == f"k-run-1-prepare-{commit[:12]}" and lake.tree(REPO, commit) == ONE and commit != version
+    assert tag == kept("run-1", commit) and lake.tree(REPO, commit) == ONE and commit != version
 
 
 def test_a_run_that_does_not_promote_seals_a_version_and_leaves_latest_alone(lake, client, tmp_path):
@@ -113,7 +145,7 @@ def test_a_retry_with_the_same_content_reuses_the_sealed_commit_and_its_tag(lake
 def test_a_retry_with_other_content_seals_another_commit_with_its_own_tag(lake, client, tmp_path):
     one = save(client, folder(tmp_path, ONE))
     two = save(client, folder(tmp_path, {"other.bin": b"o"}, "second"))
-    assert one != two and tags(lake) == {f"k-run-1-prepare-{one[:12]}": one, f"k-run-1-prepare-{two[:12]}": two}
+    assert one != two and tags(lake) == {kept("run-1", one): one, kept("run-1", two): two}
     assert save(client, folder(tmp_path, ONE, "third")) == one                     # an earlier attempt's: reused
 
 
@@ -450,7 +482,7 @@ def copies(fake):
     return sorted(path for method, path in fake.calls if method == "POST" and path.endswith("/objects/copy"))
 
 
-def test_a_second_unpromoted_run_with_the_same_files_copies_them_and_has_its_own_commit_and_tag(lake, client, tmp_path, capsys):
+def test_a_second_unpromoted_run_with_the_same_files_copies_them_and_has_its_own_commit_and_tag(small_files_count, lake, client, tmp_path, capsys):
     a = save(client, folder(tmp_path, ONE), run="run-a")
     lake.writes.clear()
     lake.calls.clear()
@@ -458,13 +490,13 @@ def test_a_second_unpromoted_run_with_the_same_files_copies_them_and_has_its_own
     b = save(client, folder(tmp_path, ONE, "second"), run="run-b")
     assert uploads(lake) == [] and len(copies(lake)) == 3
     assert b != a and lake.tree(REPO, b) == lake.tree(REPO, a) == ONE and lake.tree(REPO, "main") == {}
-    assert sorted(tags(lake)) == sorted([f"k-run-a-prepare-{a[:12]}", f"k-run-b-prepare-{b[:12]}"])
+    assert sorted(tags(lake)) == sorted([kept("run-a", a), kept("run-b", b)])
     assert lake.commit_meta(REPO, b)[1]["kaos.run"] == "run-b"
     assert (f"output 'clean': 0 file(s) to upload, 0 to delete, 0 unchanged since the last version of {REPO}, "
             "3 reused from an earlier run (copied, not uploaded).") in capsys.readouterr().out
 
 
-def test_a_third_run_that_changes_one_file_uploads_one_and_copies_the_rest(lake, client, tmp_path):
+def test_a_third_run_that_changes_one_file_uploads_one_and_copies_the_rest(small_files_count, lake, client, tmp_path):
     save(client, folder(tmp_path, ONE), run="run-a")
     save(client, folder(tmp_path, ONE, "second"), run="run-b")
     lake.writes.clear()
@@ -474,7 +506,7 @@ def test_a_third_run_that_changes_one_file_uploads_one_and_copies_the_rest(lake,
     assert uploads(lake) == ["a/2.bin"] and len(copies(lake)) == 2 and lake.tree(REPO, c) == changed
 
 
-def test_a_file_with_the_same_path_and_other_content_in_the_last_sealed_version_is_uploaded(lake, client, tmp_path):
+def test_a_file_with_the_same_path_and_other_content_in_the_last_sealed_version_is_uploaded(small_files_count, lake, client, tmp_path):
     save(client, folder(tmp_path, {**ONE, "a/2.bin": b"other"}), run="run-a")
     lake.writes.clear()
     lake.calls.clear()
@@ -482,16 +514,16 @@ def test_a_file_with_the_same_path_and_other_content_in_the_last_sealed_version_
     assert uploads(lake) == ["a/2.bin"] and len(copies(lake)) == 2 and lake.tree(REPO, b) == ONE
 
 
-def test_the_newest_sealed_version_is_the_one_copied_from(lake, client, tmp_path):
+def test_the_newest_sealed_version_is_the_one_copied_from(small_files_count, lake, client, tmp_path, clock):
     save(client, folder(tmp_path, {"x": b"old"}), run="run-z")      # newest by time, not by the tag's name
-    time.sleep(1.1)          # a real server dates a commit to the second
+    clock.now += dt.timedelta(minutes=5)
     newest = save(client, folder(tmp_path, {"x": b"new"}, "n"), run="run-a")
     lake.writes.clear()
     save(client, folder(tmp_path, {"x": b"new"}, "again"), run="run-b")
     assert uploads(lake) == [] and len(copies(lake)) == 1 and lake.tree(REPO, newest) == {"x": b"new"}
 
 
-def test_a_copy_that_fails_uploads_the_file_and_the_step_succeeds(lake, client, tmp_path, monkeypatch, capsys):
+def test_a_copy_that_fails_uploads_the_file_and_the_step_succeeds(small_files_count, lake, client, tmp_path, monkeypatch, capsys):
     save(client, folder(tmp_path, ONE), run="run-a")
     lake.writes.clear()
 
@@ -505,7 +537,7 @@ def test_a_copy_that_fails_uploads_the_file_and_the_step_succeeds(lake, client, 
     assert "3 of the 3 file(s) could not be copied and were uploaded." in capsys.readouterr().out
 
 
-def test_a_copied_file_that_is_not_what_the_step_wrote_is_not_sealed(lake, client, tmp_path, monkeypatch):
+def test_a_copied_file_that_is_not_what_the_step_wrote_is_not_sealed(small_files_count, lake, client, tmp_path, monkeypatch):
     save(client, folder(tmp_path, ONE), run="run-a")
     monkeypatch.setattr(client, "copy_object", lambda repo, branch, path, src, ref: client.upload_object(
         repo, branch, path, folder(tmp_path, {"wrong": b"not it"}, "w") / "wrong"))
@@ -514,7 +546,7 @@ def test_a_copied_file_that_is_not_what_the_step_wrote_is_not_sealed(lake, clien
     assert set(lake.repos[REPO]["branches"]) == {"main"}
 
 
-def test_without_a_kept_version_the_run_uploads_everything_as_before(lake, client, tmp_path, capsys):
+def test_without_a_kept_version_the_run_uploads_everything_as_before(small_files_count, lake, client, tmp_path, capsys):
     save(client, folder(tmp_path, ONE), run="run-a", dataset=False)      # sealed without a tag: nothing kept
     lake.calls.clear()
     capsys.readouterr()
@@ -524,14 +556,14 @@ def test_without_a_kept_version_the_run_uploads_everything_as_before(lake, clien
         in capsys.readouterr().out
 
 
-def test_promoting_a_run_that_copied_every_file_moves_latest_to_a_tree_that_holds_them_all(lake, client, tmp_path):
+def test_promoting_a_run_that_copied_every_file_moves_latest_to_a_tree_that_holds_them_all(small_files_count, lake, client, tmp_path):
     save(client, folder(tmp_path, ONE), run="run-a")
     lake.calls.clear()
     version = save(client, folder(tmp_path, ONE, "second"), run="run-b", promote=True)
     assert len(copies(lake)) == 3 and version == lake.head(REPO) and lake.tree(REPO, version) == ONE
 
 
-def test_a_dataset_that_main_already_holds_needs_no_copy(lake, client, tmp_path, capsys):
+def test_a_dataset_that_main_already_holds_needs_no_copy(small_files_count, lake, client, tmp_path, capsys):
     save(client, folder(tmp_path, ONE), run="run-a", promote=True)
     lake.calls.clear()
     capsys.readouterr()
@@ -541,13 +573,204 @@ def test_a_dataset_that_main_already_holds_needs_no_copy(lake, client, tmp_path,
         in capsys.readouterr().out
 
 
-def test_a_file_that_main_holds_and_the_last_sealed_version_changed_is_copied_over_main_s(lake, client, tmp_path):
+def test_a_file_that_main_holds_and_the_last_sealed_version_changed_is_copied_over_main_s(small_files_count, lake, client, tmp_path):
     save(client, folder(tmp_path, {"x": b"v1", "y": b"y"}), run="run-a", promote=True)
     save(client, folder(tmp_path, {"x": b"v2", "y": b"y"}, "s"), run="run-b")        # sealed, not promoted
     lake.writes.clear()
     lake.calls.clear()
     c = save(client, folder(tmp_path, {"x": b"v2", "y": b"y"}, "t"), run="run-c")
     assert uploads(lake) == [] and len(copies(lake)) == 1 and lake.tree(REPO, c) == {"x": b"v2", "y": b"y"}
+
+
+def calls_of(fake, kind):
+    return [p for m, p in fake.calls if m == "GET" and p.endswith(kind)]
+
+
+def test_looking_for_the_previous_version_never_reads_a_version(small_files_count, lake, client, tmp_path):
+    save(client, folder(tmp_path, ONE), run="run-a")
+    lake.calls.clear()
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert not [p for m, p in lake.calls if m == "GET" and "/commits/" in p]
+    assert len(calls_of(lake, "/tags")) == 2          # one for an earlier attempt of this step, one for the newest version
+
+
+def test_more_than_300_kept_versions_the_newest_is_still_found_with_a_bounded_number_of_calls(
+        small_files_count, lake, client, tmp_path, clock):
+    clock.now = START - dt.timedelta(hours=3)
+    old = save(client, folder(tmp_path, {"x": b"old"}), run="run-z")
+    clock.now = START - dt.timedelta(hours=1)
+    newest = save(client, folder(tmp_path, {"x": b"new"}, "n"), run="run-a")
+    for i in range(350):                                  # kept versions of other content, all older than the newest
+        lake.tag(REPO, kept("run-f", old, stamp=writer._stamp(START - dt.timedelta(hours=2, seconds=i))), old)
+    clock.now = START
+    lake.writes.clear()
+    lake.calls.clear()
+    b = save(client, folder(tmp_path, {"x": b"new"}, "again"), run="run-b")
+    assert uploads(lake) == [] and len(copies(lake)) == 1 and lake.tree(REPO, b) == lake.tree(REPO, newest)
+    assert len(calls_of(lake, "/tags")) <= 3
+    assert not [p for m, p in lake.calls if m == "GET" and "/commits/" in p]
+
+
+@pytest.mark.parametrize("days_back, listings", [(3, 2), (20, 3), (200, 4)])
+def test_a_version_sealed_long_ago_is_found_in_a_few_calls(small_files_count, lake, client, tmp_path, clock,
+                                                             days_back, listings):
+    clock.now = START - dt.timedelta(days=days_back)
+    save(client, folder(tmp_path, ONE), run="run-a")
+    clock.now = START
+    lake.writes.clear()
+    lake.calls.clear()
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert uploads(lake) == [] and len(copies(lake)) == 3
+    assert len(calls_of(lake, "/tags")) == 1 + listings        # an earlier attempt, then the windows
+
+
+def test_a_version_sealed_over_a_year_ago_is_not_looked_for(small_files_count, lake, client, tmp_path, clock):
+    clock.now = START - dt.timedelta(days=400)
+    save(client, folder(tmp_path, ONE), run="run-a")
+    clock.now = START
+    lake.writes.clear()
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert uploads(lake) == sorted(ONE)
+
+
+def test_a_tag_of_another_form_is_never_a_source(small_files_count, lake, client, tmp_path):
+    a = save(client, folder(tmp_path, ONE), run="run-a")
+    lake.repos[REPO]["tags"].pop(kept("run-a", a))
+    lake.repos[REPO]["tags"][f"k-run-a-prepare-{a[:12]}"] = a                  # the old form
+    lake.writes.clear()
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert uploads(lake) == sorted(ONE)
+
+
+@pytest.mark.parametrize("broken", ["tags", "listing"])
+def test_a_lookup_that_fails_uploads_everything_and_the_step_succeeds(small_files_count, lake, client, tmp_path,
+                                                                       monkeypatch, broken):
+    a = save(client, folder(tmp_path, ONE), run="run-a")
+
+    def refuse(*args, **kw):
+        raise LakeFSError("refused", 401)
+
+    if broken == "tags":
+        real = client.tags
+        monkeypatch.setattr(client, "tags", lambda repo, prefix="", after="": refuse() if after else real(repo, prefix))
+    else:
+        real = client.list_objects
+        monkeypatch.setattr(client, "list_objects", lambda repo, ref, prefix="": refuse() if ref == a else real(repo, ref, prefix))
+    lake.writes.clear()
+    b = save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert uploads(lake) == sorted(ONE) and lake.tree(REPO, b) == ONE
+
+
+def test_the_upload_after_a_failed_copy_is_tried_again_like_any_upload(small_files_count, lake, client, tmp_path,
+                                                                        monkeypatch):
+    save(client, folder(tmp_path, {"x": b"x"}), run="run-a")
+
+    def refused(*a, **k):
+        raise LakeFSError("copy failed", 404)
+
+    monkeypatch.setattr(client, "copy_object", refused)
+    lake.upload_answers.extend([503])                     # the first upload is answered "try again"
+    b = save(client, folder(tmp_path, {"x": b"x"}, "second"), run="run-b")
+    assert lake.tree(REPO, b) == {"x": b"x"} and lake.upload_answers == []
+
+
+def test_a_promotion_refused_on_a_moved_head_seals_again_and_copies_from_the_last_version(
+        small_files_count, lake, client, tmp_path, clock):
+    if hasattr(lake, "server") and not lake.server.is_kaos_lake:
+        pytest.skip("needs kaos-lake: upstream lakeFS ignores expected_head")
+    save(client, folder(tmp_path, ONE), run="run-a")
+    real, seen = client.merge, []
+
+    def merge(*args, **kw):
+        if not seen:                                  # run-b is about to merge: run-c gets in first
+            seen.append("c")
+            clock.now = START - dt.timedelta(hours=1)          # sealed earlier than run-b's version: the newest is run-b's
+            save(lake.client(), folder(tmp_path, {"other": b"o"}, "c"), promote=True, run="run-c")
+            clock.now = START
+            lake.calls.clear()
+            lake.writes.clear()
+        return real(*args, **kw)
+
+    client.merge = merge
+    b = save(client, folder(tmp_path, ONE, "second"), run="run-b", promote=True)
+    assert uploads(lake) == [] and len(copies(lake)) == 3          # the second seal copied them again
+    assert lake.tree(REPO, b) == {**ONE}
+    assert lake.head(REPO) == b
+
+
+def test_a_dataset_sealed_below_a_prefix_copies_the_files_below_it(small_files_count, lake, client, tmp_path):
+    save(client, folder(tmp_path, {"p/other.bin": b"o"}, "zero"), run="run-0", promote=True)       # not below q/
+    files = {"q/a.bin": b"a", "q/d/b.bin": b"b"}
+    first = save(client, folder(tmp_path, {"a.bin": b"a", "d/b.bin": b"b"}), run="run-a", prefix="q/")
+    lake.writes.clear()
+    lake.calls.clear()
+    second = save(client, folder(tmp_path, {"a.bin": b"a", "d/b.bin": b"b"}, "second"), run="run-b", prefix="q/")
+    assert uploads(lake) == [] and len(copies(lake)) == 2
+    assert {p: c for p, c in lake.tree(REPO, second).items() if p.startswith("q/")} == files == \
+        {p: c for p, c in lake.tree(REPO, first).items() if p.startswith("q/")}
+    assert lake.tree(REPO, second)["p/other.bin"] == b"o"
+
+
+def test_paths_with_spaces_and_unicode_go_through_a_copy(small_files_count, lake, client, tmp_path):
+    files = {"dir é/ファイル 1.bin": b"one", "a b/c#d?e&f.bin": b"two", "plain.bin": b"three"}
+    save(client, folder(tmp_path, files), run="run-a")
+    lake.writes.clear()
+    lake.calls.clear()
+    b = save(client, folder(tmp_path, files, "second"), run="run-b")
+    assert uploads(lake) == [] and len(copies(lake)) == 3 and lake.tree(REPO, b) == files
+
+
+def test_two_runs_sealing_at_once_each_get_their_own_version_and_copy_everything(small_files_count, lake, client, tmp_path):
+    import concurrent.futures as cf
+    a = save(client, folder(tmp_path, ONE), run="run-a")
+    lake.writes.clear()
+    lake.calls.clear()
+    roots = {run: folder(tmp_path, ONE, run) for run in ("run-b", "run-c")}
+    with cf.ThreadPoolExecutor(2) as ex:
+        done = dict(zip(roots, ex.map(lambda r: save(lake.client(), roots[r], run=r), roots)))
+    assert uploads(lake) == [] and len(copies(lake)) == 6
+    assert len({a, *done.values()}) == 3 and all(lake.tree(REPO, c) == ONE for c in done.values())
+    assert sorted(tags(lake)) == sorted([kept("run-a", a), kept("run-b", done["run-b"]), kept("run-c", done["run-c"])])
+
+
+class CountingClient:
+    """What a plan needs of a client: the objects of a version. Counts the calls."""
+    def __init__(self, held):
+        self.held, self.listed = held, 0
+
+    def list_objects(self, repo, ref, prefix=""):
+        self.listed += 1
+        return self.held
+
+
+def test_twenty_thousand_reusable_files_are_planned_in_one_pass(tmp_path):
+    from kaos_lib.transfer import MirrorPlan
+    n = 20_000
+    files = {f"d/{i:05d}.bin": (4, f"{i:032x}") for i in range(n)}
+    held = [{"path": p, "size_bytes": size, "checksum": md5} for p, (size, md5) in files.items()]
+    s = writer.Sealed(CountingClient(held), REPO, "clean", tmp_path, "", "b", "k-r-s", "m", {}, files=files)
+    plan = MirrorPlan(add=[(tmp_path / p, p) for p in files] + [(tmp_path / "new", "new")])
+    s.files["new"] = (1, "0" * 32)
+    started = time.monotonic()
+    same = writer._reuse(s, plan, "previous")
+    assert len(same) == n and [p for _, p in plan.add] == ["new"] and s.client.listed == 1
+    assert time.monotonic() - started < 3        # the quadratic filter took minutes
+
+
+def test_a_small_output_looks_for_no_earlier_version(lake, client, tmp_path):
+    save(client, folder(tmp_path, ONE), run="run-a")
+    lake.calls.clear()
+    lake.writes.clear()
+    save(client, folder(tmp_path, ONE, "second"), run="run-b")
+    assert copies(lake) == [] and len(calls_of(lake, "/tags")) == 1 and uploads(lake) == sorted(ONE)       # the retry lookup only
+
+
+def test_an_output_of_a_megabyte_or_more_looks_for_one(lake, client, tmp_path):
+    big = {"big.bin": b"x" * (1 << 20)}
+    save(client, folder(tmp_path, big), run="run-a")
+    lake.writes.clear()
+    save(client, folder(tmp_path, big, "second"), run="run-b")
+    assert uploads(lake) == [] and len(copies(lake)) == 1
 
 
 # ---------------------------------------------------------------------- an earlier attempt is this run's and this step's
@@ -578,7 +801,7 @@ def test_a_tag_of_this_run_and_step_is_reused_only_when_it_is_exact_and_names_th
     prefix = writer.keep_prefix("r1", "p")
     # a tag with another suffix than the commit's own first 12 characters is not a candidate
     lake.repos[REPO]["tags"].pop(a.tag)
-    lake.repos[REPO]["tags"][f"{prefix}-{'0' * 12}"] = a.commit
+    lake.repos[REPO]["tags"][f"k-{writer._stamp(START)}-{prefix[2:]}-{'0' * 12}"] = a.commit
     assert _seal_as(client, folder(tmp_path, {"f": b"1"}, "o3"), "r1", "p").commit != a.commit
 
 

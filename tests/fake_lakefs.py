@@ -182,7 +182,7 @@ class FakeLakeFS(BaseAdapter):
         if kind == "tags":
             if len(rest) == 1 and m == "GET":
                 return 200, {"results": [{"id": t, "commit_id": c} for t, c in sorted(r["tags"].items())
-                                         if t.startswith(q.get("prefix", ""))],
+                                         if t.startswith(q.get("prefix", "")) and t > q.get("after", "")],
                              "pagination": {"has_more": False}}
             if len(rest) == 1:
                 if body["id"] in r["tags"]:                          # lakeFS: a tag is never moved

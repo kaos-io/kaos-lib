@@ -104,7 +104,7 @@ an earlier run that did not move `latest`, `output 'clean': 0 file(s) to upload,
 version of dataset-myapp-clean, 201 reused from an earlier run (copied, not uploaded).` If a file cannot be copied, the
 step uploads it and says so: `output 'clean': 1 of the 201 file(s) could not be copied and were uploaded.`
 
-Keep each file at the same path from run to run, so that it counts as unchanged. A run that writes exactly the files of
+Keep each file at the same path from run to run, so that it counts as unchanged. An output of less than 1 MiB to upload is simply uploaded. A run that writes exactly the files of
 the last version makes no new version.
 
 ## When a step is run again
@@ -115,7 +115,7 @@ retry does with what it writes:
 
 | output | what the retry does |
 |---|---|
-| a dataset | seals its version again. If the files are exactly the ones an earlier attempt of this step already sealed, that version is used: no second version. The version is kept under the name `k-<run>-<step>-<12 characters of the id>`, which the log shows as `kept as ...` |
+| a dataset | seals its version again. If the files are exactly the ones an earlier attempt of this step already sealed, that version is used: no second version. The version is kept under the name `k-<time>-<run>-<step>-<12 characters of the id>`, where the time is when the step sealed it, such as `20261112T093015Z`, which the log shows as `kept as ...` |
 | a model or an artifact | replaces the folder `<name>/<experiment>/<run>/` with exactly what the retry wrote; a file of the earlier attempt that the retry did not write is gone |
 
 So a retry writes each output once. If `latest` moved while the step was away (another run asked to move it), the retry
