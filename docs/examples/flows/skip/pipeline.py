@@ -6,7 +6,7 @@ from kubecore.authoring import artifact, pipeline, step  # provided by the platf
 with pipeline("ml-pipeline") as p:
     base = step("base", kind="transform", produces=[artifact("summary")])
     # The condition names a field of the run form: the setting extra.mode is the field extra-mode.
-    extra = step("extra", kind="evaluate", needs=[base], when="{{workflow.parameters.extra-mode}} != off",
+    extra = step("extra", kind="evaluate", needs=[base], when="extra-mode != off",
                  produces=[artifact("extra-report")])
     final = step("final", kind="publish", needs=[base, extra], produces=[artifact("final-report")])
 

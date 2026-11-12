@@ -34,8 +34,8 @@ specific to it: the dataset layout, every form field and the Slurm notes.
 
 ## A step that runs only sometimes
 
-`qat-finetune` and `model-quantization` have a `when=`. Its condition holds the value of a run-form field, written
-`{{workflow.parameters.quantization-mode}}` ([page 5](pass-things-on.md#a-step-that-runs-only-sometimes)); the field name
+`qat-finetune` and `model-quantization` have a `when=`. Its condition is the name of a run-form field compared with a value, written
+`when="quantization-mode != none"` ([page 5](pass-things-on.md#a-step-that-runs-only-sometimes)); the field name
 is the setting's path with dashes ([page 3](settings.md)). With the default `quantization-mode` of `none`, both steps are
 skipped.
 

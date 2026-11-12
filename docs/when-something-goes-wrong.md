@@ -45,6 +45,8 @@ a page: [Lint checks](lint.md).
 | `L-E06 ... step() no longer takes 'outputs'. This app was made before the current pipelines. Create it again from the template.` | `outputs=` is gone | declare the things a step makes in `produces=`, and hand values on with `step.result(...)` |
 | `step() no longer takes 'hpc_time_limit'` | `hpc_time_limit=` is gone | write `walltime="12h"` |
 | `step() no longer takes 'disk'` | a step is not told its disk | pick a bigger class on the run form |
+| `L-E06 ... when=... is not a run-form field compared with a value`, or `... names 'x', which is not a field of the run form` | `when=` is not written as a field name, `==` or `!=`, and a value, or the field is not on the run form | write `when="mode != off"` with the name of a setting as the run form shows it |
+| `L-E06 ... when= is written with the name of a run-form field` | `when=` still has the `{{workflow.parameters.<field>}}` form | write the field's name instead |
 | `L-E07 ... Step 'x' has no kind=, which every step declares: one of ingest, transform, train, evaluate, publish, control.` | a step has no `kind=` | add the kind that says what the step does. The sentence "This app was made before the current pipelines" follows only when no step has a kind |
 | `L-E05 ... needs 'x', which is defined after it` | a step is defined below the step that needs it | move the line of `x` above |
 | `L-E05 ... reads the config section 'x', which does not exist in config/` | `reads=` names a section that is not there | fix the name, or add the section to `config/` |

@@ -91,7 +91,7 @@ def test_should_report_each_argument_step_refuses(tmp_path, body, expect):
 
 def test_should_accept_the_arguments_step_accepts(tmp_path):
     body = ('    a = step("a", kind="train", gpu=True, walltime="12h", resumable="20m", checkpoint_every="1h", '
-            'idle_timeout=0, when="x")\n    b = step("b", kind="train", resumable=False, checkpoint_every=False)\n')
+            'idle_timeout=0, when="experiment-name != x")\n    b = step("b", kind="train", resumable=False, checkpoint_every=False)\n')
     assert not messages(tmp_path, body, rule="L-E06")
 
 

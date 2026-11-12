@@ -57,7 +57,7 @@ every output: `name`, `type`, `repo`, `commit`.
 | `needs=` | earlier steps (the variables) | more steps than the limit; a step defined below; an input and a needed output of one name; two needed steps producing one name; more readable datasets than the limit |
 | `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; `control` steps |
 | `gpu=True` | one GPU | |
-| `when="..."` | a condition on the value of a run-form field `<field>`, written `"{{workflow.parameters.<field>}} == value"` or with `!=` | |
+| `when="..."` | the name of a run-form field `<field>` compared with a value, written `"<field> == value"` or with `!=`; join comparisons with `and` / `or` (`and` first, no parentheses); a value with spaces is quoted | a `when=` that is not written that way; a field the run form does not have |
 | `walltime=` | the run limit on a Slurm class: `"90m"`, `"12h"`, `"720"` (minutes); without it the default of [the limits](must-and-can.md#the-limits) | a wrong form; `ingest`, `publish`, `control` steps |
 | `resumable=` | `True` (stop signal 10 minutes before the limit), a lead time `"20m"`, or `False` | a wrong form |
 | `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes | a wrong form |

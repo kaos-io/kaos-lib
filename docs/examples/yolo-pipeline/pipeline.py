@@ -34,11 +34,11 @@ with pipeline("ml-pipeline") as p:
                  produces=[model("checkpoints")])
     qat = step("qat-finetune", kind="train", gpu=True, needs=[prepare, train],
                reads=["train", "quantization"],
-               when="{{workflow.parameters.quantization-mode}} == qat",
+               when="quantization-mode == qat",
                produces=[model("qat")])
     quant = step("model-quantization", kind="transform", needs=[prepare, train, qat],
                  reads=["quantization"],
-                 when="{{workflow.parameters.quantization-mode}} != none",
+                 when="quantization-mode != none",
                  produces=[model("quantization")])
     register = step("model-registration", kind="publish", needs=[prepare, train, quant],
                     reads=["data", "registration"])

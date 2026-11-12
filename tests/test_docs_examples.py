@@ -137,7 +137,7 @@ def test_should_keep_the_model_of_the_better_of_two_steps_a_step_needs(tmp_path)
 
 def test_should_name_a_setting_of_the_run_form_in_the_condition_of_a_skipped_step():
     text = (ex.FLOWS / "skip" / "pipeline.py").read_text()
-    field = re.search(r"workflow\.parameters\.([a-z-]+)\}\}", text).group(1)
+    field = re.search(r"when=\"([a-z-]+) [!=]=", text).group(1)
     config = yaml.safe_load((ex.FLOWS / "skip" / "config" / "extra.yaml").read_text())
     assert field == "-".join(["extra", *config["extra"]])  # config path with dashes: extra.mode is extra-mode
 

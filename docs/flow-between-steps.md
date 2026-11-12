@@ -49,8 +49,9 @@ Declare an artifact in `produces=`, write into its folder, and read the folder b
 
 **You want** a step to run only when the run form asks for it, and the steps after it to work either way.
 
-`when=` holds a condition on the value of a run-form field, written `{{workflow.parameters.<field>}}`. The field is named
-as in [Settings](settings.md): `extra.mode` is the field `extra-mode`. A step that is skipped leaves no result and no
+`when=` holds the name of a run-form field, compared with a value: `when="extra-mode != off"`. The field is named
+as in [Settings](settings.md): `extra.mode` is the field `extra-mode`. Join comparisons with `and` or `or` (`and` is
+taken first; no parentheses), and put a value with spaces in quotes. A step that is skipped leaves no result and no
 files. The step after it asks for them with `optional=True` and gets `None` when they are not there. Without
 `optional=True` it fails with `step 'x' did not run, so it left no result`.
 
