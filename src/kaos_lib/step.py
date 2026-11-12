@@ -178,6 +178,8 @@ class _Running:
     def __init__(self, step: Step):
         self.step = step
         self.outputs: dict = {}      # produce name -> local folder
+        self.scratch = None          # the folder step.workdir() gave
+        self.copies: dict = {}       # input name -> its writable copy
         self.checks: dict = {}       # produce name -> (layout, min_files)
         self.done = False
         self.pid = os.getpid()
@@ -276,13 +278,27 @@ def _upstream_write(step: Step, name: str):
     return None
 
 
-def input(name: str, optional: bool = False) -> Optional[pathlib.Path]:  # noqa: A001 - the contract's name
+def input(name: str, optional: bool = False, writable: bool = False) -> Optional[pathlib.Path]:  # noqa: A001
     """The folder holding the input ``name``: a dataset the run pinned (``inputs=``), or a dataset, model or
-    artifact a step in ``needs=`` wrote. Downloaded once, or the copy staged beside an HPC (Slurm) job.
+    artifact a step in ``needs=`` wrote. Downloaded once, or the copy staged beside an HPC (Slurm) job. Read-only.
+
+    ``writable=True`` returns a private full copy of it that the step may write into (tools that write beside
+    their inputs); the copy costs the input's size in disk and time, and is emptied and made again at each attempt.
 
     When the name is not there because a needed step did not run, this raises, naming the name and the steps;
     with ``optional=True`` it returns None instead.
     """
+    found = _find(name, optional)
+    if found is None or not writable:
+        return found
+    run = _need()
+    if name not in run.copies:      # a real copy: a tool may rewrite a file, so no link may reach the staged one
+        run.copies[name] = _fresh(_work(WORK) / "kaos" / "inputs" / name, f"input '{name}'")
+        shutil.copytree(found, run.copies[name], symlinks=True, dirs_exist_ok=True)
+    return run.copies[name]
+
+
+def _find(name: str, optional: bool) -> Optional[pathlib.Path]:
     from . import datasets
     run = _need()
     step = run.step
@@ -374,14 +390,26 @@ def output(name: str) -> pathlib.Path:
     run = _need()
     _produce(run, name)
     if name not in run.outputs:
-        folder = _work(WORK) / "kaos" / "outputs" / name
-        if folder.is_symlink():
-            _fail(f"output '{name}': {folder} is a link, and the folder of an output must be a real folder. "
-                  "Nothing was changed.")
-        shutil.rmtree(folder, ignore_errors=True)       # an earlier attempt's files are never part of this one
-        folder.mkdir(parents=True)
-        run.outputs[name] = folder
+        run.outputs[name] = _fresh(_work(WORK) / "kaos" / "outputs" / name, f"output '{name}'")
     return run.outputs[name]
+
+
+def _fresh(folder: pathlib.Path, what: str) -> pathlib.Path:
+    """``folder``, made empty: an earlier attempt's files are never part of this one."""
+    if folder.is_symlink():
+        _fail(f"{what}: {folder} is a link, and the folder must be a real folder. Nothing was changed.")
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True)
+    return folder
+
+
+def workdir() -> pathlib.Path:
+    """A scratch folder for files that are neither an input nor an output (run folders, caches of ML tools).
+    Empty at each attempt, never uploaded."""
+    run = _need()
+    if run.scratch is None:
+        run.scratch = _fresh(_work(WORK) / "kaos" / "scratch", "the work folder")
+    return run.scratch
 
 
 def check(name: str, layout: Optional[str] = None, min_files: int = 1) -> None:

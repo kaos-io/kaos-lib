@@ -81,20 +81,25 @@ class Run:
 @contextlib.contextmanager
 def running(tmp_path, *, kind: str = "train", name: str = "step", app: str = "app", experiment: str = "test",
             params: Optional[dict] = None, inputs: Optional[dict] = None, upstream: Optional[dict] = None,
-            produces=()):
+            upstream_writes: Optional[dict] = None, produces=()):
     """Prepare a step's world in ``tmp_path`` for the length of the block.
 
     ``params`` is what ``step.start().params`` holds; ``inputs`` maps an input's name to a folder of files;
     ``upstream`` maps a step's name to the values it handed on, or to None for a step that did not run;
+    ``upstream_writes`` maps a step's name to what it wrote, ``{"train": {"checkpoints": <folder>}}``: the step
+    then reads ``step.input("checkpoints")`` from that folder and ``step.upstream("train").writes`` names it;
     ``produces`` is a list of ``("model" | "artifact" | "dataset", name)``.
     """
     tmp_path = pathlib.Path(tmp_path)
     work, staged = tmp_path / "work", tmp_path / "staged"
     staged.mkdir(parents=True, exist_ok=True)
     reads = [stage_input(staged, input_name, folder) for input_name, folder in (inputs or {}).items()]
+    written = {up: [{"name": n, "type": "artifact", "repo": f"outputs-{app}",
+                     "commit": stage_input(staged, n, f, repo=f"outputs-{app}")["commit"]} for n, f in files.items()]
+               for up, files in (upstream_writes or {}).items()}
     results = {up: ABSENT if values is None else
-               {"version": 1, "status": "ok", "values": values, "reads": [], "writes": []}
-               for up, values in (upstream or {}).items()}
+               {"version": 1, "status": "ok", "values": values, "reads": [], "writes": written.get(up, [])}
+               for up, values in {**{u: {} for u in written}, **(upstream or {})}.items()}
     context = local_context(run="test-run", app=app, step_name=name, kind=kind, experiment=experiment,
                             params=params or {}, reads=reads, produces=list(produces), upstream=results)
     env = {step.ENV: lock.wire(context), step.LOCAL_WORK_ENV: str(work), local.STAGED_ENV: str(staged)}

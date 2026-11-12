@@ -1,6 +1,6 @@
 # The step API (`kaos_lib.step`)
 
-Six calls are everything a step needs from the platform.
+Seven calls are everything a step needs from the platform.
 
 ```python
 from kaos_lib import step
@@ -9,6 +9,7 @@ ctx = step.start()                 # first: the run, the app, the step and the c
 data = step.input("raw")           # a folder: what the run pinned for the input "raw"
 prev = step.upstream("prepare")    # an earlier step's result: prev.values
 out = step.output("report")        # a folder to write into
+scratch = step.workdir()           # a folder for tool caches and run folders: not an input, never saved
 step.check("report", min_files=1)  # a condition the output must meet before it is saved
 step.result(rows=1200)             # last: save the outputs, hand the result on
 ```
@@ -74,7 +75,9 @@ Returns a folder (`pathlib.Path`). `name` is one of two things, and nothing else
   that copy.
 - For a dataset with the `yolo` layout the folder holds a `data.yaml` whose `path:` points at the files; use
   `step.input("dataset") / "data.yaml"`.
-- Never write into the folder. Copy what you change into an output.
+- Never write into the folder. Copy what you change into an output. A tool that writes beside its input (label
+  caches, an export next to the weights) gets `step.input("name", writable=True)`: a private full copy that you may
+  write into. It costs the input's size in disk and time; it never changes the input and is never saved.
 - When the name is missing because a step in `needs=` did not run (its `when=` was false), `input()` raises and
   names the input and the step. A step that can work without it asks with `step.input("name", optional=True)`
   and gets `None`.
@@ -113,6 +116,11 @@ Names in `produces=` use lowercase letters, digits and hyphens, at most 40 chara
 file in a folder called `.kaos/`: the platform keeps it for itself.
 
 [Results](results.md) says where each ends up and how a later step or run reads it.
+
+## `step.workdir()`
+
+Returns a scratch folder for files that are neither an input nor an output, such as the run folders and caches of ML
+tools. It is empty at each attempt and is never saved.
 
 ## `step.check(name, layout=None, min_files=1)`
 
@@ -175,6 +183,7 @@ def test_count_files(tmp_path):
 | `params` | what `step.start().params` holds |
 | `inputs` | input name to a folder of files |
 | `upstream` | step name to the values it handed on, or to `None` for a step that did not run |
+| `upstream_writes` | step name to what it wrote, `{"train": {"checkpoints": folder}}`: `step.input("checkpoints")` returns that folder and `step.upstream("train").writes` names it |
 | `produces` | a list of `("model" or "artifact" or "dataset", name)` |
 | `kind`, `name`, `app`, `experiment` | the step's own fields |
 
