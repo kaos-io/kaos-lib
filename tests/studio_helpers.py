@@ -35,7 +35,7 @@ from kaos_lib import step
 def main():
     ctx = step.start()
     cfg = ctx.params
-    load = step.upstream("dataset-loading", required=False)
+    load = step.upstream("dataset-loading", optional=True)
     print(f"{cfg['summary']['label']}: seed={cfg['data']['seed']} info={load.values if load else None}")
     (step.output("summary") / "summary.json").write_text(json.dumps({"seed": cfg["data"]["seed"]}))
     step.result(seed=cfg["data"]["seed"])

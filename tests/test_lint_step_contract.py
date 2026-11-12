@@ -4,7 +4,7 @@ import pytest
 from kaos_lib.lint import lint_project
 from kaos_lib.lint.cli import main as kaosctl_lint
 from kaos_lib.lint.constants import KIND_PLACEHOLDER, STEP_KINDS
-from kaos_lib.lint.fix import fix_pipeline
+from kaos_lib.lint.fix import fix_config, fix_pipeline
 from lint_corpus import HEADER, OLD_STEP, PLAIN_STEP, repo, write_repo
 
 
@@ -30,6 +30,11 @@ def messages(tmp_path, body, steps=None, rule="L-E07"):
     ('    a = step("a", kind="train", produces=[model("m"), artifact("m")])\n', "produces 'm' twice"),
     ('    a = step("a", kind="train", produces=[model("kaos-model")])\n', "names starting with 'kaos-'"),
     ('    a = step("a", kind="train", produces=[dataset("Clean Data")])\n', "is not a name for what a step produces"),
+    ('    a = step("a", kind="train", produces=[model("%s")])\n' % ("m" * 41), "at most 40 characters"),
+    ('    a = step("a", kind="train", inputs=["Data_Set"])\n', "'Data_Set' is not a name for an input"),
+    ('    a = step("a", kind="train", inputs=["kaos-data"])\n', "names starting with 'kaos-' are the platform's"),
+    ('    a = step("kaos-train", kind="train")\n', "The step name 'kaos-train' cannot be used"),
+    ('    a = step("%s", kind="train")\n' % ("s" * 41), "at most 40 characters"),
     ('    a = step("a", kind="transform", produces=[dataset("clean", of="raw")])\n', "of=...) is reserved"),
     ('    a = step("a", kind="transform", produces=[dataset("clean")])\n'
      '    b = step("b", kind="train", needs=[a], inputs=["clean"])\n',
@@ -38,6 +43,9 @@ def messages(tmp_path, body, steps=None, rule="L-E07"):
      '    b = step("b", kind="train", produces=[model("model")])\n'
      '    c = step("c", kind="evaluate", needs=[a, b])\n',
      "Step 'c' needs 'a' and 'b', which both produce 'model'"),
+    ("".join(f'    s{i} = step("s{i}", kind="train")\n' for i in range(11))
+     + '    z = step("z", kind="evaluate", needs=[' + ", ".join(f"s{i}" for i in range(11)) + '])\n',
+     "Step 'z' needs 11 steps; a step can need at most 10."),
 ])
 def test_should_report_a_step_that_does_not_declare_itself(tmp_path, body, expect):
     assert any(expect in m for m in messages(tmp_path, body)), messages(tmp_path, body)
@@ -154,3 +162,31 @@ def test_fix_refuses_text_from_standard_input(tmp_path, capsys):
     root = write_repo(tmp_path, repo('    a = step("a")\n'))
     assert kaosctl_lint([str(root), "--fix", "--stdin-path", "pipeline.py"]) == 1
     assert "--fix rewrites the pipeline file on disk" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------------------------------------------ L-E09
+CONFIG_BEFORE = "defaults:\n  - _self_\n  - experiment\n  - platform: live # platform-owned group\n  - train\n"
+CONFIG_AFTER = "defaults:\n  - _self_\n  - experiment\n  - train\n"
+
+
+def test_should_report_the_platform_group_in_the_defaults_and_its_folder(tmp_path):
+    files = {**repo('    a = step("a", kind="train")\n'), "config/config.yaml": CONFIG_BEFORE,
+             "config/platform/live.yaml": "platform:\n  x: 1\n"}
+    report = lint_project(str(write_repo(tmp_path, files)))
+    got = sorted((f for f in report.findings if f.rule == "L-E09"), key=lambda f: f.span.line)
+    assert [(f.file, f.span.line) for f in got] == [("config/config.yaml", 1), ("config/config.yaml", 4)]
+    assert "still has the folder config/platform/" in got[0].message and got[0].fix == "Delete the folder config/platform/."
+    assert "still names the `platform` config group" in got[1].message and "kaosctl lint --fix" in got[1].fix
+
+
+def test_fix_removes_the_platform_line_from_the_defaults_and_nothing_else(tmp_path, capsys):
+    assert fix_config(CONFIG_BEFORE) == (CONFIG_AFTER, ["line 4: the `platform` config group removed from the defaults"])
+    assert fix_config(CONFIG_AFTER) == (CONFIG_AFTER, [])
+    root = write_repo(tmp_path, {**repo('    a = step("a", kind="train")\n'), "config/config.yaml": CONFIG_BEFORE})
+    assert kaosctl_lint([str(root), "--fix"]) == 0
+    assert (root / "config/config.yaml").read_text() == CONFIG_AFTER
+    assert "fixed config/config.yaml line 4" in capsys.readouterr().err
+
+
+def test_a_section_called_platform_inside_a_file_is_not_the_group(tmp_path):
+    assert fix_config("defaults:\n  - train\nplatform:\n  note: mine\n")[1] == []

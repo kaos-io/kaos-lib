@@ -25,6 +25,7 @@ kaosctl lint --fix
 | --- | --- | --- |
 | `hpc_time_limit="12h"` | `walltime="12h"` | yes |
 | `outputs=["training-result"]` | removed: the step calls `step.result(...)` | yes |
+| `- platform: live` in the `defaults:` of `config/config.yaml` | removed: the platform no longer has that config group | yes |
 | no `kind=` | `kind="choose one: ingest \| transform \| ..."`, listing the six kinds | a placeholder: you choose |
 
 The placeholder is not a kind, so `kaosctl lint` keeps failing until you replace it. Choose what the step does:
@@ -38,11 +39,14 @@ The placeholder is not a kind, so `kaosctl lint` keeps failing until you replace
 | `publish` | registers or delivers a result |
 | `control` | decides or coordinates, and does no data work itself |
 
+If your app has a folder `config/platform/`, delete it. A step never reads addresses or platform settings from
+the config: they are not in `ctx.params`.
+
 Then add by hand what `--fix` cannot know:
 
 | add | when |
 | --- | --- |
-| `inputs=["dataset"]` | the step reads a dataset. Name the setting that holds the reference (`dataset: my-data@v3` in `config/`). |
+| `inputs=["dataset"]` | the step reads a dataset. Name the setting that holds the reference (`dataset: dataset-my-data@v3` in `config/`). |
 | `produces=[model("model")]` | the step saves a model |
 | `produces=[artifact("report")]` | the step saves other files of the run |
 | `produces=[dataset("clean")]` | the step writes a dataset that later steps or runs read |
@@ -123,14 +127,16 @@ What changes in behaviour:
 - **A step must end with `step.result()`.** A step that ends without it fails.
 - **A step reads only what the run pinned.** `datasets.resolve` or `datasets.materialize` of a dataset that is
   not in the step's `inputs=` is refused inside a step.
+- **A step sees only the config sections it names in `reads=`.** `ctx.params["train"]` needs `reads=["train"]`.
+  A dataset reference is not read from the config at all: name its setting in `inputs=`.
 - **A missing result is never empty.** In 0.4 a step that wrote no result handed `{}` to the next one. Now the
-  next step fails and names it, unless it asks with `step.upstream("x", required=False)`.
+  next step fails and names it, unless it asks with `step.upstream("x", optional=True)`.
 - **A result is small.** At most 8 KiB. Log metrics to MLflow; write anything larger into an artifact.
 
 ## 3. Check and try
 
 ```bash
-kaosctl lint                       # no errors: L-E06, L-E07 and L-E08 are the ones about this change
+kaosctl lint                       # no errors: L-E06 to L-E09 are the ones about this change
 kaosctl step run train --input dataset=./a-few-files
 ```
 
@@ -139,6 +145,7 @@ kaosctl step run train --input dataset=./a-few-files
 | [L-E06](lint/L-E06.md) | `hpc_time_limit=` or `outputs=` still in `pipeline.py` |
 | [L-E07](lint/L-E07.md) | a step without a `kind`, or with a wrong `inputs=` or `produces=` |
 | [L-E08](lint/L-E08.md) | a step whose code still takes `--params` or reads a variable that is no longer set |
+| [L-E09](lint/L-E09.md) | the `platform` group still in `config/config.yaml`, or a `config/platform/` folder |
 
 [Run a step locally](step-run.md) explains `kaosctl step run`.
 

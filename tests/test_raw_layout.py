@@ -102,9 +102,19 @@ def test_raw_skeleton_is_a_readme_validates_nothing_publishes_as_is(fake, client
     junk.mkdir()
     (junk / "anything.bin").write_bytes(b"\x00")
     assert raw.validate(junk).ok
-    result = raw.publish(junk, "my-repo", "first", client=client)
-    assert result.created and fake.repos["my-repo"]["metadata"] == {"kaos.kind": "dataset", "kaos.template": "raw"}
-    assert "anything.bin" in fake.tree("my-repo", result.branch)
+    result = raw.publish(junk, "dataset-junk", "first", client=client)
+    assert result.created and fake.repos["dataset-junk"]["metadata"] == {"kaos.kind": "dataset", "kaos.template": "raw"}
+    assert "anything.bin" in fake.tree("dataset-junk", result.branch)
+
+
+def test_a_first_push_to_a_name_no_dataset_can_have_is_refused_before_anything_is_created(fake, client, tmp_path):
+    junk = tmp_path / "junk"
+    junk.mkdir()
+    (junk / "anything.bin").write_bytes(b"\x00")
+    with pytest.raises(DatasetError, match="my-new-repo does not exist, and it cannot be created as a dataset: a "
+                                           "dataset is called dataset-<name>.* Push to dataset-my-new-repo instead"):
+        layouts.load("raw").publish(junk, "my-new-repo", "first", client=client)
+    assert "my-new-repo" not in fake.repos
 
 
 def test_pulled_copy_pushes_back_without_its_marker(repo, fake, client, tmp_path):

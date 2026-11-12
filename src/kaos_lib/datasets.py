@@ -43,6 +43,11 @@ def is_repo_name(name: str) -> bool:
     return bool(_REPO_RE.match(name or ""))
 
 
+def is_dataset_name(repo: str) -> bool:
+    """Whether ``repo`` is a name a dataset can have: ``dataset-`` and 3 to 48 characters."""
+    return repo.startswith(DATASET_PREFIX) and bool(_NAME_RE.match(repo[len(DATASET_PREFIX):]))
+
+
 def dataset_repo(name: str) -> str:
     """``dataset-<name>`` from ``name`` or ``dataset-<name>``; validates the 3-48 char ``[a-z0-9-]`` rule."""
     short = name[len(DATASET_PREFIX):] if name.startswith(DATASET_PREFIX) else name
@@ -326,6 +331,10 @@ def ensure_repository(c: LakeFS, repo: str, labels: dict) -> bool:
     """
     if c.repository(repo):
         return False
+    if labels.get(LABEL_KIND) == "dataset" and not is_dataset_name(repo):   # kaos-lake refuses the label otherwise
+        raise DatasetError(f"{repo} does not exist, and it cannot be created as a dataset: a dataset is called "
+                           f"{DATASET_PREFIX}<name>, with 3 to 48 characters from a-z, 0-9 and '-'. Push to "
+                           f"{DATASET_PREFIX}{repo} instead, or to a repository that exists.")
     try:
         c.create_repository(repo, _storage_namespace(c, repo), MAIN)
     except LakeFSError as exc:

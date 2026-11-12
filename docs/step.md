@@ -45,17 +45,18 @@ Call it once, before anything else. It returns the step:
 
 | field | what it is |
 | --- | --- |
-| `params` | your composed `config/` for this run, a dictionary |
+| `params` | the sections of your composed `config/` that the step names in `reads=`, a dictionary |
 | `run` | the run's name, the same in every step of the run |
 | `app`, `project` | your app and its project |
 | `step`, `kind` | this step's name and its kind |
 | `experiment` | the experiment the run belongs to |
 | `produces` | what this step declared in `produces=` |
 
-A second call returns the same step. Outside a pipeline run it raises: start the step with
-[`kaosctl step run`](step-run.md) to try it on your machine.
+A second call returns the same step. When the step cannot start (it was not started by the platform, or what
+the platform handed it cannot be read), the process ends with one line that names the cause and exit code 1.
+To try a step on your machine, start it with [`kaosctl step run`](step-run.md).
 
-## `step.input(name)`
+## `step.input(name, optional=False)`
 
 Returns a folder (`pathlib.Path`). `name` is one of two things, and nothing else:
 
@@ -72,9 +73,12 @@ Returns a folder (`pathlib.Path`). `name` is one of two things, and nothing else
 - For a dataset with the `yolo` layout the folder holds a `data.yaml` whose `path:` points at the files; use
   `step.input("dataset") / "data.yaml"`.
 - Never write into the folder. Copy what you change into an output.
+- When the name is missing because a step in `needs=` did not run (its `when=` was false), `input()` raises and
+  names the input and the step. A step that can work without it asks with `step.input("name", optional=True)`
+  and gets `None`.
 - A dataset with no files yet raises `kaos_lib.errors.EmptyDataset`.
 
-## `step.upstream(step_name, required=True)`
+## `step.upstream(step_name, optional=False)`
 
 Returns the result of a step named in `needs=`:
 
@@ -84,11 +88,11 @@ prev.values["accuracy"]        # what that step passed to step.result(...)
 prev.reads, prev.writes        # the dataset versions it read, and what it wrote
 ```
 
-A step that was skipped (its `when=` was false) left no result. Asking for it raises, naming the step, so a
+A step that did not run (its `when=` was false) left no result. Asking for it raises, naming the step, so a
 missing result can never pass as an empty one. A step that can work without it asks so:
 
 ```python
-export = step.upstream("export", required=False)     # None when "export" did not run
+export = step.upstream("export", optional=True)     # None when "export" did not run
 ```
 
 ## `step.output(name)`
@@ -99,7 +103,9 @@ saved until `step.result()`; every declared output must hold at least one file b
 | declared as | saved as |
 | --- | --- |
 | `model("name")`, `artifact("name")` | the files of this run, in your app's outputs repository under `<name>/<experiment>/<run>/` |
-| `dataset("name")` | a new version of the dataset `name` |
+| `dataset("name")` | a new version of the dataset `dataset-<name>`: exactly the files of the folder |
+
+Names in `produces=` use lowercase letters, digits and hyphens, at most 40 characters.
 
 [Results](results.md) says where each ends up and how a later step or run reads it.
 
@@ -123,6 +129,7 @@ The last call of every step. It checks the outputs, saves each one, and hands th
 - A result holds a few kilobytes: its limit is 8 KiB. Log metrics to MLflow, and write anything larger into an
   artifact and hand on its name.
 - Call it exactly once. A step with nothing to hand on calls `step.result()`.
+- Value names that start with `kaos-` are the platform's.
 - A step that ends without it fails, even with exit code 0: otherwise the next step would start with nothing.
 
 ## What goes wrong, and what the message says
@@ -132,13 +139,15 @@ hands nothing on.
 
 | when | message starts with |
 | --- | --- |
-| the step is started outside a pipeline run | `this is not a pipeline step` |
+| the step is started outside a pipeline run (one line, exit code 1) | `ERROR: this is not a pipeline step` |
+| what the platform handed the step cannot be read (one line, exit code 1) | `ERROR: the step context ...` |
 | another call comes before `start()` | `call step.start() first` |
 | `input()` of a name that is neither an input nor produced by a needed step | `'<name>' is not an input of step '<step>'. Its inputs are: ...` |
 | code asks for a dataset the run did not pin | `<dataset> is not an input of step '<step>'` |
 | the pinned version was deleted | `input '<name>': commit ... does not exist any more` |
 | `upstream()` of a step that is not in `needs=` | `step '<x>' is not upstream of '<step>'` |
-| `upstream()` of a step that left no result | `step '<x>' wrote no result` |
+| `upstream()` of a step that did not run | `step '<x>' did not run, so it left no result` |
+| `input()` of something a step that did not run would have produced | `input '<name>' of step '<step>' is not there, and <x> did not run` |
 | `output()` of a name that is not in `produces=` | `'<name>' is not produced by step '<step>'. It produces: ...` |
 | an output is declared and was never written | `output '<name>' was not written`, `output '<name>' is empty` |
 | a `check()` fails | `output '<name>' failed its check:` |

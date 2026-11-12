@@ -77,7 +77,7 @@ same code runs unchanged in a pipeline step, on a laptop (after `kaosctl login`)
 ```python
 from kaos_lib import outputs
 
-with outputs.run("myapp", "exp1", "run-7") as r:   # in a step: app = $CHECKPOINT_BUCKET, run = $KUBECORE_RUN_ID
+with outputs.run("myapp", "exp1", "run-7") as r:   # outside a pipeline; a step uses step.output() instead
     r.save("./ckpt")                               # durable on the run's own branch, reused on a retry
     r.finish({"dataset_ref": "dataset-cats@v1"})   # one merge commit on main of outputs-myapp
 ```

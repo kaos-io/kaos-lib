@@ -4,6 +4,7 @@ it (no arguments, the step context), its inputs are folders on this machine, its
 environment is the Python running the tests."""
 import json
 import os
+import re
 
 import pytest
 
@@ -78,8 +79,10 @@ def test_should_start_the_step_as_the_platform_does_with_no_arguments_and_the_st
     context = json.loads(text)
     assert list(context) == ["version", "run", "app", "project", "step", "kind", "experiment", "params", "ledger",
                              "produces", "upstream"]
-    assert (context["run"], context["app"], context["step"], context["kind"]) == ("local", "app", "data-summary", "evaluate")
-    assert context["params"]["data"] == {"seed": 42}
+    assert (context["app"], context["step"], context["kind"]) == ("app", "data-summary", "evaluate")
+    assert re.fullmatch(r"local-\d{8}t\d{6}z", context["run"])          # every local run has its own name
+    assert context["experiment"] == "app"                                # no experiment.name in the config: the app
+    assert context["params"] == {"data": {"seed": 42}, "summary": {"label": "Data summary"}}   # only what reads= names
     assert context["produces"] == [{"name": "summary", "type": "artifact", "repo": "outputs-app"}]
     assert context["upstream"] == {"dataset-loading": {"version": 1, "status": "absent"}}
 

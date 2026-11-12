@@ -9,12 +9,13 @@ import ast
 import re
 from typing import Iterable
 
-from .constants import (COMPUTE_CLASS_KEYS, DISK_PATTERN, IDENTITY_NAMES, KIND_PLACEHOLDER, MIGRATION_URL,
+from .constants import (COMPUTE_CLASS_KEYS, DISK_PATTERN, IDENTITY_NAMES, KIND_PLACEHOLDER, MAX_NEEDS, MIGRATION_URL, NAME_MAX,
                         OLD_ENTRY_ARGUMENT, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
                         TIME_PATTERN)
 from .model import ERROR
 from .pipeline_reader import UNKNOWN, literal
+from .project_reader import platform_group
 from .registry import (DECLARED, NOT_VERIFIED, OFF, REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, STATIC,
                        VERIFIED, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes,
                        rule, runs_needed)
@@ -283,12 +284,25 @@ def step_declaration(ctx: LintContext) -> Iterable[Hit]:
         for step in block.steps:
             if step.opaque:
                 continue
+            yield from _step_name(ctx, step)
             yield from _kind(ctx, step)
             inputs = yield from _inputs(ctx, step)
             produced = yield from _produces(ctx, step)
             yield from _same_name_twice(ctx, step, inputs, made)
             if step.var:
                 made[step.var] = produced
+
+
+_NAME = re.compile(r"^(?=.{1,%d}$)[a-z0-9]([a-z0-9-]*[a-z0-9])?$" % NAME_MAX)
+_NAMES = (f"Use lowercase letters, digits and hyphens, at most {NAME_MAX} characters; names starting with "
+          f"'{RESERVED_NAME_PREFIX}' are the platform's.")
+
+
+def _step_name(ctx, step) -> Iterable[Hit]:
+    name = step.name
+    if isinstance(name, str) and _STEP_NAME.match(name) and (len(name) > NAME_MAX or name.startswith(RESERVED_NAME_PREFIX)):
+        yield Hit(ctx.file, ctx.span(step.node("name")), f"The step name '{name}' cannot be used. " + _NAMES,
+                  "Rename the step and its steps/<folder>.")
 
 
 def _kind(ctx, step) -> Iterable[Hit]:
@@ -319,6 +333,10 @@ def _inputs(ctx, step):
     for name in sorted({v for v in value if list(value).count(v) > 1}):
         yield Hit(ctx.file, ctx.span(node), f"{_step_label(step)} lists the input '{name}' twice.",
                   "List each input once.")
+    for name in value:
+        if not _NAME.match(name) or name.startswith(RESERVED_NAME_PREFIX):
+            yield Hit(ctx.file, ctx.span(node), f"{_step_label(step)}: {name!r} is not a name for an input. " + _NAMES,
+                      "Rename the config value, and the name in inputs=[...].")
     return list(value)
 
 
@@ -344,10 +362,9 @@ def _produces(ctx, step):
                       f"later release and is refused at render.", "Remove of=.")
         if name is UNKNOWN:
             continue
-        if not isinstance(name, str) or not _STEP_NAME.match(name) or name.startswith(RESERVED_NAME_PREFIX):
+        if not isinstance(name, str) or not _NAME.match(name) or name.startswith(RESERVED_NAME_PREFIX):
             yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: {name!r} is not a name for what a step "
-                      f"produces. Use lowercase letters, digits and hyphens; names starting with "
-                      f"'{RESERVED_NAME_PREFIX}' are the platform's.")
+                      f"produces. " + _NAMES, "Rename it.")
         elif name in seen:
             yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)} produces '{name}' twice.",
                       "Give each thing the step produces its own name.")
@@ -361,6 +378,9 @@ def _same_name_twice(ctx, step, inputs, made) -> Iterable[Hit]:
     """An input and what the needed steps write are all read by name, so one name cannot mean two things."""
     needs = step.node("needs")
     seen = {}
+    if isinstance(needs, (ast.List, ast.Tuple)) and len(needs.elts) > MAX_NEEDS:
+        yield Hit(ctx.file, ctx.span(needs), f"{_step_label(step)} needs {len(needs.elts)} steps; a step can need "
+                  f"at most {MAX_NEEDS}.", "Put a step in between that gathers some of their results.")
     for el in needs.elts if isinstance(needs, (ast.List, ast.Tuple)) else ():
         for name in made.get(getattr(el, "id", None), ()):
             if name in inputs:
@@ -389,3 +409,17 @@ def step_not_moved(ctx: LintContext) -> Iterable[Hit]:
             yield Hit(ctx.file, ctx.span(step.call), f"{_step_label(step)} never calls step.start() "
                       f"(from kaos_lib import step), so it cannot read its config or its inputs and hands "
                       f"nothing on.")
+
+
+@rule("L-E09", "PlatformConfigGroup", ERROR,
+      "Remove the `- platform: ...` line from the defaults of config/config.yaml (`kaosctl lint --fix` does it) and "
+      "delete the folder config/platform/ if your app has one. Guide: " + MIGRATION_URL)
+def platform_config_group(ctx: LintContext) -> Iterable[Hit]:
+    for file, span, what in platform_group(ctx.root):
+        if what == "line":
+            yield Hit(file, span, "config/config.yaml still names the `platform` config group. The platform no "
+                      "longer has it: a step gets its data access and its tracking sign-in from the platform, never "
+                      "from the config, so the render is refused.")
+        else:
+            yield Hit(file, span, "The app still has the folder config/platform/. The platform no longer reads "
+                      "it, and the render is refused while it is there.", "Delete the folder config/platform/.")

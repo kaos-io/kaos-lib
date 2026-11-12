@@ -170,15 +170,19 @@ class LakeFS:
                    what=f"delete branch {name}")
 
     def merge(self, repo: str, source: str, destination: str, message: str, metadata: Optional[dict] = None,
-              tolerate_empty: bool = False) -> str:
+              tolerate_empty: bool = False, expected_head: Optional[str] = None) -> str:
         """Merge ``source`` into ``destination`` (mergeIntoBranch); returns the merge commit id.
 
         With ``tolerate_empty`` a merge with nothing to merge is a success returning the destination head.
+        With ``expected_head`` (a full commit id) the merge happens only while ``destination`` is still at that
+        commit; when it moved, kaos-lake answers 412 and this raises ``LakeFSError`` with ``status == 412``.
         """
+        body = {"message": message, "metadata": _strs(metadata)}
+        if expected_head:
+            body["expected_head"] = expected_head
         try:
             resp = self._call("POST", f"/repositories/{_q(repo)}/refs/{_q(source)}/merge/{_q(destination)}",
-                              json={"message": message, "metadata": _strs(metadata)},
-                              what=f"merge {source} into {destination}")
+                              json=body, what=f"merge {source} into {destination}")
         except LakeFSError as exc:
             if tolerate_empty and _is_no_changes(exc):
                 return self.branch_commit(repo, destination)

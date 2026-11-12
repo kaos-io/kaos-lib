@@ -35,11 +35,14 @@ REMOVED_STEP_PARAMS = {
 STEP_KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 PRODUCE_TYPES = ("model", "artifact", "dataset")
 RESERVED_NAME_PREFIX = "kaos-"
+NAME_MAX = 40                        # characters of a step name, an input name and a produces name
+MAX_NEEDS = 10                       # steps in one step's needs=: each may hand on a result of up to 8 KiB
 # What `kaosctl lint --fix` writes for a missing kind: it is not a kind, so the check keeps failing until one is chosen.
 KIND_PLACEHOLDER = "choose one: " + " | ".join(STEP_KINDS)
 # What step code used before the step contract: finding one means the step was not moved to kaos_lib.step.
 OLD_ENTRY_ARGUMENT = "--params"
-OLD_ENTRY_VARIABLES = ("KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME", "CHECKPOINT_BUCKET", "OUTPUTS_REPO",
+OLD_ENTRY_VARIABLES = ("KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME", "CHECKPOINT_BUCKET", "CHECKPOINT_PREFIX",
+                       "OUTPUTS_REPO",
                        "KUBECORE_DATASET_REF", "KUBECORE_DATASET_COMMIT", "DATASET_REPO", "DATASET_REF",
                        "DATASET_COMMIT", "KUBECORE_STAGED_DIR", "KAOS_LIB_LOCK")
 MIGRATION_URL = DOC_BASE[: -len("lint/")] + "migrate-to-0.5.html"

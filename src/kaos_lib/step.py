@@ -24,6 +24,7 @@ import atexit
 import json
 import os
 import pathlib
+import re
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
@@ -39,6 +40,8 @@ KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 WORK = "/work"                      # the step's working folder
 RESULT_FILE = "/work/output/kaos-result.json"
 RESERVED_PREFIX = "kaos-"
+NAME_MAX = 40
+NAME = re.compile(r"^(?=.{1,%d}$)[a-z0-9]([a-z0-9-]*[a-z0-9])?$" % NAME_MAX)   # step, input and produces names
 LOCAL_OUTPUTS_ENV = "KAOS_LOCAL_OUTPUTS"    # set by `kaosctl step run`: outputs stay on this machine, in this folder
 LOCAL_WORK_ENV = "KAOS_LOCAL_WORK"          # set by `kaosctl step run`: the folder that stands for /work there
 
@@ -120,8 +123,10 @@ def _produces(entries) -> tuple:
             _fail(f"{where} needs a name, a type and a repo ({_found(entry)}).")
         if entry["type"] not in lock.WRITE_TYPES:
             _fail(f"{where} has type {entry['type']!r}; it is one of {', '.join(lock.WRITE_TYPES)}.")
-        if entry["name"].startswith(RESERVED_PREFIX) or entry["name"] in [p.name for p in out]:
-            _fail(f"{where}: the name {entry['name']!r} is reserved or used twice.")
+        if entry["name"].startswith(RESERVED_PREFIX) or entry["name"] in [p.name for p in out] \
+                or not NAME.match(entry["name"]):
+            _fail(f"{where}: the name {entry['name']!r} is reserved, used twice or not a name (lowercase "
+                  f"letters, digits and hyphens, at most {NAME_MAX} characters).")
         out.append(Produce(entry["name"], entry["type"], entry["repo"], entry.get("promote") is True))
     return tuple(out)
 
@@ -205,16 +210,26 @@ def _pinned(step: Step) -> lock.DataLock:
 
 
 def start(environ=None) -> Step:
-    """Read and check the step context; call it once, first. A second call returns the same step."""
+    """Read and check the step context; call it once, first. A second call returns the same step.
+
+    A context that is missing or cannot be read ends the process: one line on stderr that names the cause, exit
+    code 1.
+    """
     global _running
     if _running is not None:
         return _running.step
     text = (os.environ if environ is None else environ).get(ENV)
-    if not text:
-        _fail(f"this is not a pipeline step: {ENV} is not set. Run the step with: kaosctl step run <step>")
-    step = parse(text)
+    try:
+        if not text:
+            _fail(f"this is not a pipeline step: {ENV} is not set. Run the step with: kaosctl step run <step>")
+        step = parse(text)
+    except StepError as exc:        # nothing of the step ran yet: one line that names the cause, no traceback
+        print(f"ERROR: {exc}", file=sys.stderr, flush=True)
+        raise SystemExit(1) from None
     lock.DataLock.replay(_pinned(step))
     lock.strict(step.step)
+    for read in step.ledger.reads:  # every declared input is part of what the step read, opened or not
+        lock.current().record(read.repo, read.ref, read.commit, read.owner, read.name)
     _running = _Running(step)
     _watch_exit(_running)
     return step
@@ -241,17 +256,28 @@ def _upstream_write(step: Step, name: str):
     return None
 
 
-def input(name: str) -> pathlib.Path:  # noqa: A001 - the contract's name
+def input(name: str, optional: bool = False) -> Optional[pathlib.Path]:  # noqa: A001 - the contract's name
     """The folder holding the input ``name``: a dataset the run pinned (``inputs=``), or a dataset, model or
-    artifact a step in ``needs=`` wrote. Downloaded once, or the copy staged beside an HPC (Slurm) job."""
+    artifact a step in ``needs=`` wrote. Downloaded once, or the copy staged beside an HPC (Slurm) job.
+
+    When the name is not there because a needed step did not run, this raises, naming the name and the steps;
+    with ``optional=True`` it returns None instead.
+    """
     from . import datasets
     run = _need()
     step = run.step
     read = _pinned(step).named(name)
     write = None if read else _upstream_write(step, name)
     if read is None and write is None:
+        absent = [s for s, up in step.upstream.items() if up is None]
+        if absent and optional:
+            return None
         known = [r.name for r in _pinned(step).reads] + [w.name for up in step.upstream.values() if up
                                                          for w in up.writes]
+        if absent:
+            _fail(f"input '{name}' of step '{step.step}' is not there, and {_names(absent)} did not run: a step "
+                  f"that did not run produced nothing. Use input('{name}', optional=True) if this step can run "
+                  f"without it. What is there: {_names(known)}.")
         _fail(f"'{name}' is not an input of step '{step.step}'. Its inputs are: {_names(known)}. "
               "Add it to inputs=[...] in pipeline.py.")
     try:
@@ -295,19 +321,19 @@ def _artifact(run: _Running, name: str, write: lock.Write) -> pathlib.Path:
     return target
 
 
-def upstream(step: str, required: bool = True) -> Optional[Upstream]:
+def upstream(step: str, optional: bool = False) -> Optional[Upstream]:
     """The result of the earlier step ``step`` (a step named in ``needs=``).
 
-    A step that was skipped, or that ended without ``step.result()``, left no result: that raises, naming it.
-    With ``required=False`` it returns None instead, for a step that can work without it.
+    A step that did not run (it was skipped) left no result: that raises, naming it. With ``optional=True`` it
+    returns None instead, for a step that can work without it.
     """
     mine = _need().step
     if step not in mine.upstream:
         _fail(f"step '{step}' is not upstream of '{mine.step}'. Add needs=['{step}'] in pipeline.py.")
     found = mine.upstream[step]
-    if found is None and required:
-        _fail(f"step '{step}' wrote no result: it was skipped, or it ended without step.result(). "
-              f"'{mine.step}' needs it. Use upstream('{step}', required=False) if this step can run without it.")
+    if found is None and not optional:
+        _fail(f"step '{step}' did not run, so it left no result, and '{mine.step}' needs it. "
+              f"Use upstream('{step}', optional=True) if this step can run without it.")
     return found
 
 
@@ -370,7 +396,10 @@ def _save(run: _Running, produce: Produce, folder: pathlib.Path) -> str:
     reads = {f"read.{r.name}": r.commit for r in lock.current().reads}
     try:
         if produce.type == "dataset":
-            _fail(f"output '{produce.name}': this kaos-lib does not write datasets yet.")
+            from .dataset_writer import write_version
+            return write_version(run.client, produce.repo, folder, name=produce.name, run=step.run, step=step.step,
+                                 app=step.app, promote=produce.promote,
+                                 metadata={f"kaos.{k}": v for k, v in reads.items()})
         from .outputs import RunWriter
         writer = RunWriter(step.app, step.experiment, step.run, produce.name, run.client)
         writer.repo = produce.repo
@@ -425,6 +454,8 @@ def result(**values) -> None:
     if run.done:
         _fail("step.result() was already called.")
     for key, value in values.items():
+        if key.startswith(RESERVED_PREFIX):
+            _fail(f"result value '{key}': names starting with '{RESERVED_PREFIX}' are the platform's.")
         try:
             lock.wire(value)
         except (TypeError, ValueError):

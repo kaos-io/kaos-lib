@@ -41,7 +41,7 @@ with pipeline("ml-pipeline") as p:
 | `name` | lowercase letters, digits and `-`, no `-` at the start or end. Unique in the pipeline. |
 | `kind=` | **Required.** What the step is: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`. |
 | `reads=[...]` | the top-level sections of `config/` that the step uses. A name that is not in `config/` fails the check. |
-| `inputs=[...]` | the names of the settings that hold a dataset reference, for example `"dataset"` for `dataset: my-data@latest`. The platform pins each to one exact version when the run starts; the step reads it with `step.input("dataset")`. |
+| `inputs=[...]` | the names of the settings that hold a dataset reference, for example `"dataset"` for `dataset: dataset-my-data@latest`. The platform pins each to one exact version when the run starts; the step reads it with `step.input("dataset")`. |
 | `needs=[...]` | steps that must finish first. Define a step above the steps that need it. Their results reach this step with `step.upstream(...)`, and what they produced with `step.input(...)`. |
 | `produces=[...]` | what the step writes: `model("name")`, `artifact("name")` or `dataset("name")`. The step writes each into the folder `step.output("name")` gives it. |
 | `gpu=True` | the step gets one GPU. |
@@ -71,14 +71,14 @@ Everything the step needs comes from `kaos_lib.step`:
 from kaos_lib import step
 
 ctx = step.start()                 # call it first
-cfg = ctx.params                   # your whole config/ for this run, with the values from the run form
+cfg = ctx.params                   # the config sections in reads=, with the values from the run form
 data = step.input("dataset")       # a folder: the dataset version this run pinned for the input "dataset"
 prev = step.upstream("prepare")    # the result of an earlier step: prev.values
 ```
 
 | what | where it shows |
 | --- | --- |
-| the composed config | `ctx.params`, a dictionary |
+| the composed config: the sections the step names in `reads=` | `ctx.params`, a dictionary |
 | the run, the app, the project, the step, its kind, the experiment | `ctx.run`, `ctx.app`, `ctx.project`, `ctx.step`, `ctx.kind`, `ctx.experiment` |
 | a dataset the step declared in `inputs=` | `step.input("<name>")` |
 | a dataset, model or artifact a step in `needs=` produced | `step.input("<name>")` |

@@ -7,11 +7,12 @@ step is started and what it may do: [How a step works](steps.md). Every call: [T
 | # | the job | example step |
 | --- | --- | --- |
 | 1 | [Data consumer](#1-a-data-consumer): read a dataset and compute something small | `data-check` |
-| 2 | [Dataset producer](#2-a-dataset-producer): write a dataset that later steps and runs read | `prepare` |
+| 2 | [Data preparation](#2-data-preparation-a-dataset-producer): write a dataset that later steps and runs read | `prepare` |
 | 3 | [Training](#3-training): GPU, MLflow, progress, a model | `train` |
 | 4 | [Evaluation](#4-evaluation): score the model and write a report | `evaluate` |
 | 5 | [Conditional step](#5-a-conditional-step): run only on a choice from the run form | `export-model` |
 | 6 | [Publish](#6-publish-a-model): register the model in MLflow | `register-model` |
+| 7 | [Model transform](#7-a-model-transform): make another model from a model | `quantize` |
 
 ## The example app
 
@@ -49,7 +50,6 @@ defaults:
   - evaluate
   - export
   - registration
-  - platform: live # platform-owned group; keep this line as it is
 ```
 
 ```yaml
@@ -141,10 +141,11 @@ if __name__ == "__main__":
 Wrong data should end the step with a message, as `raise SystemExit(...)` does. A dataset with no files at all
 raises `kaos_lib.errors.EmptyDataset`, so a step can tell "no data yet" from other failures.
 
-## 2. A dataset producer
+## 2. Data preparation: a dataset producer
 
 **Use it** for preprocessing whose result later steps, and later runs, read: cleaning, filtering, splitting,
-converting.
+converting. The step writes a dataset of its own; every run makes one version of it, and a run that changes
+little stores little.
 
 ```python
 prepare = step("prepare", kind="transform", needs=[check], inputs=["dataset"], produces=[dataset("clean")])
@@ -185,10 +186,12 @@ if __name__ == "__main__":
 | writes | a version of the dataset `clean`: the two files in `step.output("clean")` |
 | hands on | `rows` and `dropped` |
 | the next steps | read it with `step.input("clean")` |
-| a later run | reads it as an input: a setting `clean: clean@latest` named in `inputs=` |
+| a later run | reads it as an input: a setting `clean: dataset-clean@latest` named in `inputs=` |
+| `latest` of `dataset-clean` | moves to this run's version only when the run asks for it on the run form |
 
-Write every file under the same path in every run. Then a run that changes one file stores one file, and the
-difference between two versions is the real change.
+Write every file under the same path in every run. Then a run that changes one file uploads one file, and the
+difference between two versions is the real change. More:
+[A dataset a step produces](steps-and-datasets.md#a-dataset-a-step-produces).
 
 ## 3. Training
 
@@ -319,9 +322,9 @@ What happens when the step is skipped:
 | the step | is shown as skipped. Its code does not run |
 | steps that need it | still run |
 | `step.upstream("export-model")` in such a step | raises, naming the step |
-| `step.upstream("export-model", required=False)` | returns `None` |
+| `step.upstream("export-model", optional=True)` | returns `None` |
 
-So a step that needs a conditional step asks with `required=False`, as the next example does.
+So a step that needs a conditional step asks with `optional=True`, as the next example does.
 
 ## 6. Publish a model
 
@@ -341,7 +344,7 @@ def main() -> None:
     ctx = step.start()
     cfg = ctx.params["registration"]
     evaluation = step.upstream("evaluate").values
-    export = step.upstream("export-model", required=False)        # None when the export was skipped
+    export = step.upstream("export-model", optional=True)        # None when the export was skipped
     if evaluation["verdict"] != "pass":
         step.result(registered=False, reason=f"mse {evaluation['mse']}")
         return
@@ -363,6 +366,42 @@ if __name__ == "__main__":
 | reads | the results of `evaluate` and, when it ran, of `export-model`; the model `train` wrote |
 | writes | nothing in `produces=`: the model goes to the MLflow registry |
 | hands on | whether it registered, and the registered version |
+
+## 7. A model transform
+
+**Use it** to make another model from the run's model: quantize, prune, convert to another format.
+
+```python
+quantize = step("quantize", kind="transform", needs=[train], produces=[model("model-int8")])
+```
+
+```python
+"""quantize: the run's model with its numbers rounded to one decimal."""
+import json
+
+from kaos_lib import step
+
+
+def main() -> None:
+    step.start()
+    source = json.loads((step.input("model") / "model.json").read_text())
+    small = {name: round(value, 1) for name, value in source.items()}
+    (step.output("model-int8") / "model.json").write_text(json.dumps(small))
+    step.result(parameters=len(small))
+
+
+if __name__ == "__main__":
+    main()
+```
+
+| | |
+| --- | --- |
+| reads | the model `train` wrote in this run, by its name |
+| writes | a second model, `model-int8`, under `model-int8/<experiment>/<run>/` |
+| the next steps | read either one: `step.input("model")` or `step.input("model-int8")` |
+
+A transform that only some runs need is the same step with a `when=`: see
+[a conditional step](#5-a-conditional-step).
 
 ## One pipeline
 

@@ -22,8 +22,8 @@ Replay matches a resolve on (owner, repo, ref) first, then on (owner, repo) when
 that repository. A commit pinned by the caller (``ref.commit`` or ``commit=``) is used as given and recorded.
 
 ``wire(value)`` is the form in which a context or a result crosses a process boundary: JSON with no whitespace,
-ASCII only, and ``{`` and ``}`` inside strings written as ``\\u007b`` and ``\\u007d``. ``cost(text)`` is what such a
-text counts against a size cap.
+ASCII only, and ``{``, ``}``, ``&``, ``<`` and ``>`` inside strings written as ``\\uXXXX`` escapes. ``cost(text)`` is
+what such a text counts against a size cap.
 """
 from __future__ import annotations
 
@@ -48,10 +48,18 @@ WRITE_TYPES = ("model", "artifact", "dataset")
 DATASET_PREFIX = "dataset-"
 
 
+# Inside strings: braces (the platform would read "{{...}}" as a template) and the three characters the
+# platform's own JSON writer escapes, so that a text costs the same wherever it is carried.
+_WIRE_ESCAPES = (("{", "\\u007b"), ("}", "\\u007d"), ("&", "\\u0026"), ("<", "\\u003c"), (">", "\\u003e"))
+
+
 def wire(value) -> str:
     """The wire form of a JSON value (see the module text); TypeError for what JSON cannot hold."""
     if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=True).replace("{", "\\u007b").replace("}", "\\u007d")
+        text = json.dumps(value, ensure_ascii=True)
+        for char, escape in _WIRE_ESCAPES:
+            text = text.replace(char, escape)
+        return text
     if value is None or isinstance(value, (bool, int, float)):
         return json.dumps(value, allow_nan=False)
     if isinstance(value, (list, tuple)):

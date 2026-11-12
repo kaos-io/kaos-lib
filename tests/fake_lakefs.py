@@ -16,6 +16,7 @@ from kaos_lib import credentials, lakefs
 from kaos_lib.lakefs import LakeFS
 
 BRANCH_ID = re.compile(r"^\w[-\w]*$")  # lakeFS's branch id rule
+DATASET_ID = re.compile(r"^dataset-[a-z0-9-]{3,48}$")  # kaos-lake: what may carry kaos.kind=dataset
 REPO_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,62}$")  # and its repository id rule
 
 
@@ -34,6 +35,7 @@ class FakeLakeFS(BaseAdapter):
         self.kaos: dict = {}         # "/kaos/v1/..." -> (status, JSON body or raw bytes); others: 404 HTML
         self.deny = None             # an HTTP status every /api/v1 call answers (a token this server refuses)
         self.writes: list = []       # (kind, repo, branch, path) for object uploads/deletes
+        self.upload_answers: list = []   # statuses the next uploads answer instead of storing the object
         self.storage_prefix = "gs://bucket/lakefs"   # None: kaos-lake publishes no prefix
         self.templates: list = []                    # /kaos/v1/dataset-templates entries (layouts kaos-lake serves)
         self._ids = itertools.count(1)
@@ -59,6 +61,10 @@ class FakeLakeFS(BaseAdapter):
 
     def tag(self, repo, name, ref="main"):
         self.repos[repo]["tags"][name] = self._resolve(repo, ref)
+
+    def commit_meta(self, repo, commit):
+        """`(message, metadata)` of a commit."""
+        return next((message, meta) for _, cid, message, meta in self.repos[repo]["commit_log"] if cid == commit)
 
     def head(self, repo, branch="main"):
         return self.repos[repo]["branches"][branch]["commit"]
@@ -159,6 +165,9 @@ class FakeLakeFS(BaseAdapter):
         if kind == "metadata":
             if m == "GET":
                 return 200, dict(r["metadata"])  # lakeFS: a flat object, not {"metadata": ...}
+            if body["metadata"].get("kaos.kind") == "dataset" and not DATASET_ID.match(repo):   # kaos-lake's rule
+                return 400, {"message": "invalid repository label: a dataset's name is dataset- followed by 3-48 "
+                                        f"lowercase letters, digits or hyphens; \"{repo}\" is not"}
             r["metadata"].update(body["metadata"])
             return 204, None
         if kind == "branches":
@@ -170,6 +179,8 @@ class FakeLakeFS(BaseAdapter):
                 return 200, {"results": [{"id": t, "commit_id": c} for t, c in sorted(r["tags"].items())],
                              "pagination": {"has_more": False}}
             if len(rest) == 1:
+                if body["id"] in r["tags"]:                          # lakeFS: a tag is never moved
+                    return 409, {"message": "tag already exists"}
                 r["tags"][body["id"]] = self._resolve(repo, body["ref"])
                 return 201, {"id": body["id"], "commit_id": r["tags"][body["id"]]}
             return 200, {"id": rest[1], "commit_id": r["tags"][rest[1]]}
@@ -198,6 +209,9 @@ class FakeLakeFS(BaseAdapter):
             return 200, {"id": rest[0], "commit_id": b["commit"]}
         if rest[1] == "objects":
             self.writes.append((m, repo, rest[0], q["path"]))
+            if m == "POST" and self.upload_answers:                 # a server that is busy, restarting, refusing
+                self.writes.pop()
+                return self.upload_answers.pop(0), {"message": "try again"}
             if m == "POST":
                 b["staged"][q["path"]] = _multipart_content(req)
                 r.setdefault("mtimes", {})[q["path"]] = next(self._ids)   # write order stands in for mtime
@@ -218,6 +232,9 @@ class FakeLakeFS(BaseAdapter):
     def _merge(self, r, source, dest, body):
         """Three-way merge of a branch into dest: dest's tree plus the branch's changes since its base."""
         src, dst = r["branches"][source], r["branches"][dest]
+        want = body.get("expected_head")                             # kaos-lake: merge only onto this head
+        if want and want != dst["commit"]:
+            return 412, {"message": f"expected head {want} but {dest} is at {dst['commit']}"}
         base, head = r["commits"][src["base"]], r["commits"][src["commit"]]
         tree = dict(r["commits"][dst["commit"]])
         for path in set(base) | set(head):

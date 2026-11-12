@@ -127,9 +127,10 @@ def test_malformed_installed_version_is_unknown():
 def test_packaged_release_json_is_valid_and_matches_this_version():
     meta = support.packaged()
     assert support.validate_release(meta) == []
-    assert meta["version"] == kaos_lib.__version__
-    assert meta["supported"] == ">=0.5" and meta["deprecated"] == [] and meta["breaking"] is True   # the step contract
-    assert meta["migration"].endswith("/migrate-to-0.5.html")
+    # The policy still describes 0.4: it is what the platform serves to running apps. It moves to 0.5 (supported
+    # >=0.5, breaking) in one commit of its own, merged when the platform cuts over (PRD kaos#1911).
+    assert meta["version"] == "0.4.0" and kaos_lib.__version__ == "0.5.0"
+    assert meta["supported"] == ">=0.2" and meta["deprecated"] == [] and meta["breaking"] is False
     assert support.check(kaos_lib.__version__, meta)["verdict"] == "current"
 
 

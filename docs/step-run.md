@@ -27,6 +27,8 @@ Done: prepare exited 0. Next: kaosctl step run <the step that needs prepare>, or
   overrides you give. It is composed here by the same composer the platform uses: the platform's pipeline engine, fetched
   as for [`kaosctl render`](render.md) (pass `--context` or `--engine-wheel`); `--set key=value` adds an override as on
   the submit form, and `--params-file FILE` uses a params file you already have.
+* **The run and the experiment.** `ctx.run` is `local-<date and time>`, new for every local run. `ctx.experiment`
+  is `experiment.name` of your config, or the app's name when there is none.
 * **The checks.** A step that names an input it did not declare, hands on a value that is too large, or ends without
   `step.result()` fails here with the same message.
 * **The results of earlier steps.** `step.upstream("<step>")` gives the result of that step's last local run. Run the

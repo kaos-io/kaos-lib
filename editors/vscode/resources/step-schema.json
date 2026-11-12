@@ -105,7 +105,7 @@
         "default": null,
         "gpu_only": false,
         "pattern": null,
-        "doc": "The names of the config values that hold a dataset reference, for example `\"dataset\"` for `dataset: my-data@latest`. The platform pins each to one exact version when the run starts, and the step reads it with `step.input(\"dataset\")`. Step code never names a version.",
+        "doc": "The names of the config values that hold a dataset reference, for example `\"dataset\"` for `dataset: dataset-my-data@latest`. The platform pins each to one exact version when the run starts, and the step reads it with `step.input(\"dataset\")`. Step code never names a version.",
         "snippet": "[\"${1:dataset}\"]",
         "values": [],
         "links": [
@@ -561,6 +561,13 @@
       "level": "error",
       "fix": "Move the step to kaos_lib.step: step.start() gives the config and the run, step.input() the datasets, step.result() hands values on. Guide: https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E08.html"
+    },
+    {
+      "id": "L-E09",
+      "name": "PlatformConfigGroup",
+      "level": "error",
+      "fix": "Remove the `- platform: ...` line from the defaults of config/config.yaml (`kaosctl lint --fix` does it) and delete the folder config/platform/ if your app has one. Guide: https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E09.html"
     },
     {
       "id": "L-I01",

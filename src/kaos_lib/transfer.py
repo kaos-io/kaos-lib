@@ -7,10 +7,18 @@ from __future__ import annotations
 import concurrent.futures as cf
 import hashlib
 import pathlib
+import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Optional
 
+import requests
+
+from .errors import LakeFSError, NotFoundError
 from .lakefs import LakeFS
+
+UPLOAD_ATTEMPTS = 4                               # one upload is tried this often
+RETRY_STATUSES = (408, 429, 500, 502, 503, 504)   # answers that can pass
+RETRY_PAUSE_S = 1.0                               # before the second try; doubled each time
 
 # layouts.local.MARKER: a pulled copy's marker never goes back up when the folder is pushed.
 IGNORED_NAMES = {".DS_Store", "Thumbs.db", ".kubecore-dataset.json", ".kaos-ready"}
@@ -67,15 +75,31 @@ def _parallel(client: LakeFS, items: Iterable, fn) -> None:
             fut.result()  # re-raises the first failure
 
 
+def upload(client: LakeFS, repo: str, branch: str, path: str, local: pathlib.Path) -> None:
+    """Upload one file, again after a failure that can pass (the connection, a busy or restarting server).
+
+    An upload replaces the object at its path, so repeating it is safe. A refusal (not allowed, not found, a bad
+    request) is raised at once; so is the last of ``UPLOAD_ATTEMPTS`` failures.
+    """
+    for attempt in range(UPLOAD_ATTEMPTS):
+        try:
+            return client.upload_object(repo, branch, path, local)
+        except (LakeFSError, requests.RequestException) as exc:
+            passing = not isinstance(exc, LakeFSError) or exc.status in RETRY_STATUSES
+            if not passing or isinstance(exc, NotFoundError) or attempt == UPLOAD_ATTEMPTS - 1:
+                raise
+            time.sleep(RETRY_PAUSE_S * 2 ** attempt)
+
+
 def apply_plan(client: LakeFS, repo: str, branch: str, plan: MirrorPlan) -> None:
     """Stage the plan's uploads and deletes on ``branch`` (the caller commits)."""
-    _parallel(client, plan.add, lambda a: client.upload_object(repo, branch, a[1], a[0]))
+    _parallel(client, plan.add, lambda a: upload(client, repo, branch, a[1], a[0]))
     _parallel(client, plan.delete, lambda path: client.delete_object(repo, branch, path))
 
 
 def upload_files(client: LakeFS, repo: str, branch: str, files: dict) -> int:
     """Upload ``{repo path: local Path}`` to ``branch``; returns the file count."""
-    _parallel(client, files.items(), lambda kv: client.upload_object(repo, branch, kv[0], kv[1]))
+    _parallel(client, files.items(), lambda kv: upload(client, repo, branch, kv[0], kv[1]))
     return len(files)
 
 

@@ -16,11 +16,18 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: every app changes o
 - The ledger: the data lock at version 2, with named reads and with writes. Each step records what it read and wrote in
   its result and, on its MLflow run, in its own `ledger/<step>.json`.
 - `step()` in `pipeline.py` takes `kind=` (required), `inputs=`, `produces=` and `walltime=`. `kaosctl lint` checks them
-  (`L-E07`), finds steps still written for 0.4 (`L-E08`), and `kaosctl lint --fix` renames `hpc_time_limit=`, removes
+  (`L-E07`), finds steps still written for 0.4 (`L-E08`) and the removed `platform` config group (`L-E09`), and `kaosctl lint --fix` renames `hpc_time_limit=`, removes
   `outputs=` and adds a `kind=` placeholder that you replace. Rule set 2.0.0.
 - `kaosctl step run` starts a step with the new contract: `--input NAME=FOLDER|REPO@REF` gives an input, `--upstream`
   a needed step's result; outputs and results stay in `.kaos/local/`.
 - On HPC (Slurm) every input of a step is read from its own staged copy.
+- A step can produce a dataset (`produces=[dataset("name")]`, PRD novelcore/kaos#1911 F-11, F-12): `step.result()` makes
+  the folder one version of `dataset-<name>`. Only files that changed since the last version are uploaded; the version
+  is checked against what the step wrote before and after it is sealed; `latest` moves only when the run asks, and never
+  onto a dataset that another run changed in the meantime (the step then writes its version again on the new one).
+- Uploads are tried again after a failure that can pass (a dropped connection, a busy server).
+- `kaosctl dataset push` to a new repository whose name no dataset can have is refused with the reason, before anything
+  is created.
 
 ### Changed
 - `runtime.context()` takes the run, app, project, step, kind and experiment from what the platform hands the step.

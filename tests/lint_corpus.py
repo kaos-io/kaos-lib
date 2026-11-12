@@ -21,7 +21,7 @@ OLD_STEP = ("import argparse, os\n\ndef main():\n    p = argparse.ArgumentParser
             "    run = os.environ.get('KUBECORE_RUN_ID')\n")
 
 CONFIG = {
-    "config/config.yaml": "defaults:\n  - experiment\n  - dataset\n  - train\n  - platform: live\n",
+    "config/config.yaml": "defaults:\n  - experiment\n  - dataset\n  - train\n",
     "config/experiment.yaml": "experiment:\n  name: demo\n",
     "config/dataset.yaml": "dataset: \"dataset-default@v1\"\n",
     "config/train.yaml": "train:\n  epochs: 3\n",
@@ -102,6 +102,11 @@ CASES = {
         repo('    a = step("a", kind="train")\n', {"a": OLD_STEP}),
         repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP}),
         None, (5, "takes --params")),
+    "L-E09": (
+        repo('    a = step("a", kind="train")\n',
+             config={**CONFIG, "config/config.yaml": "defaults:\n  - experiment\n  - platform: live\n"}),
+        repo('    a = step("a", kind="train")\n'),
+        None, (3, "still names the `platform` config group")),
     "L-W01": (
         repo('    t = step("work", kind="train", gpu=True, walltime="6h")\n', {"work": PLAIN_STEP}),
         repo('    t = step("work", kind="train", gpu=True, walltime="6h", resumable=True)\n', {"work": PLAIN_STEP}),

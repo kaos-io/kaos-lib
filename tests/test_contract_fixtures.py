@@ -43,6 +43,11 @@ def test_wire_reproduces_every_wire_file_byte_for_byte(name):
     assert "{{" not in text and text.isascii() and not text.endswith("\n")
 
 
+def test_wire_escapes_what_the_platform_would_read_or_rewrite():
+    assert lock.wire({"k{}": "a&b <c> {{x}}"}) == '{"k\\u007b\\u007d":"a\\u0026b \\u003cc\\u003e \\u007b\\u007bx\\u007d\\u007d"}'
+    assert json.loads(lock.wire({"k{}": "a&b <c> {{x}}"})) == {"k{}": "a&b <c> {{x}}"}
+
+
 def test_wire_refuses_what_json_cannot_hold():
     for bad in (float("nan"), {1: "x"}, object(), {"a": {2, 3}}):
         with pytest.raises((TypeError, ValueError)):

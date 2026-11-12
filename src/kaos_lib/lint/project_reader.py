@@ -15,7 +15,8 @@ from typing import Optional
 import yaml
 
 from .constants import (CHECKPOINT_DIR_ENV, CHECKPOINT_FRAMEWORKS, CHECKPOINT_STATE_NAMES, CONFIG_DIR, MAX_FILE_BYTES,
-                        MAX_STEP_BYTES, MAX_STEP_FILES, OLD_ENTRY_ARGUMENT, OLD_ENTRY_VARIABLES, STEPS_DIR)
+                        MAX_STEP_BYTES, MAX_STEP_FILES, OLD_ENTRY_ARGUMENT, OLD_ENTRY_VARIABLES, PIPELINE_FILE,
+                        STEPS_DIR)
 
 ENTRY_FILE = "app/entry.py"        # the module the platform starts: python -m app.entry
 from .model import Span
@@ -91,6 +92,27 @@ def dataset_default(root: pathlib.Path) -> Optional[DatasetDefault]:
             a, b = value.start_mark, value.end_mark
             return DatasetDefault(src.rel, str(value.value), Span(a.line + 1, a.column + 1, b.line + 1, b.column + 1))
     return None
+
+
+PLATFORM_DEFAULT = re.compile(r"^(\s*)-\s*(?:override\s+)?/?platform\s*:.*$")   # `- platform: live` in a defaults list
+ROOT_CONFIG = f"{CONFIG_DIR}/config.yaml"
+
+
+def platform_group(root: pathlib.Path) -> list:
+    """Where the app still carries the `platform` config group the platform no longer has: `(file, Span, what)`
+    for each `- platform: ...` line of config/config.yaml and for a config/platform/ folder."""
+    found = []
+    try:
+        src = read_text(root, root / ROOT_CONFIG, ROOT_CONFIG)
+    except TooLarge:
+        src = None
+    for number, line in enumerate(src.text.splitlines() if src else (), 1):
+        if PLATFORM_DEFAULT.match(line):
+            start = len(line) - len(line.lstrip()) + 1
+            found.append((ROOT_CONFIG, Span(number, start, number, len(line.rstrip()) + 1), "line"))
+    if (root / CONFIG_DIR / PLATFORM_SECTION).is_dir():
+        found.append((ROOT_CONFIG if src else PIPELINE_FILE, Span(1, 1, 1, 1), "folder"))
+    return found
 
 
 def _scan_python(src: SourceFile, out: StepSource) -> None:

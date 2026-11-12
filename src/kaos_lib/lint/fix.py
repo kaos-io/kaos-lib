@@ -1,7 +1,8 @@
 """`kaosctl lint --fix`: the mechanical part of moving a pipeline.py to the step contract of kaos-lib 0.5.
 
 Why: three changes to every `step()` call are the same in every app, so a person should not type them: rename
-`hpc_time_limit=` to `walltime=`, remove `outputs=`, and give a step that has no `kind=` one. The kind is a choice only
+`hpc_time_limit=` to `walltime=`, remove `outputs=`, and give a step that has no `kind=` one. A fourth is in
+`config/config.yaml`: the `platform` config group is gone, so its line in the defaults is removed. The kind is a choice only
 the author can make, so the fix writes a placeholder that lists the six kinds and is not one of them: the check keeps
 failing until a kind is chosen. Nothing else in the file is touched, and step code is never rewritten.
 
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 from .constants import KIND_PLACEHOLDER
 from .pipeline_reader import read_pipeline
+from .project_reader import PLATFORM_DEFAULT
 from .source import buffer_source, parse_python
 
 OLD_TIME, NEW_TIME, OUTPUTS = "hpc_time_limit", "walltime", "outputs"
@@ -80,3 +82,15 @@ def fix_pipeline(text: str, rel: str = "pipeline.py") -> tuple:
     for start, end, new in sorted(edits, reverse=True):
         data = data[:start] + new + data[end:]
     return data.decode("utf-8"), changes
+
+
+def fix_config(text: str) -> tuple:
+    """`(new text, changes)` for config/config.yaml: the `- platform: ...` line of its defaults is removed. The
+    platform no longer has that config group."""
+    kept, changes = [], []
+    for number, line in enumerate(text.splitlines(keepends=True), 1):
+        if PLATFORM_DEFAULT.match(line.rstrip("\r\n")):
+            changes.append(f"line {number}: the `platform` config group removed from the defaults")
+        else:
+            kept.append(line)
+    return "".join(kept), changes

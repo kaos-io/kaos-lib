@@ -2,6 +2,7 @@
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -31,6 +32,15 @@ def one_step_per_test(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "excepthook", sys.excepthook)
     yield
     step.stop()
+
+
+def refused(capsys, monkeypatch, context) -> str:
+    """Start a step on a context that cannot be read: the one line it leaves on stderr."""
+    with pytest.raises(SystemExit) as stop:
+        begin(monkeypatch, context)
+    err = capsys.readouterr().err
+    assert stop.value.code == 1 and err.startswith("ERROR: ") and err.count("\n") == 1 and "Traceback" not in err
+    return err
 
 
 def begin(monkeypatch, context, client=None):
@@ -92,20 +102,21 @@ def test_a_dataset_carries_whether_this_run_promotes_it(monkeypatch):
     assert begin(monkeypatch, wire("context-no-upstream")).produces[0].promote is False    # absent means false
 
 
-def test_without_a_context_it_is_not_a_step(monkeypatch):
+def test_without_a_context_it_is_not_a_step_one_line_and_exit_1(monkeypatch, capsys):
     monkeypatch.delenv(step.ENV, raising=False)
-    with pytest.raises(StepError, match="this is not a pipeline step: KAOS_STEP_CONTEXT is not set. "
-                                        "Run the step with: kaosctl step run <step>"):
+    with pytest.raises(SystemExit) as stop:
         step.start()
+    assert stop.value.code == 1
+    assert capsys.readouterr().err == ("ERROR: this is not a pipeline step: KAOS_STEP_CONTEXT is not set. "
+                                       "Run the step with: kaosctl step run <step>\n")
 
 
-def test_a_context_over_the_cap_is_refused(monkeypatch):
+def test_a_context_over_the_cap_is_refused(monkeypatch, capsys):
     context = changed("context-no-upstream", params={"blob": "x" * step.CONTEXT_CAP})
-    with pytest.raises(StepError, match=r"the step context costs \d+; the limit is 98304"):
-        begin(monkeypatch, context)
+    assert re.search(r"the step context costs \d+; the limit is 98304", refused(capsys, monkeypatch, context))
 
 
-def test_the_cap_counts_the_cost_and_the_largest_context_that_fits_is_read(monkeypatch):
+def test_the_cap_counts_the_cost_and_the_largest_context_that_fits_is_read(monkeypatch, capsys):
     base = lock.cost(lock.wire(changed("context-no-upstream", params={"blob": ""})))
     context = changed("context-no-upstream", params={"blob": "x" * (step.CONTEXT_CAP - base)})
     assert lock.cost(lock.wire(context)) == step.CONTEXT_CAP > len(lock.wire(context))
@@ -113,18 +124,16 @@ def test_the_cap_counts_the_cost_and_the_largest_context_that_fits_is_read(monke
     step.stop()
     quotes = changed("context-no-upstream", params={"blob": '"' * 40000})      # 80002 bytes that cost 120002
     assert len(lock.wire(quotes)) < step.CONTEXT_CAP
-    with pytest.raises(StepError, match="the step context costs"):
-        begin(monkeypatch, quotes)
+    assert "the step context costs" in refused(capsys, monkeypatch, quotes)
 
 
 @pytest.mark.parametrize("text,fragment", [
     ("{oops", "the step context is not a JSON object"),
     ("[1, 2]", "the step context is not a JSON object (it is a list)"),
 ])
-def test_a_context_that_is_not_a_json_object(monkeypatch, text, fragment):
-    with pytest.raises(StepError) as err:
-        begin(monkeypatch, text)
-    assert fragment in str(err.value) and "report this" in str(err.value)
+def test_a_context_that_is_not_a_json_object(monkeypatch, capsys, text, fragment):
+    err = refused(capsys, monkeypatch, text)
+    assert fragment in err and "report this" in err
 
 
 @pytest.mark.parametrize("change,fragment", [
@@ -142,16 +151,16 @@ def test_a_context_that_is_not_a_json_object(monkeypatch, text, fragment):
      "the step context: ledger: reads[0] needs a non-empty string name"),
     ({"produces": None}, "the step context has no produces"),
     ({"produces": [{"name": "m", "type": "weights", "repo": "outputs-a"}]}, "has type 'weights'"),
-    ({"produces": [{"name": "kaos-x", "type": "model", "repo": "outputs-a"}]}, "reserved or used twice"),
+    ({"produces": [{"name": "kaos-x", "type": "model", "repo": "outputs-a"}]}, "reserved, used twice or not a name"),
+    ({"produces": [{"name": "x" * 41, "type": "model", "repo": "outputs-a"}]}, "at most 40 characters"),
+    ({"produces": [{"name": "Model", "type": "model", "repo": "outputs-a"}]}, "not a name"),
     ({"upstream": None}, "the step context has no upstream"),
     ({"upstream": {"prepare": {}}}, "upstream.prepare is not a result at version 1"),
     ({"upstream": {"prepare": {"version": 1, "status": "failed"}}}, "has status 'failed'"),
     ({"upstream": {"prepare": {"version": 1, "status": "ok", "values": {}, "writes": []}}}, "has no reads list"),
 ])
-def test_what_is_wrong_with_a_context_is_said(monkeypatch, change, fragment):
-    with pytest.raises(StepError) as err:
-        begin(monkeypatch, changed("context-one-upstream", **change))
-    assert fragment in str(err.value)
+def test_what_is_wrong_with_a_context_is_said(monkeypatch, capsys, change, fragment):
+    assert fragment in refused(capsys, monkeypatch, changed("context-one-upstream", **change))
 
 
 @pytest.mark.parametrize("call", [lambda: step.input("raw"), lambda: step.output("model"),
@@ -191,6 +200,14 @@ def test_an_input_is_the_folder_of_the_pinned_commit(monkeypatch, lake):
     assert [r.as_dict() for r in lock.current().reads] == lake.context("context-no-upstream")["ledger"]["reads"]
 
 
+def test_every_declared_input_is_in_the_reads_whether_it_was_opened_or_not(monkeypatch, lake):
+    context = lake.context("context-one-upstream")
+    begin(monkeypatch, context, lake.client())
+    assert [r.as_dict() for r in lock.current().reads] == context["ledger"]["reads"]      # "labels", never opened
+    step.input("embeddings")                                         # a dataset the step before wrote: added when read
+    assert [r.name for r in lock.current().reads] == ["labels", "embeddings"]
+
+
 def test_the_pinned_commit_is_read_even_after_the_dataset_moved(monkeypatch, lake, tmp_path):
     client = lake.client()
     begin(monkeypatch, lake.context("context-no-upstream"), client)
@@ -208,7 +225,7 @@ def test_a_dataset_an_earlier_step_wrote_is_an_input_by_its_name(monkeypatch, la
     assert (step.input("embeddings") / "e.npy").read_bytes() == b"emb"
     assert (step.input("labels") / "labels.csv").is_file()
     want = [dict(r) for r in lake.context("context-skipped-upstream")["upstream"]["train"]["reads"]]
-    assert [r.as_dict() for r in lock.current().reads] == [want[1], want[0]]     # in the order they were opened
+    assert [r.as_dict() for r in lock.current().reads] == want       # the declared input, then what was read
 
 
 def test_a_model_an_earlier_step_wrote_is_an_input_and_not_a_read(monkeypatch, lake, tmp_path):
@@ -252,7 +269,7 @@ def test_inside_a_step_a_dataset_the_run_did_not_pin_is_refused(monkeypatch, lak
         datasets.resolve(datasets.DatasetRef.parse("dataset-labels@latest"), client)
     pinned = datasets.resolve(datasets.DatasetRef.parse("dataset-raw-images@latest"), client)
     assert pinned == lake.commit_of["raw"]                           # what the run pinned is read, by any path
-    assert lock.current().reads[0].name == "raw"
+    assert [r.name for r in lock.current().reads] == ["raw"]
 
 
 def test_outside_a_step_a_resolve_asks_lakefs_as_before(lake):
@@ -303,11 +320,31 @@ def test_a_step_that_is_not_upstream(monkeypatch):
 
 def test_a_needed_step_without_a_result_fails_the_consumer_naming_it(monkeypatch):
     begin(monkeypatch, wire("context-skipped-upstream"))
-    with pytest.raises(StepError, match=r"step 'export' wrote no result: it was skipped, or it ended without "
-                                        r"step.result\(\). 'evaluate' needs it. Use upstream\('export', "
-                                        r"required=False\) if this step can run without it."):
+    with pytest.raises(StepError, match=r"step 'export' did not run, so it left no result, and 'evaluate' needs "
+                                        r"it. Use upstream\('export', optional=True\) if this step can run without it."):
         step.upstream("export")
-    assert step.upstream("export", required=False) is None
+    assert step.upstream("export", optional=True) is None
+
+
+def test_an_input_a_step_that_did_not_run_would_have_produced(monkeypatch):
+    begin(monkeypatch, wire("context-skipped-upstream"))
+    with pytest.raises(StepError, match=r"input 'exported' of step 'evaluate' is not there, and export did not run: "
+                                        r"a step that did not run produced nothing. Use input\('exported', "
+                                        r"optional=True\) if this step can run without it. What is there: model."):
+        step.input("exported")
+    assert step.input("exported", optional=True) is None
+
+
+def test_optional_does_not_excuse_a_name_nothing_could_have_produced(monkeypatch):
+    begin(monkeypatch, wire("context-one-upstream"))                 # every needed step ran
+    with pytest.raises(StepError, match="'images' is not an input of step 'train'"):
+        step.input("images", optional=True)
+
+
+def test_a_value_name_of_the_platform_is_refused(monkeypatch):
+    begin(monkeypatch, wire("context-escapes"))
+    with pytest.raises(StepError, match="result value 'kaos-plan': names starting with 'kaos-' are the platform's"):
+        step.result(**{"kaos-plan": 1})
 
 
 # ------------------------------------------------------------------------------------------- outputs and result

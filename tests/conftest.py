@@ -48,7 +48,19 @@ def lakefs_backend():
 def lakefs_server():
     """The container, started by the first test that needs it (skipped when docker is not available)."""
     holder = {}
-    yield lambda: holder.get("server") or holder.setdefault("server", real_lakefs.Server())
+
+    def server():
+        if "skip" in holder:                 # it could not be started: say so at once, do not try for every test
+            pytest.skip(holder["skip"])
+        if "server" not in holder:
+            try:
+                holder["server"] = real_lakefs.Server()
+            except pytest.skip.Exception as exc:
+                holder["skip"] = str(exc)
+                raise
+        return holder["server"]
+
+    yield server
     if "server" in holder:
         holder["server"].stop()
 

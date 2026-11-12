@@ -69,7 +69,7 @@ _PARAMS = {
     "inputs": dict(
         type="list[str]", rules=("L-E07",), snippet='["${1:dataset}"]',
         doc="The names of the config values that hold a dataset reference, for example `\"dataset\"` for "
-            "`dataset: my-data@latest`. The platform pins each to one exact version when the run starts, and "
+            "`dataset: dataset-my-data@latest`. The platform pins each to one exact version when the run starts, and "
             "the step reads it with `step.input(\"dataset\")`. Step code never names a version.",
         values=[]),
     "needs": dict(

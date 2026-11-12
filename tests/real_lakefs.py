@@ -17,9 +17,11 @@ import base64
 import io
 import json
 import os
+import pathlib
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -36,6 +38,13 @@ IMAGE_ENV = "KAOS_LIB_TEST_LAKEFS_IMAGE"
 LOCAL_IMAGE = "kaos-lake:prd1911"
 UPSTREAM_IMAGE = "treeverse/lakefs:1.86.0"
 ACCESS_KEY, SECRET_KEY = "AKIAIOSFOLKAOSTEST00", "kaos-lib-test-secret-key-0000000000000000"
+# The apps of the test project on kaos-lake: each may write its outputs repository and the datasets it declares.
+APPS = {
+    "writer": {"user": "kaos-app-writer", "access_key_id": "AKIAJWRITER0000001Q", "secret_access_key": "writer-secret",
+               "outputs_repository": "outputs-writer", "datasets": [f"dataset-written-{i}" for i in range(1, 9)]},
+    "other": {"user": "kaos-app-other", "access_key_id": "AKIAJOTHER00000001Q", "secret_access_key": "other-secret",
+              "outputs_repository": "outputs-other", "datasets": ["dataset-others-1"]},
+}
 SCRIPTED = "this test rewrites the fake's state in place; a real server has no such handle"
 
 
@@ -64,36 +73,88 @@ class Server:
             pytest.skip("docker is not available: the real-lakeFS tests need it")
         self.image = image()
         self.name = f"kaos-lib-test-lakefs-{uuid.uuid4().hex[:8]}"
-        run = _docker("run", "-d", "--rm", "--name", self.name, "-p", "127.0.0.1::8000",
+        self.apps_dir = pathlib.Path(tempfile.mkdtemp(prefix="kaos-lib-test-apps-"))
+        for app, entry in APPS.items():      # kaos-lake reads these: the apps of the project and what each produces
+            (self.apps_dir / app).write_text(json.dumps(entry))
+        self.apps_dir.chmod(0o755)
+        for f in self.apps_dir.iterdir():
+            f.chmod(0o644)
+        self.session = requests.Session()
+        self.auth = "Basic " + base64.b64encode(f"{ACCESS_KEY}:{SECRET_KEY}".encode()).decode()
+        self.session.headers["Authorization"] = self.auth
+        # kaos-lake reads the app users and creates their datasets; upstream lakeFS does not start with those
+        # settings, so it is started again without them.
+        if not self._start(kaos=True) and not self._start(kaos=False):
+            pytest.skip(f"{self.image} did not answer within 60 s: {self.last_log[-300:]}")
+
+    def _start(self, kaos: bool) -> bool:
+        _docker("rm", "-f", self.name)
+        options = ["-e", "LAKEFS_AUTH_UI_CONFIG_RBAC=internal",
+                   "-e", "LAKEFS_KAOS_APP_USERS_PATH=/etc/kaos/apps", "-e", "LAKEFS_KAOS_APP_USERS_INTERVAL=2s",
+                   "-e", "LAKEFS_KAOS_REPOSITORIES_STORAGE_NAMESPACE_PREFIX=local://lake",
+                   "-e", "LAKEFS_KAOS_REPOSITORIES_INTERVAL=2s",
+                   "-v", f"{self.apps_dir}:/etc/kaos/apps:ro,z"] if kaos else []
+        run = _docker("run", "-d", "--name", self.name, "-p", "127.0.0.1::8000",
                       "-e", "LAKEFS_DATABASE_TYPE=local", "-e", "LAKEFS_BLOCKSTORE_TYPE=local",
                       "-e", "LAKEFS_AUTH_ENCRYPT_SECRET_KEY=kaos-lib-tests", "-e", "LAKEFS_LOGGING_LEVEL=WARN",
                       "-e", "LAKEFS_INSTALLATION_USER_NAME=admin",
                       "-e", f"LAKEFS_INSTALLATION_ACCESS_KEY_ID={ACCESS_KEY}",
-                      "-e", f"LAKEFS_INSTALLATION_SECRET_ACCESS_KEY={SECRET_KEY}", self.image, "run", timeout=600)
+                      "-e", f"LAKEFS_INSTALLATION_SECRET_ACCESS_KEY={SECRET_KEY}", *options, self.image, "run",
+                      timeout=600)
         if run.returncode != 0:
             pytest.skip(f"cannot start {self.image}: {run.stderr.strip()[-300:]}")
-        port = _docker("port", self.name, "8000/tcp").stdout.splitlines()[0].rsplit(":", 1)[1]
-        self.url = f"http://127.0.0.1:{port}"
-        self.auth = "Basic " + base64.b64encode(f"{ACCESS_KEY}:{SECRET_KEY}".encode()).decode()
-        self.session = requests.Session()
-        self.session.headers["Authorization"] = self.auth
-        self._wait()
+        port = _docker("port", self.name, "8000/tcp").stdout.splitlines()
+        if not port:                       # it exited at once
+            self.last_log = _docker("logs", "--tail", "20", self.name).stdout + _docker("logs", "--tail", "20", self.name).stderr
+            return False
+        self.url = f"http://127.0.0.1:{port[0].rsplit(':', 1)[1]}"
+        return self._wait()
 
-    def _wait(self):
+    def _wait(self) -> bool:
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
                 if self.session.get(f"{self.url}/api/v1/repositories", timeout=2).status_code == 200:
-                    return
+                    return True
             except requests.RequestException:
                 pass
+            if _docker("inspect", "-f", "{{.State.Running}}", self.name).stdout.strip() != "true":
+                break
             time.sleep(0.3)
-        logs = _docker("logs", "--tail", "20", self.name).stdout
-        self.stop()
-        pytest.skip(f"{self.image} did not answer within 60 s: {logs[-300:]}")
+        out = _docker("logs", "--tail", "20", self.name)
+        self.last_log = out.stdout + out.stderr
+        return False
 
     def stop(self):
         _docker("rm", "-f", self.name)
+        shutil.rmtree(self.apps_dir, ignore_errors=True)
+
+    @property
+    def is_kaos_lake(self) -> bool:
+        """Whether the server is kaos-lake (dataset rights per app, the expected-head merge), not upstream lakeFS."""
+        return "kaos" in str(self.api("GET", "/config/version").json().get("version", ""))
+
+    def app_client(self, app: str) -> LakeFS:
+        """A client with the app's own key, straight to the server: its rights are the app's, not the admin's."""
+        entry = APPS[app]
+        return LakeFS(self.url, credentials.Credential(access_key=entry["access_key_id"],
+                                                       secret_key=entry["secret_access_key"]), concurrency=4)
+
+    def wait_for_dataset(self, app: str, dataset: str, seconds: int = 90) -> LakeFS:
+        """The app's client, once kaos-lake has created the declared dataset and given the app its rights."""
+        client, deadline = self.app_client(app), time.time() + seconds
+        while True:
+            try:
+                client.create_branch(dataset, "run-ready-probe", "main")
+                client.delete_branch(dataset, "run-ready-probe")
+                return client
+            except Exception as exc:  # noqa: BLE001 - not there yet, or no right yet
+                if "already exists" in str(exc) or getattr(exc, "status", 0) == 409:
+                    client.delete_branch(dataset, "run-ready-probe")
+                    return client
+                if time.time() > deadline:
+                    pytest.fail(f"{app} never got the right to write {dataset}: {exc}")
+                time.sleep(1)
 
     def api(self, method, path, ok=(200, 201, 204), **kw):
         resp = self.session.request(method, f"{self.url}/api/v1{path}", timeout=60, **kw)
@@ -187,6 +248,7 @@ class RealLakeFS:
         self.server, self.base = server, self.BASE
         self.calls, self.auth, self.writes = [], [], []
         self.kaos, self.templates, self.deny = {}, [], None
+        self.upload_answers: list = []                     # statuses the next uploads answer, as on the fake
         self.refused_labels: list = []                     # (repository, label) the server keeps for the platform
         self.storage_prefix = "gs://bucket/lakefs"
         self.repos = _Repos(self)
@@ -206,6 +268,9 @@ class RealLakeFS:
             return self.kaos.get(path, (404, b"<html><body>404 page not found</body></html>"))
         if self.deny:
             return self.deny, {"message": "insufficient permissions"}
+        if request.method == "POST" and path.endswith("/objects") and self.upload_answers:
+            self.writes.pop()
+            return self.upload_answers.pop(0), {"message": "try again"}
         return None
 
     def on_server(self, repo: str) -> str:
@@ -260,6 +325,11 @@ class RealLakeFS:
 
     def tag(self, repo, name, ref="main"):
         self.server.api("POST", f"/repositories/{self.on_server(repo)}/tags", json={"id": name, "ref": ref})
+
+    def commit_meta(self, repo, commit):
+        """`(message, metadata)` of a commit."""
+        c = self.server.api("GET", f"/repositories/{self.on_server(repo)}/commits/{commit}").json()
+        return c["message"], c.get("metadata") or {}
 
     def head(self, repo, branch="main"):
         return self.server.api("GET", f"/repositories/{self.on_server(repo)}/branches/{branch}").json()["commit_id"]

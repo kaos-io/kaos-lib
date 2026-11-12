@@ -9,7 +9,11 @@ The sections below are the design as it was reviewed. Where the implementation d
 | Topic | As built |
 |---|---|
 | Contract | `docs/step-contract.md` of kaos-hpc-operator at `5ad1f92`; fixtures copied to `tests/contract_fixtures/` by `sync.py`, pinned by `SHA256SUMS` |
-| Caps | Counted by cost (`lock.cost`: every `"` and `\` counts twice). Context 96 KiB in `start()`; result 8 KiB in `result()`, on the coordinator's instruction (the contract page at `5ad1f92` still says 32 KiB) |
+| Caps | Counted by cost (`lock.cost`: every quote and backslash counts twice). Context 96 KiB in `start()`; result 8 KiB in `result()` |
+| Wire form | Also writes `&`, `<` and `>` inside strings as unicode escapes |
+| Absent | `upstream(step, optional=True)` and `input(name, optional=True)` return `None`; without it both raise, naming the step. `start()` failures are one line on stderr and exit 1 |
+| Reads | Every declared input is in the result's `reads`, opened or not, then every upstream dataset that was read |
+| Dataset writer | `dataset_writer.write_version`: the run branch is always started again from the head of `main` (no resume of an earlier attempt's branch), so the branch's base is the expected head |
 | `promote` | A boolean on a `dataset` entry of `produces`, set by the platform; absent means false |
 | `input(name)` | An `inputs=` name resolves from `ledger.reads`; a dataset, model or artifact of a needed step from `upstream.<step>.writes`. Only dataset reads are recorded |
 | Staged inputs | One folder per input under `$KAOS_STAGED_ROOT`, named after the input. Used only when `<folder>/.kaos-ready` is a JSON object with this `repo`, this `commit`, this `owner` (absent or null for the own project) and `"full": true`. An optional `"layout"` lets the step read the copy without asking lakeFS. The one function is `layouts.local.staged_dir` |
@@ -19,7 +23,7 @@ The sections below are the design as it was reviewed. Where the implementation d
 | The ledger on MLflow | `ledger/<step>.json`, written when the step's MLflow run ends and again by `result()` once the writes are known |
 | Local runs | `kaosctl step run` sets `KAOS_STEP_CONTEXT`, `KAOS_STAGED_ROOT`, `KAOS_LOCAL_OUTPUTS` and `KAOS_LOCAL_WORK`; with `KAOS_LOCAL_OUTPUTS` set, `result()` keeps outputs on disk and uploads nothing |
 | Lint | `L-E07` (declaration), `L-E08` (step not moved), `lint --fix`; rule set 2.0.0. The positional order of `step()` follows the contract's signature |
-| Release policy | `_release.json`: 0.5.0, `supported >=0.5`, `breaking: true` |
+| Release policy | Unchanged on this branch; the move to 0.5 is one commit on `prd1911/release-policy-0.5` |
 
 ## 1. What the engineer writes
 

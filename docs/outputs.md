@@ -1,8 +1,9 @@
 # Outputs
 
 Each ML app writes its results to its own lakeFS repository `outputs-<app>`, on `main`, **one commit per step per
-run**, under `<kind>/<experiment>/<run>/` (`kind` is `checkpoints` by default). In a pipeline step the repository name is in
-`$CHECKPOINT_BUCKET` and the run id in `$KUBECORE_RUN_ID`.
+run**, under `<kind>/<experiment>/<run>/` (`kind` is `checkpoints` by default). A pipeline step does not call this module: it
+writes into `step.output("<name>")` and `step.result()` saves it here ([Results](results.md)). Use `outputs` in a
+script of your own, outside a pipeline.
 
 ```python
 from kaos_lib import outputs

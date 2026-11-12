@@ -15,7 +15,8 @@ from .graph import graph_json
 from .catalogue import CatalogueError, default_catalogue, empty_catalogue, read_context, read_file
 from .constants import MAX_FILE_BYTES, PIPELINE_FILE, RULESET_VERSION
 from .engine import MissingPipeline, lint_project
-from .fix import fix_pipeline
+from .fix import fix_config, fix_pipeline
+from .project_reader import ROOT_CONFIG
 from .model import Report
 from .schema import schema_json
 
@@ -49,7 +50,8 @@ def add_arguments(sp: argparse.ArgumentParser) -> None:
     sp.add_argument("--fix", action="store_true",
                     help="first rewrite the pipeline file for kaos-lib 0.5: rename hpc_time_limit= to walltime=, "
                          "remove outputs=, and add a kind= placeholder to steps that have none (you choose the "
-                         "kind: the placeholder lists them and keeps the check failing). Then check as usual")
+                         "kind: the placeholder lists them and keeps the check failing); and remove the platform "
+                         "group from the defaults of config/config.yaml. Then check as usual")
     sp.add_argument("--schema", action="store_true",
                     help="print what step() accepts (names, types, allowed values, docs, links) as JSON, versioned "
                          "with the rule set, and stop: editors read it for completion and hover text")
@@ -102,6 +104,14 @@ def _fix(args) -> None:
         print(f"fixed {args.pipeline} {change}", file=sys.stderr)
     if not changes:
         print(f"nothing to fix in {args.pipeline}", file=sys.stderr)
+    config = pathlib.Path(args.path) / ROOT_CONFIG
+    if config.is_file():
+        text = config.read_text(encoding="utf-8")
+        fixed, changes = fix_config(text)
+        if fixed != text:
+            config.write_text(fixed, encoding="utf-8")
+        for change in changes:
+            print(f"fixed {ROOT_CONFIG} {change}", file=sys.stderr)
 
 
 def run(args) -> int:

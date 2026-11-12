@@ -9,6 +9,7 @@ allowlisted environment (CON-16) and needs no login or network unless a sample o
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
@@ -29,6 +30,7 @@ from .dev import setup_step
 
 ABSENT = {"version": 1, "status": "absent"}     # what the platform hands a step for a needed step without a result
 RESULT_NAME = "kaos-result.json"
+PLATFORM_SECTIONS = ("platform", "plan")
 
 WORKMAP = pathlib.Path(__file__).with_name("workmap.py")
 
@@ -89,10 +91,11 @@ def _hash(folder: pathlib.Path) -> str:
 
 
 def _dataset_of(params: dict, name: str) -> tuple:
-    """`(repository, ref)` the config names for the input, for the ledger: what a real run would have pinned."""
+    """`(repository, ref)` the config names for the input (`<repository>@<ref>`), for the ledger: what a real run
+    would have pinned. A setting that holds no reference gives `dataset-<name>` at `local`."""
     value = params.get(name)
-    repo, _, ref = value.partition("@") if isinstance(value, str) else ("", "", "")
-    return (repo if repo.startswith("dataset-") else f"dataset-{repo or name}"), ref or "local"
+    repo, _, ref = value.rpartition("/")[2].partition("@") if isinstance(value, str) else ("", "", "")
+    return repo or f"dataset-{name}", ref or "local"
 
 
 def stage_inputs(step: steps.StepInfo, args, params: dict, staged: pathlib.Path) -> list:
@@ -159,8 +162,11 @@ def step_context(root: pathlib.Path, step: steps.StepInfo, params: dict, reads: 
         raise KaosLibError(f"{step.name} has no kind in pipeline.py: add kind=\"...\", one of {', '.join(STEP_KINDS)}.")
     app = re.sub(r"[^a-z0-9-]", "-", root.name.lower()).strip("-") or "app"
     experiment = (params.get("experiment") or {}).get("name") if isinstance(params.get("experiment"), dict) else None
-    return {"version": 1, "run": LOCAL_RUN_ID, "app": app, "project": "local", "step": step.name, "kind": step.kind,
-            "experiment": experiment if isinstance(experiment, str) and experiment else "local", "params": params,
+    run = f"{LOCAL_RUN_ID}-{datetime.datetime.now(datetime.timezone.utc):%Y%m%dt%H%M%Sz}"
+    # As on the platform: a step gets the config sections it names in reads=, never the platform's own.
+    own = {k: v for k, v in params.items() if k in step.reads and k not in PLATFORM_SECTIONS}
+    return {"version": 1, "run": run, "app": app, "project": "local", "step": step.name, "kind": step.kind,
+            "experiment": experiment if isinstance(experiment, str) and experiment else app, "params": own,
             "ledger": {"version": 2, "reads": reads, "writes": []},
             "produces": [{"name": name, "type": kind,
                           "repo": f"dataset-{name}" if kind == "dataset" else f"outputs-{app}"}
@@ -221,8 +227,8 @@ def run_step(args) -> int:
     if services:
         print(f"NOTE: this step reads {', '.join(services)}, which only the platform sets. Here they are not set (no "
               f"platform secret reaches a local run), so a step that needs one stops with its own error, and one that has a fallback (config, a default) runs on it.")
-    print(f"Running {step.name}: python -m app.entry (the step context holds {len(lock.wire(params))} characters of "
-          "composed params)")
+    print(f"Running {step.name}: python -m app.entry (run {context['run']}; the step context holds "
+          f"{len(lock.wire(context['params']))} characters of composed params: {', '.join(context['params']) or 'no section'})")
     done = proc.stream([str(py), str(WORKMAP), "app.entry"], env=child_env(work, staged, context), cwd=step.path)
     print_result(step, work, results, staged)
     if done.returncode:
