@@ -96,6 +96,8 @@ def test_a_promoted_run_makes_main_hold_exactly_the_folder_and_keeps_the_sealed_
     assert all(branch == "run-run-1-prepare-clean" for _, _, branch, _ in lake.writes)   # nothing written to main
     (tag, commit), = tags(lake).items()
     assert tag == kept("run-1", commit) and lake.tree(REPO, commit) == ONE and commit != version
+    # the merge that moved `latest` names the version it promoted, so the data store never expires that version
+    assert client.commit_info(REPO, version)["metadata"]["kaos.promoted"] == commit
 
 
 def test_a_run_that_does_not_promote_seals_a_version_and_leaves_latest_alone(lake, client, tmp_path):

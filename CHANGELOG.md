@@ -45,6 +45,8 @@ template.** Nothing in kaos-lib converts an old app.
   is created.
 
 ### Changed
+- The merge that moves `latest` records which version it promoted (`kaos.promoted` on that commit), so the platform
+  knows a promoted version and never expires it.
 - A step that makes a dataset uploads only the files that differ from `latest` and from the newest version an earlier run
   sealed in it: a file with the same path, size and content is copied inside the data store, and a file that cannot be
   copied is uploaded. Every run still makes its own version and tag. The log line says how many were reused. Models and
