@@ -83,3 +83,11 @@ def test_every_fixture_is_within_its_cap_by_cost(name):
         assert lock.cost(text) <= step.CONTEXT_CAP
     if name.startswith("result-"):
         assert lock.cost(text) <= step.RESULT_CAP
+
+
+def test_a_produced_datasets_repository_is_dataset_app_name():
+    """The contract's ruling: the engine writes it, and the one function that spells it for local runs agrees."""
+    from kaos_lib import datasets
+    context = load("context-no-upstream")
+    entry, = [p for p in context["produces"] if p["type"] == "dataset"]
+    assert entry["repo"] == datasets.produced_repo(context["app"], entry["name"]) == "dataset-hera-demo-embeddings"

@@ -125,6 +125,8 @@ def test_a_sealed_commit_is_not_reused_once_main_has_moved(lake, client, tmp_pat
 
 
 def test_two_promoting_runs_the_second_is_refused_restages_and_main_is_never_a_mix(lake, client, tmp_path):
+    if hasattr(lake, "server") and not lake.server.is_kaos_lake:
+        pytest.skip("needs kaos-lake: upstream lakeFS ignores expected_head")
     a = folder(tmp_path, {"only-a.bin": b"a", "shared.bin": b"from a"}, "a")
     b = folder(tmp_path, {"only-b.bin": b"b", "shared.bin": b"from b"}, "b")
     real, seen = client.merge, []
@@ -290,7 +292,7 @@ def test_names_of_the_branch_and_the_tag():
 @pytest.fixture
 def started(lake, monkeypatch, tmp_path):
     lake.add_repo("dataset-raw-images", metadata={"kaos.kind": "dataset"}, files={"x.bin": b"x"})
-    lake.add_repo("dataset-embeddings", metadata={"kaos.kind": "dataset"})
+    lake.add_repo("dataset-hera-demo-embeddings", metadata={"kaos.kind": "dataset"})
     lake.add_repo("outputs-hera-demo", metadata={"kaos.kind": "outputs"})
     monkeypatch.setattr(step, "_connect", lambda: lake.client())
 
@@ -312,44 +314,44 @@ def result_file():
 
 @pytest.mark.parametrize("context,promoted", [("context-no-upstream", False), ("context-promote", True)])
 def test_a_step_that_produces_a_dataset_seals_it_and_promotes_only_when_the_run_asks(started, lake, context, promoted):
-    first = lake.head("dataset-embeddings")
+    first = lake.head("dataset-hera-demo-embeddings")
     started(context)
     step.input("raw")
     (step.output("embeddings") / "e.npy").write_bytes(b"emb")
     step.result(rows=1)
     got = json.loads(result_file().read_text())
     commit = got["writes"][0]["commit"]
-    assert got["writes"] == [{"name": "embeddings", "type": "dataset", "repo": "dataset-embeddings",
+    assert got["writes"] == [{"name": "embeddings", "type": "dataset", "repo": "dataset-hera-demo-embeddings",
                               "commit": commit}]
-    assert lake.tree("dataset-embeddings", commit) == {"e.npy": b"emb"}
-    assert (lake.head("dataset-embeddings") == commit) is promoted
-    assert (lake.head("dataset-embeddings") == first) is not promoted
-    _, meta = lake.commit_meta("dataset-embeddings", commit)
+    assert lake.tree("dataset-hera-demo-embeddings", commit) == {"e.npy": b"emb"}
+    assert (lake.head("dataset-hera-demo-embeddings") == commit) is promoted
+    assert (lake.head("dataset-hera-demo-embeddings") == first) is not promoted
+    _, meta = lake.commit_meta("dataset-hera-demo-embeddings", commit)
     assert meta["kaos.read.raw"] == lake.head("dataset-raw-images") and meta["kaos.step"] == "prepare"
 
 
 def two_outputs(c):
-    c["produces"] = [{"name": "embeddings", "type": "dataset", "repo": "dataset-embeddings", "promote": True},
+    c["produces"] = [{"name": "embeddings", "type": "dataset", "repo": "dataset-hera-demo-embeddings", "promote": True},
                      {"name": "second", "type": "dataset", "repo": "dataset-missing"}]
     return c
 
 
 def test_a_step_that_fails_while_sealing_moves_no_latest(started, lake):
     """The first output is promoted only after every output is sealed: the second one cannot be, so nothing moves."""
-    first = lake.head("dataset-embeddings")
+    first = lake.head("dataset-hera-demo-embeddings")
     started(edit=two_outputs)
     (step.output("embeddings") / "e.npy").write_bytes(b"emb")
     (step.output("second") / "s").write_bytes(b"s")
     with pytest.raises(StepError, match="dataset-missing does not exist"):
         step.result()
-    assert lake.head("dataset-embeddings") == first and lake.tree("dataset-embeddings", "main") == {}
-    assert not result_file().exists() and set(lake.repos["dataset-embeddings"]["branches"]) == {"main"}
+    assert lake.head("dataset-hera-demo-embeddings") == first and lake.tree("dataset-hera-demo-embeddings", "main") == {}
+    assert not result_file().exists() and set(lake.repos["dataset-hera-demo-embeddings"]["branches"]) == {"main"}
 
 
 def test_a_step_that_fails_while_promoting_the_second_dataset_has_moved_the_first(started, lake, monkeypatch):
     """The one case that cannot be undone (two repositories, two merges): documented, and the step still fails."""
     lake.add_repo("dataset-second", metadata={"kaos.kind": "dataset"})
-    first, real = lake.head("dataset-embeddings"), lake.client
+    first, real = lake.head("dataset-hera-demo-embeddings"), lake.client
 
     def edit(c):
         two_outputs(c)["produces"][1].update(repo="dataset-second", promote=True)
@@ -368,7 +370,7 @@ def test_a_step_that_fails_while_promoting_the_second_dataset_has_moved_the_firs
     (step.output("second") / "s").write_bytes(b"s")
     with pytest.raises(LakeFSError):
         step.result()
-    assert lake.head("dataset-embeddings") != first and not result_file().exists()
+    assert lake.head("dataset-hera-demo-embeddings") != first and not result_file().exists()
     assert lake.tree("dataset-second", "main") == {}
 
 
@@ -408,7 +410,7 @@ def test_a_dataset_may_not_hold_a_file_in_the_platforms_folder(started, lake):
     (out / ".kaos" / "notes").write_bytes(b"x")
     with pytest.raises(StepError, match=r"output 'embeddings' holds a file in \.kaos/, which the platform keeps"):
         step.result()
-    assert lake.repos["dataset-embeddings"].get("commit_log", []) == []
+    assert lake.repos["dataset-hera-demo-embeddings"].get("commit_log", []) == []
 
 
 def test_the_next_step_reads_exactly_what_the_step_before_wrote(started, lake, monkeypatch):
@@ -425,7 +427,7 @@ def test_the_next_step_reads_exactly_what_the_step_before_wrote(started, lake, m
     step.start()
     assert (step.input("embeddings") / "e.npy").read_bytes() == b"emb"
     assert [r.as_dict() for r in lock.current().reads] == [
-        {"name": "embeddings", "repo": "dataset-embeddings", "owner": None,
+        {"name": "embeddings", "repo": "dataset-hera-demo-embeddings", "owner": None,
          "ref": written["writes"][0]["commit"], "commit": written["writes"][0]["commit"]}]
 
 
@@ -433,7 +435,7 @@ def test_an_app_that_may_not_write_says_so_and_a_rejected_credential_says_that(s
     started()
     (step.output("embeddings") / "e.npy").write_bytes(b"emb")
     lake.deny = "refused"  # kaos-lake answers a policy refusal with 401 and "insufficient permissions"
-    with pytest.raises(StepError, match="this app may not write dataset-embeddings: only what the step declares"):
+    with pytest.raises(StepError, match="this app may not write dataset-hera-demo-embeddings: only what the step declares"):
         step.result()
     lake.deny = 401          # a credential the server does not know
     with pytest.raises(StepError, match=r"lakeFS rejected the credential this step was given, or it has expired. "

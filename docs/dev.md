@@ -35,8 +35,9 @@ For each step of `pipeline.py`:
    the link to install it and carries on with `pip`; it never installs `uv` for you.
 4. **Adds kaos-lib** to a step that uses it (its Dockerfile declares `ARG KAOS_LIB_PACKAGE`, or its code imports
    `kaos_lib`). A step that does not, such as a step that needs only PyYAML, does not get it.
-5. **Writes `steps/<name>/.vscode/settings.json`** so VS Code picks that environment when you open the step's folder
-   (`code steps/data_check`). An existing settings file is merged, not replaced; one with comments in it is left alone.
+5. **With `--vscode`, writes `steps/<name>/.vscode/settings.json`** so VS Code picks that environment when you open
+   the step's folder (`code steps/data_check`). An existing settings file is merged, not replaced; one with comments
+   in it is left alone. Without `--vscode` nothing is written outside `.venv`.
 
 Run it again whenever you like: an environment whose dependencies did not change is left as it is (`up-to-date`).
 
@@ -47,7 +48,7 @@ takes, in this order:
 
 | Order | Source | How |
 |---|---|---|
-| 1 | what you pass | `--kaos-lib "kaos-lib[zitadel]==0.4.0rc20"` (a whole pip requirement) |
+| 1 | what you pass | `--kaos-lib "kaos-lib[zitadel]==0.5.0rc1"` (a whole pip requirement), or the path of a kaos-lib checkout, wheel or archive on your machine |
 | 2 | the platform's context file | `--context pipeline-context.yaml`: its `kaosLib.spec` |
 | 3 | your Dockerfile's default | the value of `ARG KAOS_LIB_PACKAGE="..."` |
 | 4 | the installed `kaosctl` | the same version as the command you are running |
@@ -67,7 +68,8 @@ include them. Training on a laptop is rarely the point; trying a step's code on 
 | `[path]` | your app folder (default: the current folder) |
 | `--step NAME` | set up only this step; repeat for more |
 | `--all` | include steps with large dependencies |
-| `--kaos-lib REQUIREMENT` | the kaos-lib to install |
+| `--kaos-lib REQUIREMENT` or `PATH` | the kaos-lib to install |
+| `--vscode` | also write `.vscode/settings.json` in each step folder |
 | `--context FILE` | the platform's context file |
 
 Exit code `0` when every selected step is ready, `1` when one failed (the installer's output is printed).

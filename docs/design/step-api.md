@@ -8,7 +8,7 @@ The sections below are the design as it was reviewed. Where the implementation d
 
 | Topic | As built |
 |---|---|
-| Contract | `docs/step-contract.md` of kaos-hpc-operator at `5ad1f92`; fixtures copied to `tests/contract_fixtures/` by `sync.py`, pinned by `SHA256SUMS` |
+| Contract | `docs/step-contract.md` of kaos-hpc-operator (branch `prd1911/engine-contract` at `00f134f`); fixtures copied to `tests/contract_fixtures/` by `sync.py`, pinned by `SHA256SUMS` |
 | Caps | Counted by cost (`lock.cost`: every quote and backslash counts twice). Context 96 KiB in `start()`; result 8 KiB in `result()` |
 | Wire form | Also writes `&`, `<` and `>` inside strings as unicode escapes |
 | Absent | `upstream(step, optional=True)` and `input(name, optional=True)` return `None`; without it both raise, naming the step. `start()` failures are one line on stderr and exit 1 |

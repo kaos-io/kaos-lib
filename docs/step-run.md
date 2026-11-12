@@ -63,7 +63,7 @@ Done: prepare exited 0. Next: kaosctl step run <the step that needs prepare>, or
 | `--input NAME=FOLDER` or `NAME=REPO@REF` | what the step gets for the input `NAME`: a local folder, or a small sample of a dataset version (needs `kaosctl login`) |
 | `--sample-mb MB` | the most a sample downloads |
 | `--upstream STEP=JSON` or `STEP=@FILE` | the result of a step this one needs |
-| `--kaos-lib REQUIREMENT`, `--context FILE` | as in [`kaosctl dev`](dev.md), for the environment it may have to make |
+| `--kaos-lib REQUIREMENT` or `PATH`, `--context FILE` | as in [`kaosctl dev`](dev.md), for the environment it may have to make |
 
 The exit code is the step's own; `1` when the step could not be started (for example an unknown step name, or an
 input that was not given).

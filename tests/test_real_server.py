@@ -6,6 +6,7 @@ import pytest
 
 import real_lakefs
 from kaos_lib import writer
+from kaos_lib.lakefs import LakeFS
 from kaos_lib.errors import AuthError, LakeFSError, StepError
 
 REPO = "outputs-myapp"
@@ -145,6 +146,19 @@ def test_two_promoting_runs_the_second_restages_and_main_is_never_a_mix(lake, tm
     version = write(client, "dataset-written-4", b, "run-b")
     assert seen == ["a", 412] and version == client.branch_commit("dataset-written-4", "main")
     assert tree(client, "dataset-written-4", "main") == ["only-b.bin", "shared.bin"]
+
+
+def test_a_refusal_and_a_rejected_credential_are_told_apart(lake):
+    from kaos_lib import credentials
+    from kaos_lib.errors import PermissionDenied
+    lake.wait_for_dataset("other", "dataset-others-1")
+    with pytest.raises(PermissionDenied, match="not allowed"):               # kaos-lake answers a policy refusal with 401
+        lake.app_client("writer").create_branch("dataset-others-1", "run-x", "main")
+    wrong = LakeFS(lake.url, credentials.Credential(access_key=real_lakefs.APPS["writer"]["access_key_id"],
+                                                    secret_key="wrong"), concurrency=2)
+    with pytest.raises(AuthError, match="rejected the credential") as err:
+        wrong.create_branch("dataset-written-1", "run-x", "main")
+    assert not isinstance(err.value, PermissionDenied)
 
 
 def test_an_app_cannot_write_a_dataset_another_app_declares(lake, tmp_path):

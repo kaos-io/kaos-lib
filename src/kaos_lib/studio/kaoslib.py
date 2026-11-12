@@ -45,15 +45,20 @@ def _indexes_for(requirement) -> list:
     return [channel.INDEXES[kind]] if kind in channel.INDEXES else list(channel.INDEXES.values())
 
 
-def _local(text: Optional[str]) -> Optional[str]:
-    """``--kaos-lib`` naming a checkout, a wheel or an archive on this machine: the requirement that installs it."""
+def _local(text: Optional[str]) -> Optional[KaosLibSpec]:
+    """``--kaos-lib`` naming a checkout, a wheel or an archive on this machine: the spec that installs it. It is the
+    person's own file, so unlike a spec the platform recommends it may be a ``file:`` address."""
     path = pathlib.Path(text).expanduser() if text else None
-    return f"{channel.DIST}[zitadel] @ {path.resolve().as_uri()}" if path is not None and path.exists() else text
+    if path is None or not path.exists():
+        return None
+    return KaosLibSpec(f"{channel.DIST}[zitadel] @ {path.resolve().as_uri()}", [], "--kaos-lib (a path on this machine)")
 
 
 def resolve(flag: Optional[str] = None, context: Optional[str] = None, dockerfile_default: Optional[str] = None) -> KaosLibSpec:
     """Choose the kaos-lib requirement (see the module text for the order)."""
-    for text, source in ((_local(flag), "--kaos-lib"), (_context_spec(context), f"the context file {context}"),
+    if _local(flag):
+        return _local(flag)
+    for text, source in ((flag, "--kaos-lib"), (_context_spec(context), f"the context file {context}"),
                          (dockerfile_default, "the default of ARG KAOS_LIB_PACKAGE in the Dockerfile")):
         if text:
             try:

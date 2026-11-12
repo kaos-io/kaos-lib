@@ -179,7 +179,7 @@ def lake(fake):
     raw = fake.add_repo("dataset-raw-images", metadata={"kaos.kind": "dataset"},
                         files={"a/1.bin": b"one", "b/2.bin": b"two"})
     labels = fake.add_repo("dataset-labels", metadata={"kaos.kind": "dataset"}, files={"labels.csv": b"x,y\n"})
-    made = fake.add_repo("dataset-embeddings", metadata={"kaos.kind": "dataset"}, files={"e.npy": b"emb"})
+    made = fake.add_repo("dataset-hera-demo-embeddings", metadata={"kaos.kind": "dataset"}, files={"e.npy": b"emb"})
     fake.add_repo("outputs-hera-demo", metadata={"kaos.kind": "outputs", "kaos.app": "hera-demo"})
     commits = {"1" * 64: raw, "2" * 64: labels, "3" * 64: made}
 

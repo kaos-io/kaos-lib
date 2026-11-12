@@ -228,3 +228,14 @@ def test_should_build_a_real_environment_offline_for_a_step_with_no_dependencies
         pytest.skip("this machine cannot create a virtual environment here: " + capsys.readouterr().out[-300:])
     py = pyenv.venv_python(repo / "steps/data_summary/.venv")
     assert py.is_file() and (repo / "steps/data_summary/.venv/.kaos-env.json").is_file()
+
+
+def test_should_install_a_kaos_lib_from_a_path_on_this_machine(tmp_path):
+    checkout = tmp_path / "kaos-lib"
+    checkout.mkdir()
+    spec = kaoslib.resolve(str(checkout))
+    assert spec.requirement == f"kaos-lib[zitadel] @ {checkout.resolve().as_uri()}" and spec.index_urls == []
+    wheel = tmp_path / "kaos_lib-0.5.0-py3-none-any.whl"
+    wheel.write_bytes(b"x")
+    assert kaoslib.resolve(str(wheel)).requirement.endswith(wheel.resolve().as_uri())
+    assert kaoslib.resolve("kaos-lib==0.5.0").requirement.endswith("==0.5.0")           # a requirement stays one
