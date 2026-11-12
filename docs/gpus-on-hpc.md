@@ -75,7 +75,7 @@ count each time and keeps nothing about it in the checkpoint.
 
 - `gpu=True` on the step, so that the run form offers it the GPU classes. Without it the form offers the CPU classes only.
 - `<step>-class` on the run form: the class of the GPU partition. Each class names its machine in its description.
-- `<step>-walltime`: the time limit. Every step has one; without `walltime=` it is 4 hours.
+- `<step>-walltime` on the run form: the time limit. Every step has one. `walltime=` in `pipeline.py` is only the default of this field, and without it the default is 4 hours.
 
 ## Mistakes and what you see
 

@@ -10,7 +10,7 @@ files into a dataset, so it must produce one.
 | | |
 |---|---|
 | **Must** | produce at least one dataset: `produces=[dataset("name")]`. Write at least one file into each output before `step.result()` |
-| **May** | read datasets (`inputs=`) and earlier steps (`needs=`); also produce a model or an artifact; set `walltime=`, `when=`, `gpu=True`, `resumable=` |
+| **May** | read datasets (`inputs=`) and earlier steps (`needs=`); also produce a model or an artifact; set `walltime=` (the default of the run form's time limit), `when=`, `gpu=True`, `resumable=` |
 | **Must not** | nothing more than every step must keep to ([the contract](contract.md#what-you-write)) |
 
 ## Where it runs

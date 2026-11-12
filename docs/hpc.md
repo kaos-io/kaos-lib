@@ -41,7 +41,7 @@ one ends at its limit.
 
 A step that asks for more time than the longest run the site allows is not cut. If it can continue, it runs as several
 capped jobs, one after the other, each from the last checkpoint. If it cannot, it is refused before it is sent: make it
-resumable, or shorten `walltime=`. `kaosctl lint` reports this before you push (`L-E01`, `L-E02`).
+resumable, or shorten the limit in the field `<step>-walltime` of the run form (and its default, `walltime=`). `kaosctl lint` reports this before you push (`L-E01`, `L-E02`).
 
 A step that waits or is refused has a reason in its status:
 [Why an HPC (Slurm) step waits or is refused](when-something-goes-wrong.md#why-an-hpc-slurm-step-waits-or-is-refused) lists them.

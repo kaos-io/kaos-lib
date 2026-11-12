@@ -541,7 +541,7 @@
       "id": "L-I01",
       "name": "NodeSharing",
       "level": "info",
-      "fix": "Nothing to fix. Give this GPU step a walltime= close to what it needs, so it can join a node that is already running.",
+      "fix": "Nothing to fix. Choose the time limit on the run form (<step>-walltime). If this step always needs about the same time, put it in walltime= so the form starts with a good default.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
     },
     {

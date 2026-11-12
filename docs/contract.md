@@ -235,7 +235,7 @@ What a run keeps and removes, and when, is in [What is kept, and for how long](d
 | Edit files of an input | `step.input("x", writable=True)` | [Reference](reference.md#step-api-kaos_libstep) |
 | Use a scratch folder that is never saved | `step.workdir()` | [Cheat sheet](cheat-sheet.md) |
 | Ask for a GPU | `gpu=True` | [Bigger machines](bigger-machines.md) |
-| Set the longest a step may run, anywhere | `walltime="12h"`, the default of the field `<step>-walltime` | [Long jobs](long-jobs.md#the-time-limit) |
+| Set the longest a step may run, anywhere | the field `<step>-walltime` of the run form; `walltime="12h"` in code only sets its default | [Long jobs](long-jobs.md#the-time-limit) |
 | Continue after an interruption | `checkpoint.load/save`, `resumable=`, `checkpoint_every=` | [Long jobs](long-jobs.md) |
 | End a GPU step that sits idle sooner or later | `idle_timeout=` | [Reference](reference.md#pipelinepy) |
 | Run a step many times, once for each combination of values | see [Sweeps](sweeps.md) | [Sweeps](sweeps.md) |

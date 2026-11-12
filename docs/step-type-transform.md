@@ -10,7 +10,7 @@ transforms produce a dataset.
 | | |
 |---|---|
 | **Must** | produce at least one thing: a dataset, a model or an artifact. Write at least one file into each output |
-| **May** | read datasets (`inputs=`) and earlier steps (`needs=`); produce any mix of dataset, model and artifact; set `walltime=`, `when=`, `gpu=True`, `resumable=` |
+| **May** | read datasets (`inputs=`) and earlier steps (`needs=`); produce any mix of dataset, model and artifact; set `walltime=` (the default of the run form's time limit), `when=`, `gpu=True`, `resumable=` |
 | **Must not** | nothing more than every step must keep to ([the contract](contract.md#what-you-write)) |
 
 ## Where it runs

@@ -51,8 +51,8 @@
           "column": 85
         }
       },
-      "message": "Step 'train' declares no walltime=, so it uses the default limit of 4 hours. A step joins a node that another step of your project already holds only if the node has the step's limit and about six minutes left, so a step with the default limit more often starts a node of its own.",
-      "fix": "Nothing to fix. Give this GPU step a walltime= close to what it needs, so it can join a node that is already running.",
+      "message": "Step 'train' has its time limit chosen on the run form (the field '<step>-walltime'), which starts at 4 hours because pipeline.py sets no walltime=. A GPU step joins a node that is already running only if that node has the step's limit and a few minutes left, so a limit close to what the step needs shares more often.",
+      "fix": "Nothing to fix. Choose the time limit on the run form (<step>-walltime). If this step always needs about the same time, put it in walltime= so the form starts with a good default.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
     },
     {

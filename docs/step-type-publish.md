@@ -10,7 +10,7 @@ keeps, so it produces nothing. It reads what the step before it made, and hands 
 | | |
 |---|---|
 | **Must** | nothing about what it produces |
-| **May** | read earlier steps (`needs=`) and datasets (`inputs=`); hand on values, such as the name it delivered under; set `walltime=`, `when=`, `gpu=True` |
+| **May** | read earlier steps (`needs=`) and datasets (`inputs=`); hand on values, such as the name it delivered under; set `walltime=` (the default of the run form's time limit), `when=`, `gpu=True` |
 | **Must not** | produce anything: no `produces=` |
 
 ## Where it runs

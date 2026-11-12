@@ -25,8 +25,8 @@ You add a `train` step that makes several passes over `clean`, and keeps its pla
 - `checkpoint.save(state)` writes it into the checkpoint folder, atomically. Save at a point where a restart is safe.
 - `checkpoint.stop_requested()` is true when the platform wants the machine back. `checkpoint.exit_for_restart()` ends
   the step with exit code 85: "saved, run me again". The platform starts it again, with the folder as you left it.
-- `checkpoint_every="10m"` in `pipeline.py` makes the platform copy the folder every ten minutes
-  ([Reference](reference.md#pipelinepy)).
+- The platform copies the folder at the interval of the run form's field `<step>-checkpoint-every`. `checkpoint_every="10m"`
+  in `pipeline.py` is only its default ([Reference](reference.md#pipelinepy)).
 
 ## Test the stop on your machine
 
@@ -73,7 +73,7 @@ A step that reaches its limit is ended. What happens next depends on `resumable=
 | declares none | it is run again from the start when its machine is lost, at most twice; a step that reaches its limit ends, and the run fails |
 
 So a training that needs 30 hours and has a limit of 12 hours is resumable, saves checkpoints, and runs three times. A
-`train` step that sets `walltime=` and is not resumable gets a warning from `kaosctl lint`
+`train` step that has a time limit set in `pipeline.py` and is not resumable gets a warning from `kaosctl lint`
 ([L-W06](lint/L-W06.md)). `resumable=True` also makes the step save 10 minutes before its limit; the field
 `<step>-walltime` must then be longer than that lead.
 

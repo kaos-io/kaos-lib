@@ -10,7 +10,7 @@ checkpoints, so that a run cut short continues instead of starting over.
 | | |
 |---|---|
 | **Must** | produce at least one model: `produces=[model("name")]`. Write at least one file into each output |
-| **May** | read datasets (`inputs=`) and earlier steps (`needs=`); also produce artifacts (a log, plots) or a dataset; set `gpu=True`, `walltime=`, `resumable=`, `checkpoint_every=`, `idle_timeout=`, `when=` |
+| **May** | read datasets (`inputs=`) and earlier steps (`needs=`); also produce artifacts (a log, plots) or a dataset; set `gpu=True`, `walltime=` (the default of the run form's time limit), `resumable=`, `checkpoint_every=`, `idle_timeout=`, `when=` |
 | **Must not** | nothing more than every step must keep to ([the contract](contract.md#what-you-write)) |
 
 ## Where it runs
@@ -23,8 +23,9 @@ machines: the run form offers it no HPC class.
 - Checks, when the pipeline is built, that `produces=` holds a model.
 - Keeps the model of each run in its own folder, `<name>/<experiment>/<run>/`, so a later run never overwrites it
   ([models and artifacts](data-writes.md#models-and-artifacts)).
-- Offers the run form's `<step>-walltime` and, when the step declares `checkpoint_every=`, `<step>-checkpoint-every`.
-  Without `walltime=` the limit is 4 hours.
+- Adds the run form's field `<step>-walltime`, where whoever starts the run chooses the time limit. `walltime=` in
+  `pipeline.py` is only its default, and without it the default is 4 hours. When the step declares `checkpoint_every=`, the
+  form also has `<step>-checkpoint-every`, which `checkpoint_every=` defaults.
 - Runs a step that declares `resumable=` again, from its newest checkpoint, when it reaches its time limit, loses its
   machine or exits with code 85: at most 5 times after the first run ([Long jobs](long-jobs.md)).
 - Ends a GPU step that shows no GPU use and no new log line for 20 minutes, as idle (`idle_timeout=` changes it).

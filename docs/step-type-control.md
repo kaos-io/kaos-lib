@@ -10,7 +10,7 @@ on. It has no `inputs=` and no `produces=`.
 | | |
 |---|---|
 | **Must** | nothing about what it produces |
-| **May** | read settings (`reads=`) and earlier steps (`needs=`); hand on values; set `walltime=`, `when=`, `gpu=True` |
+| **May** | read settings (`reads=`) and earlier steps (`needs=`); hand on values; set `walltime=` (the default of the run form's time limit), `when=`, `gpu=True` |
 | **Must not** | take `inputs=`, or produce anything |
 
 ## Where it runs

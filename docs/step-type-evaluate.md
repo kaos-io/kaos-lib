@@ -10,7 +10,7 @@ not produce a dataset or a model: a step that makes a dataset is a `transform`, 
 | | |
 |---|---|
 | **Must** | nothing about what it produces |
-| **May** | produce artifacts (reports, plots, tables); read datasets (`inputs=`) and earlier steps (`needs=`); hand on values such as a score; set `gpu=True`, `walltime=`, `when=` |
+| **May** | produce artifacts (reports, plots, tables); read datasets (`inputs=`) and earlier steps (`needs=`); hand on values such as a score; set `gpu=True`, `walltime=` (the default of the run form's time limit), `when=` |
 | **Must not** | produce a dataset or a model |
 
 ## Where it runs

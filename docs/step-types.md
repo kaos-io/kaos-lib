@@ -20,7 +20,7 @@ the contract, where it runs, what the platform does, a complete example, and the
 | [`control`](step-type-control.md) | steering the run | no | nothing | nothing | `inputs=`, any `produces=` | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class; a failure stops the steps that need it |
 
 Every kind keeps to the rules that every step keeps to: a name and a folder, `step.start()` first and `step.result()`
-last ([Your contract with the platform](contract.md#what-you-write)). Every kind can set `walltime=` and `when=`, and can
+last ([Your contract with the platform](contract.md#what-you-write)). Every kind has a time limit that is chosen on the run form (`walltime=` only sets its default), can use `when=`, and can
 end itself with `step.skip("reason")` ([Conditions and skipping](conditions-and-skipping.md)). A step that produces a
 dataset runs on the platform's own machines, whatever its kind ([Produce a dataset](produce-a-dataset.md#where-it-runs)).
 
