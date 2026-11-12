@@ -82,7 +82,7 @@ prove the pipeline is right.
 | warning | [L-D06 HugeLayers](lint/L-D06.md) | `COPY . .`, baked-in data, pip without `--no-cache-dir`, apt without cleanup |
 | info | [L-D07 RootUser](lint/L-D07.md) | the image runs as root |
 | warning | [L-D08 NoCudaForGpuStep](lint/L-D08.md) | a GPU step whose image shows no CUDA support, or whose plain base sets no NVIDIA driver path |
-| info | [L-I01 NodeSharing](lint/L-I01.md) | a GPU step with no limit cannot share a node |
+| info | [L-I01 NodeSharing](lint/L-I01.md) | a GPU step with no `walltime=` uses the 4 hour default and may start a node of its own |
 | info | [L-I02 LearnedLimits](lint/L-I02.md) | a short limit may be shortened further |
 | info | [L-I04 StepsBuiltInALoop](lint/L-I04.md) | steps built in a loop were not read by the checks |
 | info | [L-I03 Schedules](lint/L-I03.md) | skipped in every report: a pipeline cannot declare a schedule |

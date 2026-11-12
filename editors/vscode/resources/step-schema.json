@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "2.3.0",
+  "ruleset_version": "2.4.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -541,7 +541,7 @@
       "id": "L-I01",
       "name": "NodeSharing",
       "level": "info",
-      "fix": "Nothing to fix. Set walltime, for example walltime='4h', to let the step share a node.",
+      "fix": "Nothing to fix. Give this GPU step a walltime= close to what it needs, so it can join a node that is already running.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
     },
     {

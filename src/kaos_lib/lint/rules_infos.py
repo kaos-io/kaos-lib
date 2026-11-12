@@ -13,13 +13,14 @@ from .registry import Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes
 
 
 @rule("L-I01", "NodeSharing", INFO,
-      "Nothing to fix. Set walltime, for example walltime='4h', to let the step share a node.")
+      "Nothing to fix. Give this GPU step a walltime= close to what it needs, so it can join a node that is already running.")
 def node_sharing(ctx: LintContext) -> Iterable[Hit]:
     for step in gpu_steps(ctx):
         if step.value("walltime", None) is None:
             yield Hit(ctx.file, ctx.span(step.call),
-                      f"{step_label(step)} declares no time limit, so it cannot be offered as a guest on a node "
-                      f"another job already holds on the HPC (Slurm) site.")
+                      f"{step_label(step)} declares no walltime=, so it uses the default limit of 4 hours. A step joins a node "
+                      f"that another step of your project already holds only if the node has the step's limit and "
+                      f"about six minutes left, so a step with the default limit more often starts a node of its own.")
 
 
 @rule("L-I02", "LearnedLimits", INFO,

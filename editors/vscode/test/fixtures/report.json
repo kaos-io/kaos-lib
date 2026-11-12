@@ -51,8 +51,8 @@
           "column": 85
         }
       },
-      "message": "Step 'train' declares no time limit, so it cannot be offered as a guest on a node another job already holds on the HPC (Slurm) site.",
-      "fix": "Nothing to fix. Set walltime, for example walltime='4h', to let the step share a node.",
+      "message": "Step 'train' declares no walltime=, so it uses the default limit of 4 hours. A step joins a node that another step of your project already holds only if the node has the step's limit and about six minutes left, so a step with the default limit more often starts a node of its own.",
+      "fix": "Nothing to fix. Give this GPU step a walltime= close to what it needs, so it can join a node that is already running.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
     },
     {

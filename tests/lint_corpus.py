@@ -143,7 +143,7 @@ CASES = {
     "L-I01": (
         repo('    t = step("work", kind="evaluate", gpu=True)\n'),
         repo('    t = step("work", kind="evaluate", gpu=True, walltime="4h")\n'),
-        None, (4, "no time limit")),
+        None, (4, "no walltime=")),
     "L-I02": (
         repo('    t = step("work", kind="evaluate", gpu=True, walltime="90m")\n'),
         repo('    t = step("work", kind="evaluate", gpu=True, walltime="3h")\n'),
