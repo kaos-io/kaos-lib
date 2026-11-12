@@ -266,3 +266,49 @@ def test_an_attribute_call_in_produces_is_the_same_as_a_name(tmp_path):
     assert findings(tmp_path, body) == []
     body = '    import kubecore.authoring as au\n    a = step("a", kind="train", produces=[au.model("kaos-m")])\n'
     assert any("names starting with 'kaos-'" in m for m in messages(tmp_path, body))
+
+
+# ------------------------------------------------------------------------- --fix: parenthesised values, line endings, guard
+@pytest.mark.parametrize("body", [
+    '    a = step(name=("a"), outputs=["x"])\n',
+    '    a = step(name=(\n "a"\n ), cmd="x")\n',
+    '    a = step(("a"), outputs=["x"])\n',
+    '    a = step(("a" \n "b"), outputs=["x"])\n',
+    '    a = step(name="a", outputs=(["x"]))\n',
+    '    a = step(name="a", outputs=(\n["x"]\n), cmd="y")\n',
+    '    a = step(name=(  # c\n "a"), cmd="y")\n',
+])
+def test_fix_places_edits_outside_the_parentheses_of_a_parenthesised_argument(body):
+    fixed, changes = fix_pipeline(HEADER + body)
+    compile(fixed, "pipeline.py", "exec")
+    assert changes and KIND_PLACEHOLDER in fixed and "outputs" not in fixed
+    assert fix_pipeline(fixed)[0] == fixed
+
+
+@pytest.mark.parametrize("eol", ["\r", "\r\n"])
+def test_fix_handles_cr_and_crlf_line_endings(eol):
+    text = (HEADER + '    x = 1\n    a = step(name="a", outputs=["x"], cmd="y")\n').replace("\n", eol)
+    fixed, changes = fix_pipeline(text)
+    assert len(changes) == 2
+    assert fixed == (HEADER + f'    x = 1\n    a = step(name="a", {PLACE}, cmd="y")\n').replace("\n", eol)
+    compile(fixed, "pipeline.py", "exec")
+
+
+def test_fix_on_disk_keeps_crlf_endings(tmp_path):
+    root = write_repo(tmp_path, repo(""))
+    (root / "pipeline.py").write_bytes((HEADER + '    a = step("a", outputs=["x"])\n').replace("\n", "\r\n").encode())
+    kaosctl_lint([str(root), "--fix"])
+    assert (root / "pipeline.py").read_bytes() == \
+        (HEADER + f'    a = step("a", {PLACE})\n').replace("\n", "\r\n").encode()
+
+
+def test_fix_writes_nothing_when_the_fixed_text_would_not_compile(tmp_path, capsys, monkeypatch):
+    from kaos_lib.lint import cli as lint_cli
+    root = write_repo(tmp_path, {**repo(""), "pipeline.py": BEFORE})
+    before = (root / "pipeline.py").read_bytes()
+    monkeypatch.setattr(lint_cli, "fix_pipeline", lambda text, rel: (text + "    a = step(name=(\"a\", kind=\"x\")\n",
+                                                                     ["line 4: made up"]))
+    assert kaosctl_lint([str(root), "--fix"]) != 0
+    assert (root / "pipeline.py").read_bytes() == before
+    err = capsys.readouterr().err
+    assert "could not be applied to pipeline.py" in err and "by hand" in err and "fixed pipeline.py" not in err

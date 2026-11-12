@@ -518,13 +518,14 @@ def test_result_puts_reads_and_writes_on_the_mlflow_run_as_the_steps_own_file(mo
 
 
 # -------------------------------------------------------------------------------- a step must not end without one
-def run_entry(tmp_path, body, context="context-escapes"):
+def run_entry(tmp_path, body, context="context-escapes", pre="", stdout=False):
     script = tmp_path / "entry.py"
-    script.write_text("from kaos_lib import step\nstep.WORK = %r\nstep.RESULT_FILE = %r\nstep.start()\n%s\n"
-                      % (str(tmp_path / "work"), str(tmp_path / "work" / "output" / "kaos-result.json"), body))
+    script.write_text("%sfrom kaos_lib import step\nstep.WORK = %r\nstep.RESULT_FILE = %r\nstep.start()\n%s\n"
+                      % (pre, str(tmp_path / "work"), str(tmp_path / "work" / "output" / "kaos-result.json"), body))
     env = {**os.environ, "PYTHONPATH": str(pathlib.Path(kaos_lib.__file__).parent.parent), step.ENV: wire(context)}
     done = subprocess.run([sys.executable, str(script)], env=env, capture_output=True, text=True, timeout=120)
-    return done.returncode, done.stderr, tmp_path / "work" / "output" / "kaos-result.json"
+    result = tmp_path / "work" / "output" / "kaos-result.json"
+    return (done.returncode, done.stderr, result, done.stdout) if stdout else (done.returncode, done.stderr, result)
 
 
 ENDED = "ended without step.result()"
@@ -536,6 +537,11 @@ EXITS = [   # body, exit code, whether a result file exists, whether the "ended 
     ("import sys; sys.exit(3)", 3, False, False),
     ("import sys\ntry:\n    sys.exit(3)\nexcept SystemExit:\n    raise", 3, False, False),
     ("import sys; sys.exit('a message')", 1, False, False),
+    ("import sys; sys.exit(256)", 1, False, True),      # 8 bits only: 256 would end as 0
+    ("import sys; sys.exit(512)", 1, False, True),
+    ("import sys; sys.exit(257)", 1, False, False),
+    ("import sys; sys.exit('text')", 1, False, False),
+    ("import sys; sys.exit(None)", 1, False, True),
     ("import sys\ntry:\n    sys.exit(2)\nexcept SystemExit:\n    pass", 2, False, False),     # caught: keeps its code
     ("import argparse\ntry:\n    argparse.ArgumentParser().parse_args(['--nope'])\nexcept SystemExit:\n    pass", 2,
      False, False),
@@ -558,6 +564,14 @@ def test_a_step_ends_non_zero_without_a_result_and_keeps_the_exit_code_it_chose(
     assert got == code and file.exists() is has_result and (ENDED in err) is says, err
 
 
+def test_handlers_registered_before_start_run_and_those_after_run_once_when_the_step_has_no_result(tmp_path):
+    pre = "import atexit\natexit.register(lambda: print('BEFORE START'))\n"
+    body = "import atexit\natexit.register(lambda: print('AFTER START', flush=True))"
+    got, err, file, out = run_entry(tmp_path, body, pre=pre, stdout=True)
+    assert got == 1 and not file.exists() and ENDED in err
+    assert out.splitlines().count("BEFORE START") == 1 and out.splitlines().count("AFTER START") == 1
+
+
 def test_the_hook_is_taken_off_when_the_step_is_forgotten(monkeypatch):
     real_exit, real_hook = sys.exit, sys.excepthook
     begin(monkeypatch, wire("context-escapes"))
@@ -574,3 +588,31 @@ def test_result_after_a_failed_result_works_once(monkeypatch, lake):
     step.result()
     with pytest.raises(StepError, match=r"step.result\(\) was already called"):
         step.result()
+
+
+# ------------------------------------------------------------------ an output folder that is a link; a name that is both
+def test_an_output_folder_that_is_a_symlink_is_refused_and_nothing_is_deleted_through_it(monkeypatch, tmp_path):
+    begin(monkeypatch, wire("context-no-upstream"))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "keep").write_text("x")
+    folder = tmp_path / "work" / "kaos" / "outputs" / "embeddings"
+    folder.parent.mkdir(parents=True)
+    folder.symlink_to(elsewhere)
+    with pytest.raises(StepError, match=r"output 'embeddings'.*must be a real folder"):
+        step.output("embeddings")
+    assert (elsewhere / "keep").read_text() == "x" and folder.is_symlink()
+
+
+def test_a_step_whose_output_has_the_name_of_one_of_its_inputs_is_refused_at_start(monkeypatch, capsys):
+    context = fixture("context-no-upstream")
+    context["produces"][0]["name"] = "raw"                       # the step reads 'raw' and writes 'raw'
+    err = refused(capsys, monkeypatch, context)
+    assert "'raw'" in err and "output" in err and "input" in err and "different name" in err
+
+
+def test_an_output_named_like_an_input_of_a_needed_step_is_refused_at_start(monkeypatch, capsys):
+    context = fixture("context-one-upstream")
+    write = next(iter(context["upstream"].values()))["writes"][0]
+    context["produces"][0]["name"] = write["name"]
+    assert "different name" in refused(capsys, monkeypatch, context)

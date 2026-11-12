@@ -90,20 +90,29 @@ def _stdin_text(args) -> Optional[str]:
     return data.decode("utf-8", errors="replace")
 
 
-def _fix(args) -> None:
-    """Apply `fix_pipeline` to the pipeline file on disk and say what changed (on stderr: the report stays clean)."""
+def _fix(args) -> bool:
+    """Apply `fix_pipeline` to the pipeline file on disk and say what changed (on stderr: the report stays clean).
+    False when the fixed text would not be valid Python: then nothing is written and the fix is to be made by hand."""
     if args.stdin_path or args.from_report:
         raise ValueError("--fix rewrites the pipeline file on disk: it cannot be combined with --stdin-path or "
                          "--from-report")
     path = pathlib.Path(args.path) / args.pipeline
-    text = path.read_text(encoding="utf-8")
+    text = path.read_bytes().decode("utf-8")                       # bytes: the file's own line endings stay
     fixed, changes = fix_pipeline(text, args.pipeline)
-    if fixed != text:
-        path.write_text(fixed, encoding="utf-8")
-    for change in changes:
-        print(f"fixed {args.pipeline} {change}", file=sys.stderr)
-    if not changes:
-        print(f"nothing to fix in {args.pipeline}", file=sys.stderr)
+    applied = True
+    try:
+        compile(fixed, args.pipeline, "exec")
+    except (SyntaxError, ValueError):
+        applied = False
+        print(f"ERROR: the automatic fix could not be applied to {args.pipeline} (it would not be valid Python); "
+              f"{args.pipeline} is unchanged: make the changes by hand.", file=sys.stderr)
+    if applied:
+        if fixed != text:
+            path.write_bytes(fixed.encode("utf-8"))
+        for change in changes:
+            print(f"fixed {args.pipeline} {change}", file=sys.stderr)
+        if not changes:
+            print(f"nothing to fix in {args.pipeline}", file=sys.stderr)
     config = pathlib.Path(args.path) / ROOT_CONFIG
     if config.is_file():
         text = config.read_text(encoding="utf-8")
@@ -112,6 +121,7 @@ def _fix(args) -> None:
             config.write_text(fixed, encoding="utf-8")
         for change in changes:
             print(f"fixed {ROOT_CONFIG} {change}", file=sys.stderr)
+    return applied
 
 
 def run(args) -> int:
@@ -130,8 +140,7 @@ def run(args) -> int:
         if args.export_catalogue:
             pathlib.Path(args.export_catalogue).write_text(_catalogue(args).to_json(), encoding="utf-8")
             return EXIT_OK
-        if args.fix:
-            _fix(args)
+        fix_failed = args.fix and not _fix(args)
         if args.from_report:
             report = Report.from_json(pathlib.Path(args.from_report).read_text(encoding="utf-8"))
             if report.ruleset_version != RULESET_VERSION and args.expect_ruleset:
@@ -145,7 +154,7 @@ def run(args) -> int:
     _emit(args, {"json": report.to_json, "markdown": lambda: render.markdown(report, args.file_link_base),
                  "text": lambda: render.text(report),
                  "status": lambda: render.status_description(report) + "\n"}[args.format]())
-    return EXIT_ERRORS if report.errors else EXIT_OK
+    return EXIT_ERRORS if report.errors or fix_failed else EXIT_OK
 
 
 def main(argv: Optional[list] = None) -> int:

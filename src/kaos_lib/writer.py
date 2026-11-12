@@ -14,6 +14,11 @@
 Nothing is written to ``main`` directly. A step that dies half-way leaves uncommitted uploads on its branch and
 no version. A failed step moves no dataset's ``latest``, with one exception that cannot be closed: promoting two
 datasets is two merges in two repositories, and the second can fail after the first has moved.
+
+Order of promotion, in phase 2: the models and artifacts are merged into ``main`` of the outputs repository first,
+then the datasets. When a later promotion fails, a model or an artifact that is already merged stays on ``main``
+under its run-unique path ``<name>/<experiment>/<run>/`` while the step fails. Nothing refers to it, because the
+step publishes no result. A retry of the step replaces that folder with exactly what the retry wrote.
 """
 from __future__ import annotations
 
@@ -96,11 +101,20 @@ def discard(s: Sealed) -> None:
 
 def _earlier(s: Sealed) -> Optional[dict]:
     """The tag of a commit an earlier attempt of this step sealed that holds exactly this folder and was staged on
-    the head ``main`` has now (so promoting it cannot mix in what another run changed), or None."""
+    the head ``main`` has now (so promoting it cannot mix in what another run changed), or None.
+
+    Run and step names have hyphens, so a tag name alone does not say whose it is. A tag is a candidate only when it
+    is exactly ``<prefix>-<12 hex>``, those 12 characters start the commit it points at, and that commit's metadata
+    names this very run and step."""
+    own = re.compile(re.escape(s.tag_prefix) + "-([0-9a-f]{12})")
     for tag in s.client.tags(s.repo):
-        if tag["id"].startswith(s.tag_prefix + "-"):
-            commit = tag["commit_id"]
-            if s.client.commit_info(s.repo, commit).get("parents") == [s.head] \
+        found = own.fullmatch(tag["id"])
+        commit = tag["commit_id"]
+        if found and commit.startswith(found.group(1)):
+            info = s.client.commit_info(s.repo, commit)
+            meta = info.get("metadata") or {}
+            if meta.get("kaos.run") == s.meta.get("kaos.run") and meta.get("kaos.step") == s.meta.get("kaos.step") \
+                    and info.get("parents") == [s.head] \
                     and not _differences(s.client, s.repo, commit, s.files, s.prefix):
                 return tag
     return None

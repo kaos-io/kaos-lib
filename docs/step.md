@@ -102,7 +102,7 @@ export = step.upstream("export", optional=True)     # None when "export" did not
 Returns a local folder for something the step declared in `produces=`. It is empty each time the step starts, also
 on a retry on the same machine, so it never holds a file of an earlier attempt. Write files into it, and only your
 own: the platform keeps its records beside the folder, never in it. Nothing is saved until `step.result()`; every
-declared output must hold at least one file by then.
+declared output must hold at least one file by then. The name of an output must differ from the name of every input of the same step, and the folder must be a real folder, not a link: `step.start()` and `step.output()` refuse otherwise.
 
 | declared as | saved as |
 | --- | --- |
@@ -148,7 +148,7 @@ has happened. A retry of the step then finds the first already done and complete
   artifact and hand on its name.
 - Call it exactly once. A step with nothing to hand on calls `step.result()`.
 - Value names that start with `kaos-` are the platform's.
-- A step that ends without it fails, even with exit code 0: otherwise the next step would start with nothing.
+- A step that ends without it fails, even with exit code 0 (or 256, which a process cannot report as anything but 0): otherwise the next step would start with nothing.
 
 ## Test a step in your own tests
 

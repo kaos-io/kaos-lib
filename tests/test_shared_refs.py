@@ -154,11 +154,12 @@ def test_cache_dir_puts_shared_copies_under_the_owner(tmp_path):
 def test_marker_must_match_the_owner(tmp_path):
     d = tmp_path / "copy"
     d.mkdir()
-    local.marker_file(d).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None, "owner": "a"}))
+    local.marker_file(d).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None, "owner": "a",
+                                                   **local.stamp(d)}))
     assert local.marker_matches(d, "dataset-x", "c1", owner="a")
     assert not local.marker_matches(d, "dataset-x", "c1")                 # the own dataset-x
     assert not local.marker_matches(d, "dataset-x", "c1", owner="b")
-    local.marker_file(d).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None}))  # 0.1 marker
+    local.marker_file(d).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None, **local.stamp(d)}))
     assert local.marker_matches(d, "dataset-x", "c1") and not local.marker_matches(d, "dataset-x", "c1", owner="a")
 
 
