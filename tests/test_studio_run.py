@@ -243,6 +243,7 @@ def test_should_ask_for_the_engine_or_a_params_file_when_none_is_given(repo, cap
     assert cli.main(["step", "run", "data-summary", str(repo)]) == 1
     err = capsys.readouterr().err
     assert "no pipeline engine was given" in err and "--context" in err and "pass --params-file" in err
+    assert err.index("--params-file") < err.index("--context") and "pipeline-context" in err
 
 
 def test_should_take_a_small_sample_of_a_dataset_as_an_input(repo, monkeypatch, capsys):
@@ -310,6 +311,27 @@ def test_should_refuse_a_python_that_is_missing_or_has_no_kaos_lib(repo, tmp_pat
     bare.chmod(0o755)
     assert cli.main(["step", "run", "data-summary", str(repo), "--python", str(bare)]) == 1
     assert "cannot import kaos_lib" in capsys.readouterr().err
+
+
+def test_should_resolve_a_relative_python_against_the_folder_the_command_was_called_from(repo, tmp_path, monkeypatch):
+    here = tmp_path / "here"
+    (here / "bin").mkdir(parents=True)
+    link = here / "bin" / "py"
+    link.symlink_to(sys.executable)
+    monkeypatch.chdir(here)
+    seen = {}
+    real = run.proc.stream
+    monkeypatch.setattr(run.proc, "stream", lambda argv, **kw: seen.update(argv=argv) or real(argv, **kw))
+    assert cli.main(["step", "run", "data-summary", str(repo), "--python", "bin/py"]) == 0
+    assert seen["argv"][0] == str(link)                        # absolute: the step starts in its own folder
+
+
+def test_should_name_a_relative_python_that_does_not_exist_before_running_anything(repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(run.proc, "stream", lambda *a, **k: pytest.fail("the step was started"))
+    assert cli.main(["step", "run", "data-summary", str(repo), "--python", "venv/bin/python"]) == 1
+    err = capsys.readouterr().err
+    assert "no such interpreter" in err and str(tmp_path / "venv/bin/python") in err
 
 
 def test_the_environment_is_keyed_by_the_real_step_folder_so_a_link_puts_nothing_in_the_repository(repo, tmp_path):

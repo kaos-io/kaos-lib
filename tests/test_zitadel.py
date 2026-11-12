@@ -89,7 +89,7 @@ def test_a_key_file_without_type_is_accepted(tmp_path):
      "(HTTP 400): invalid_grant: assertion expired"),
     (401, {"error": "invalid_client"}, "(HTTP 401): invalid_client"),
     (500, b"upstream connect error", "(HTTP 500): upstream connect error"),
-    (502, b"", "(HTTP 502)"),
+    (403, b"", "(HTTP 403)"),
 ])
 def test_token_error_responses(tmp_path, status, body, fragment):
     endpoint = FakeTokenEndpoint(status, body)
@@ -106,12 +106,78 @@ def test_a_200_without_access_token_is_an_error(tmp_path, body):
                      session=session_with(FakeTokenEndpoint(200, body)))
 
 
-def test_unreachable_zitadel_is_an_auth_error(tmp_path):
-    class Down(FakeTokenEndpoint):
-        def send(self, request, **kw):
-            raise requests.ConnectionError("down")
-    with pytest.raises(AuthError, match="cannot reach Zitadel at https://zitadel.test/oauth/v2/token"):
-        zitadel.mint(write_machine_key(tmp_path / "k.json"), "zitadel.test", "321", session=session_with(Down()))
+class Flaky(FakeTokenEndpoint):
+    """Fails ``times`` token requests with ``error`` (an exception) or ``status``, then answers like the base."""
+
+    def __init__(self, times, error=None, status=None):
+        super().__init__()
+        self.times, self.error, self.fail_status = times, error, status
+
+    def send(self, request, **kw):
+        failing = len(self.requests) < self.times
+        self.status = self.fail_status if failing and not self.error else 200
+        resp = super().send(request, **kw)       # records the request either way
+        if failing and self.error:
+            raise self.error
+        return resp
+
+
+@pytest.fixture
+def sleeps(monkeypatch):
+    """The waits between token requests, recorded; nothing really sleeps."""
+    waited = []
+    monkeypatch.setattr(zitadel.time, "sleep", waited.append)
+    return waited
+
+
+def test_a_token_request_is_tried_again_after_connection_errors_and_waits_longer_each_time(tmp_path, sleeps, capsys):
+    endpoint = Flaky(3, error=requests.ConnectionError("down"))
+    token = zitadel.mint(write_machine_key(tmp_path / "k.json"), "zitadel.test", "321", session=session_with(endpoint))
+    assert token == "minted-token" and len(endpoint.requests) == 4
+    assert len(sleeps) == 3 and sleeps == sorted(sleeps) and sleeps[0] < sleeps[-1]
+    err = capsys.readouterr().err
+    assert err.count("Zitadel") == 3 and "tried again in" in err and "ConnectionError" in err
+
+
+@pytest.mark.parametrize("error", [requests.Timeout("slow"), requests.ConnectionError("down")])
+def test_a_timeout_or_dropped_connection_passes(tmp_path, sleeps, error):
+    endpoint = Flaky(1, error=error)
+    zitadel.mint(write_machine_key(tmp_path / "k.json"), "zitadel.test", "321", session=session_with(endpoint))
+    assert len(sleeps) == 1
+
+
+def test_each_try_carries_a_freshly_signed_assertion(tmp_path, sleeps, monkeypatch):
+    monkeypatch.setattr(zitadel, "assertion", lambda key, domain, real=zitadel.assertion, clock=iter([1000, 1100, 1200]):
+                        real(key, domain, now=next(clock)))
+    endpoint = Flaky(2, error=requests.ConnectionError("down"))
+    zitadel.mint(write_machine_key(tmp_path / "k.json"), "zitadel.test", "321", session=session_with(endpoint))
+    iats = [jwt.decode(r[2]["assertion"], rsa_key()[1], algorithms=["RS256"], audience="https://zitadel.test",
+                       options={"verify_exp": False})["iat"] for r in endpoint.requests]
+    assert iats == [1000, 1100, 1200]
+
+
+@pytest.mark.parametrize("status", [502, 503, 504])
+def test_a_bad_gateway_or_busy_answer_is_tried_again(tmp_path, sleeps, status):
+    endpoint = Flaky(2, status=status)
+    assert zitadel.mint(write_machine_key(tmp_path / "k.json"), "zitadel.test", "321",
+                        session=session_with(endpoint)) == "minted-token"
+    assert len(sleeps) == 2
+
+
+def test_unreachable_zitadel_is_an_auth_error_after_a_bounded_wait(tmp_path, sleeps):
+    endpoint = Flaky(10 ** 6, error=requests.ConnectionError("down"))
+    with pytest.raises(AuthError, match=r"^cannot reach Zitadel at https://zitadel.test/oauth/v2/token "
+                                        r"\(ConnectionError\)\.$"):
+        zitadel.mint(write_machine_key(tmp_path / "k.json"), "zitadel.test", "321", session=session_with(endpoint))
+    assert 120 <= sum(sleeps) <= 180 and len(endpoint.requests) == len(sleeps) + 1
+
+
+@pytest.mark.parametrize("status", [400, 401, 403])
+def test_a_refused_credential_fails_at_once(tmp_path, sleeps, status):
+    endpoint = FakeTokenEndpoint(status, {"error": "invalid_grant"})
+    with pytest.raises(AuthError, match=f"HTTP {status}"):
+        zitadel.mint(write_machine_key(tmp_path / "k.json"), "zitadel.test", "321", session=session_with(endpoint))
+    assert sleeps == [] and len(endpoint.requests) == 1
 
 
 @pytest.mark.parametrize("unset", ["ZITADEL_DOMAIN", "ZITADEL_MLFLOW_PROJECT_ID"])
