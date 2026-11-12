@@ -45,6 +45,9 @@ template.** Nothing in kaos-lib converts an old app.
   is created.
 
 ### Changed
+- A step that fails for a reason kaos-lib explains (an input that holds no files, an output that was not written, a
+  refused write) prints one line, `ERROR: <what happened and what to do>`, and the line of the step's code it came
+  from, with no traceback. A failure of the step's own code keeps its traceback.
 - `runtime.context()` takes the run, app, project, step, kind and experiment from what the platform hands the step.
 - Inside a pipeline step, `datasets.resolve` and `datasets.materialize` refuse a dataset the run did not pin.
 - `kaosctl lint` reads only the repository's own files (no virtualenv, `.kaos/`, caches or ignored folders) and its

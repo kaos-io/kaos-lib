@@ -598,6 +598,20 @@ def test_a_step_ends_non_zero_without_a_result_and_keeps_the_exit_code_it_chose(
     assert got == code and file.exists() is has_result and (ENDED in err) is says, err
 
 
+def test_a_failure_the_library_explains_is_one_line_with_the_place_in_the_step_and_no_traceback(tmp_path):
+    got, err, file = run_entry(tmp_path, "step.input('nope')")
+    assert got == 1 and not file.exists()
+    assert "Traceback" not in err and ENDED not in err
+    lines = [line for line in err.splitlines() if line.strip()]
+    assert lines[0].startswith("ERROR: ") and "nope" in lines[0]
+    assert lines[1].startswith("  at ") and "kaos_lib" not in lines[1]
+
+
+def test_a_failure_of_the_steps_own_code_keeps_its_traceback(tmp_path):
+    got, err, file = run_entry(tmp_path, "raise RuntimeError('boom')")
+    assert got == 1 and "Traceback" in err and "RuntimeError: boom" in err
+
+
 def test_handlers_registered_before_start_run_and_those_after_run_once_when_the_step_has_no_result(tmp_path):
     pre = "import atexit\natexit.register(lambda: print('BEFORE START'))\n"
     body = "import atexit\natexit.register(lambda: print('AFTER START', flush=True))"
