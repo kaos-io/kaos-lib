@@ -72,6 +72,7 @@ prove the pipeline is right.
 | warning | [L-W03 DatasetVersionInCode](lint/L-W03.md) | a dataset version written in step code |
 | warning | [L-W04 NoMlflowOrModelNotRegistered](lint/L-W04.md) | no MLflow logging, or no registered model |
 | warning | [L-W05 DeclaredResumableDidNotResume](lint/L-W05.md) | a step declared resumable restarted from zero on the platform |
+| warning | [L-W06 TrainTimeLimitNotResumable](lint/L-W06.md) | a training step with a time limit that is not resumable |
 | error | [L-D01 MissingKaosLibArg](lint/L-D01.md) | a step uses kaos-lib but its Dockerfile has no `ARG KAOS_LIB_PACKAGE` |
 | error | [L-D02 KaosLibNotInstalled](lint/L-D02.md) | the step imports kaos_lib but nothing installs `${KAOS_LIB_PACKAGE}` |
 | error | [L-D03 WrongArchitecture](lint/L-D03.md) | a `FROM --platform=` other than linux/amd64 |

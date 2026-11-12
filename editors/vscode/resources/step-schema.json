@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "2.1.0",
+  "ruleset_version": "2.2.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -592,6 +592,13 @@
       "level": "warning",
       "fix": "Make the step load its checkpoint and continue from it: save into $KAOS_CHECKPOINT_DIR (or with kaos_lib.checkpoint) and load it when the step starts, so a continuation gets past the checkpoint it started from.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W05.html"
+    },
+    {
+      "id": "L-W06",
+      "name": "TrainTimeLimitNotResumable",
+      "level": "warning",
+      "fix": "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its time limit then continues instead of starting over (see 'Long runs on HPC (Slurm)' in the guide).",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W06.html"
     }
   ]
 }

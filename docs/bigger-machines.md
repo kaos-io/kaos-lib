@@ -20,7 +20,7 @@ cp -r examples/gpu_check steps/gpu_check
 --8<-- "examples/first-pipeline/gpu/pipeline.py"
 ```
 
-`step("gpu-check", kind="train", reads=["experiment"], gpu=True)` is the whole change. The example step prints the
+`step("gpu-check", kind="evaluate", reads=["experiment"], gpu=True)` is the whole change. The example step prints the
 GPU it got and does a few seconds of work on it. It stops at once, with a message, when torch cannot see a GPU,
 because a GPU step that trains on the CPU for hours is the failure to rule out.
 

@@ -1,4 +1,4 @@
-"""The warning rules (L-W01 .. L-W05): things that usually go wrong later, at run time or in review.
+"""The warning rules (L-W01 .. L-W06): things that usually go wrong later, at run time or in review.
 
 Why: warnings never fail the `pipeline-lint` status. They are advice, so each one is narrow, says what to do, and
 the heuristic ones (L-W04) say they are heuristics.
@@ -10,7 +10,7 @@ from typing import Iterable
 from .constants import LONG_GPU_STEP_MINUTES
 from .model import WARNING
 from .pipeline_reader import UNKNOWN
-from .registry import (DECLARED, NOT_VERIFIED, OFF, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule)
+from .registry import (DECLARED, NOT_VERIFIED, OFF, UNKNOWN_STATE, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule)
 
 
 @rule("L-W01", "LongGpuStepNotResumable", WARNING,
@@ -94,3 +94,16 @@ def declared_resumable_did_not_resume(ctx: LintContext) -> Iterable[Hit]:
                   f"Step '{step.name}' declares resumable, but the platform recorded{when} that a continuation of "
                   f"it did not resume: {recorded.reason or 'it made no progress past its checkpoint'}. A step that "
                   f"restarts from zero on every continuation does not get any further.")
+
+
+@rule("L-W06", "TrainTimeLimitNotResumable", WARNING,
+      "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its "
+      "time limit then continues instead of starting over (see 'Long runs on HPC (Slurm)' in the guide).")
+def train_time_limit_not_resumable(ctx: LintContext) -> Iterable[Hit]:
+    for step in ctx.pipeline.steps:
+        if step.opaque or step.value("kind", None) != "train" or step.value("walltime", None) in (None, UNKNOWN):
+            continue
+        if step.value("resumable", None) is None and ctx.resumable(step) == UNKNOWN_STATE:
+            yield Hit(ctx.file, ctx.span(step.node("walltime")),
+                      f"Step '{step.name}' is a training step with a time limit and is not resumable: a run cut by "
+                      f"its time limit starts over. Add resumable=True and save checkpoints.")

@@ -7,7 +7,7 @@ rule-set version bump, never a literal buried in a rule.
 # The rule-set version: every report carries it, the PR gate and `kaosctl lint` must agree on it. Bump the major
 # for a rule removed or a level raised, the minor for a rule added or a message-only change that needs a note,
 # the patch for a fix that changes no finding on valid input.
-RULESET_VERSION = "2.1.0"
+RULESET_VERSION = "2.2.0"
 
 # Where a rule's page lives. The site is a plain public bucket, so every link names its .html file.
 DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
@@ -25,8 +25,13 @@ STEPS_DIR = "steps"
 # What the library's step() accepts, in order (positional arguments map onto it).
 STEP_PARAMS = ("name", "kind", "reads", "inputs", "needs", "produces", "gpu", "when", "walltime",
                "resumable", "checkpoint_every", "idle_timeout")
-# Arguments step() no longer takes: an app that still passes one was made before the current pipelines.
-REMOVED_STEP_PARAMS = ("outputs", "hpc_time_limit", "disk")
+# Arguments step() no longer takes, with what to write instead (the sentences the engine's render says).
+REMOVED_STEP_PARAMS = {
+    "outputs": "outputs= is gone. Declare what the step writes with produces=[...] and hand it on with "
+               "step.result().",
+    "hpc_time_limit": 'hpc_time_limit= is gone. Use walltime=, for example walltime="12h".',
+    "disk": "disk= is gone. The step gets the disk of the machine class it runs on.",
+}
 # The sentence every refusal of an old app ends with: the same one the engine ends its refusals with.
 OLD_APP_NOTICE = "This app was made before the current pipelines. Create it again from the template."
 # What a step is (kind=), and what it may declare in produces=[...].

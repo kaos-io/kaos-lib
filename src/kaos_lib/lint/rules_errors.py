@@ -225,7 +225,7 @@ def refused_argument(ctx: LintContext) -> Iterable[Hit]:
 def _unknown_arguments(ctx, step) -> Iterable[Hit]:
     for kw in step.unknown_keywords:
         if kw.arg in REMOVED_STEP_PARAMS:
-            yield Hit(ctx.file, ctx.span(kw), f"step() no longer takes '{kw.arg}'. {OLD_APP_NOTICE}")
+            yield Hit(ctx.file, ctx.span(kw), f"{_step_label(step)}: {REMOVED_STEP_PARAMS[kw.arg]}")
         else:
             yield Hit(ctx.file, ctx.span(kw), f"step() has no argument '{kw.arg}', so the render fails.",
                       f"Remove it or check the name: step() accepts {', '.join(STEP_PARAMS[:-1])} and "
@@ -314,6 +314,7 @@ def step_declaration(ctx: LintContext) -> Iterable[Hit]:
             inputs = yield from _inputs(ctx, step)
             produced = yield from _produces(ctx, step)
             yield from _control_handles_no_data(ctx, step, inputs, produced)
+            yield from _kind_contract(ctx, step)
             yield from _same_name_twice(ctx, step, inputs, made)
             yield from _one_writer(ctx, step, produced, writers)
             if step.var:
@@ -356,6 +357,48 @@ def _control_handles_no_data(ctx, step, inputs, produced) -> Iterable[Hit]:
         yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)} is a control step: it steers the run "
                   "and handles no data, so it takes no inputs= and no produces=.",
                   "Give the step the kind of the work it does: " + ", ".join(k for k in STEP_KINDS if k != "control"))
+
+
+def _produced_types(step):
+    """The types the step's produces=[...] holds, or None when the list cannot be read statically."""
+    node = step.node("produces")
+    if node is None:
+        return set()
+    if not isinstance(node, (ast.List, ast.Tuple)):
+        return None
+    types = set()
+    for el in node.elts:
+        func = el.func if isinstance(el, ast.Call) else None
+        kind = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
+        if kind not in PRODUCE_TYPES:
+            return None
+        types.add(kind)
+    return types
+
+
+def _kind_contract(ctx, step) -> Iterable[Hit]:
+    """What each kind requires of what the step produces (the page 'Step kinds')."""
+    kind, types = step.value("kind", None), _produced_types(step)
+    if types is None or kind not in STEP_KINDS or kind == "control":
+        return
+    label, others = _step_label(step), ", ".join(k for k in STEP_KINDS if k != kind)
+    if kind == "ingest" and "dataset" not in types:
+        problem = f'{label}: an ingest step brings data in, so it produces a dataset.', 'Add produces=[dataset("name")].'
+    elif kind == "transform" and not types:
+        problem = (f"{label}: a transform step turns data into something.",
+                   "Add produces=[...] with a dataset, a model or an artifact.")
+    elif kind == "train" and "model" not in types:
+        problem = (f"{label}: a train step produces a model.",
+                   f'Add produces=[model("name")], or give the step the kind of the work it does ({others}).')
+    elif kind == "evaluate" and types & {"dataset", "model"}:
+        problem = (f"{label}: an evaluate step writes reports only, so it may not produce a dataset or a model.",
+                   'Use kind="transform" for a step that makes a dataset, kind="train" for one that makes a model.')
+    elif kind == "publish" and types:
+        problem = (f"{label}: a publish step delivers a result and produces nothing here.",
+                   "Remove produces=, or give the step the kind of the work it does.")
+    else:
+        return
+    yield Hit(ctx.file, ctx.span(step.node("kind")), f"{problem[0]} {problem[1]}", problem[1])
 
 
 def _one_writer(ctx, step, produced, writers) -> Iterable[Hit]:

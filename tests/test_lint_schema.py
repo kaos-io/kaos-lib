@@ -86,8 +86,8 @@ def test_the_extensions_bundled_fallback_equals_the_generated_schema():
 
 
 # ---------------------------------------------------------------- graph
-BODY = ('    a = step("prepare", kind="train")\n    b = step("train", kind="train", needs=[a], gpu=True, walltime="12h")\n'
-        '    step("evaluate", kind="train", needs=[a, b])\n')
+BODY = ('    a = step("prepare", kind="evaluate")\n    b = step("train", kind="evaluate", needs=[a], gpu=True, walltime="12h")\n'
+        '    step("evaluate", kind="evaluate", needs=[a, b])\n')
 
 
 def test_graph_has_the_steps_and_their_dependencies(tmp_path):
@@ -101,13 +101,13 @@ def test_graph_has_the_steps_and_their_dependencies(tmp_path):
 
 
 def test_graph_marks_loop_steps_dynamic_and_wires_nothing(tmp_path):
-    body = '    a = step("prepare", kind="train")\n    for i in range(3):\n        step("w", kind="train", needs=[a])\n'
+    body = '    a = step("prepare", kind="evaluate")\n    for i in range(3):\n        step("w", kind="evaluate", needs=[a])\n'
     block = build_graph(write_repo(tmp_path, repo(body)))["pipelines"][0]
     assert [n["dynamic"] for n in block["nodes"]] == [False, True] and block["edges"] == []
 
 
 def test_graph_lists_what_it_cannot_follow_instead_of_guessing(tmp_path):
-    body = '    a = step("prepare", kind="train")\n    step("x", kind="train", needs=[a, missing])\n    step("y", kind="train", needs=["prepare"])\n'
+    body = '    a = step("prepare", kind="evaluate")\n    step("x", kind="evaluate", needs=[a, missing])\n    step("y", kind="evaluate", needs=["prepare"])\n'
     block = build_graph(write_repo(tmp_path, repo(body)))["pipelines"][0]
     assert len(block["edges"]) == 1 and len(block["unresolved"]) == 2
 
@@ -126,7 +126,7 @@ def test_graph_command_is_byte_stable(tmp_path, capsys):
 
 def test_graph_never_runs_the_pipeline_file(tmp_path):
     marker = tmp_path / "ran"
-    body = f'    open({str(marker)!r}, "w").write("x")\n    step("a", kind="train")\n'
+    body = f'    open({str(marker)!r}, "w").write("x")\n    step("a", kind="evaluate")\n'
     root = write_repo(tmp_path / "r", repo(body))
     (root / "steps" / "a" / "app").mkdir(parents=True, exist_ok=True)
     build_graph(root)
