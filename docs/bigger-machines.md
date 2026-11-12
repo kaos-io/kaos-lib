@@ -8,7 +8,7 @@ There is nothing to set for CPU, memory or disk. `pipeline.py` has no keyword fo
 
 ## A step that needs a GPU
 
-A step declares `gpu=True`, and its class field then starts on a GPU class. The template ships a small GPU step, in
+A step declares `gpu=True`, and its class field then starts on a GPU class. Only a step with `gpu=True` is offered a GPU class, on the platform's own machines and on HPC (Slurm) alike. The template ships a small GPU step, in
 `examples/gpu_check/`, and a commented line in `pipeline.py`. Copy the step's folder and take the comment off the
 line:
 
