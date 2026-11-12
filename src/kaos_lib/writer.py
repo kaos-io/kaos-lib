@@ -44,6 +44,8 @@ KEPT_TIMED = "k-2"        # ... followed by the UTC time it was sealed (years 20
 KEPT_NAME = re.compile(r"k-(\d{8}T\d{6}Z)-.+-([0-9a-f]{12})")
 LOOK_BACK_DAYS = (1, 7, 35, 365)   # how far back, in turn, the newest kept version is looked for
 MIN_REUSE_BYTES = 1 << 20          # below this many bytes to upload, looking for a version to copy from costs more
+PROMOTED = "kaos.promoted"   # on the merge that moves `latest`: the full id of the sealed version it promoted, so
+#                              the data store knows that version was promoted and never expires it
 HEAD_MOVED = 412          # kaos-lake: the merge's expected head is not the branch's head any more
 
 
@@ -271,7 +273,8 @@ def promote(s: Sealed) -> str:
             discard(s)
             return s.head
         try:
-            merged = s.client.merge(s.repo, s.commit, MAIN, s.message, s.meta, tolerate_empty=True,
+            merged = s.client.merge(s.repo, s.commit, MAIN, s.message, {**(s.meta or {}), PROMOTED: s.commit},
+                                    tolerate_empty=True,
                                     expected_head=s.head if s.guarded else None)
         except LakeFSError as exc:
             if exc.status != HEAD_MOVED:
