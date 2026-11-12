@@ -49,6 +49,9 @@ template.** Nothing in kaos-lib converts an old app.
   sealed in it: a file with the same path, size and content is copied inside the data store, and a file that cannot be
   copied is uploaded. Every run still makes its own version and tag. The log line says how many were reused. Models and
   artifacts are unchanged.
+- A step that fails for a reason kaos-lib explains (an input that holds no files, an output that was not written, a
+  refused write) prints one line, `ERROR: <what happened and what to do>`, and the line of the step's code it came
+  from, with no traceback. A failure of the step's own code keeps its traceback.
 - `runtime.context()` takes the run, app, project, step, kind and experiment from what the platform hands the step.
 - Inside a pipeline step, `datasets.resolve` and `datasets.materialize` refuse a dataset the run did not pin.
 - `kaosctl lint` reads only the repository's own files (no virtualenv, `.kaos/`, caches or ignored folders) and its

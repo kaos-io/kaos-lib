@@ -28,11 +28,12 @@ import re
 import shutil
 import sys
 import threading
+import traceback
 from dataclasses import dataclass, field
 from typing import Optional
 
 from . import lock, runtime, writer
-from .errors import AuthError, EmptyDataset, LockError, NotFoundError, PermissionDenied, StepError
+from .errors import AuthError, EmptyDataset, KaosLibError, LockError, NotFoundError, PermissionDenied, StepError
 from .layouts import local
 
 ENV = runtime.STEP_CONTEXT_ENV
@@ -579,9 +580,12 @@ def _watch_exit(run: _Running) -> None:
             run.quit = code % 256 if isinstance(code, int) else (0 if code is None else 1)   # the process keeps 8 bits
         real_exit(code)
 
-    def hook(*args):
+    def hook(kind, exc, trace):
         run.raised = True
-        real_hook(*args)
+        if isinstance(exc, KaosLibError):    # its message says what happened and what to do: one line, no traceback
+            print(f"ERROR: {exc}{_where(trace)}", file=sys.stderr, flush=True)
+        else:
+            real_hook(kind, exc, trace)
 
     def register(func, *args, **kwargs):
         run.late.append(func)
@@ -590,6 +594,15 @@ def _watch_exit(run: _Running) -> None:
     run.undo = (real_exit, real_hook, real_register)
     sys.exit, sys.excepthook, atexit.register = exit_, hook, register
     real_register(_at_exit, run)
+
+
+def _where(trace) -> str:
+    """The line of the step's own code the failure came from: the last frame outside kaos-lib, or ''."""
+    own = os.path.dirname(os.path.abspath(__file__))
+    for frame in reversed(traceback.extract_tb(trace)):
+        if not os.path.abspath(frame.filename).startswith(own):
+            return f"\n  at {frame.filename}:{frame.lineno}, in {frame.name}"
+    return ""
 
 
 def _at_exit(run: _Running) -> None:
