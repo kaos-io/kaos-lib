@@ -230,7 +230,7 @@
         "default": null,
         "gpu_only": false,
         "pattern": "^[0-9]+[mh]?$",
-        "doc": "The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). For a step that runs on an HPC (Slurm) class. Without it the platform uses 4 hours. A step with a limit above 4 hours should be resumable.",
+        "doc": "The default time limit of the step, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). The person who starts the run sets the limit on the run form (`<step>-walltime`, at most 30 days); this value is what the form starts with. Without it the form starts with 4 hours. A step with a limit above 4 hours should be resumable.",
         "snippet": "\"${1:12h}\"",
         "values": [
           {
@@ -340,7 +340,7 @@
         "default": null,
         "gpu_only": false,
         "pattern": "^[0-9]+[mh]?$",
-        "doc": "How often the platform copies the step's checkpoint folder (`KAOS_CHECKPOINT_DIR`): minutes such as `\"20m\"`, `\"1h\"` or `20`. `False` turns the copies off. GPU steps copy every 10 minutes by default.",
+        "doc": "The default for how often the platform copies the step's checkpoint folder (`KAOS_CHECKPOINT_DIR`): minutes such as `\"20m\"`, `\"1h\"` or `20`. `False` turns the copies off. The person who starts the run can change it on the run form (`<step>-checkpoint-every`). GPU steps copy every 10 minutes by default.",
         "snippet": "\"${1:20m}\"",
         "values": [
           {
@@ -478,14 +478,14 @@
       "id": "L-E01",
       "name": "TooLongNotResumable",
       "level": "error",
-      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set walltime to the longest run or less.",
+      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set the default walltime= to the longest run or less (the run form's <step>-walltime starts with it).",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
     },
     {
       "id": "L-E02",
       "name": "TooLongBeyondContinuations",
       "level": "error",
-      "fix": "Shorten walltime, or split the work into steps that each fit within the runs allowed.",
+      "fix": "Shorten the default walltime= (the person who starts the run can still set a limit on the run form, and the same rule applies), or split the work into steps that each fit within the runs allowed.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
     },
     {
@@ -569,7 +569,7 @@
       "id": "L-W01",
       "name": "LongGpuStepNotResumable",
       "level": "warning",
-      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten walltime.",
+      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten the default walltime= (the run form's <step>-walltime starts with it).",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
     },
     {
