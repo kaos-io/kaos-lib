@@ -35,7 +35,8 @@ ABSENT = {"version": 1, "status": "absent"}     # what a step gets for a needed 
 def mark(folder: pathlib.Path, repo: str, ref: str = "local", layout: str = "raw") -> dict:
     """Record that ``folder`` is a whole staged copy of ``repo`` and return the ledger read that names it."""
     commit = fingerprint(folder)
-    local.staged_marker(folder).write_text(json.dumps({"repo": repo, "commit": commit, "full": True, "layout": layout}),
+    local.staged_marker(folder).write_text(json.dumps({"repo": repo, "commit": commit, "full": True, "layout": layout,
+                                                         **local.stamp(folder)}),
                                            encoding="utf-8")
     return {"name": folder.name, "repo": repo, "owner": None, "ref": ref, "commit": commit}
 

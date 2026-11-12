@@ -73,7 +73,7 @@ def test_cache_path_and_marker_carry_the_owner(lakes, step_env, tmp_path):
     assert data_yaml.parent == tmp_path / "cache" / "a" / "dataset-x" / commit
     marker = json.loads(local.marker_file(data_yaml.parent).read_text())
     assert marker == {"repo": "dataset-x", "commit": commit, "prefix": None, "owner": "a",
-                      "include": ["data.yaml", "images/**", "labels/**"]}
+                      "include": ["data.yaml", "images/**", "labels/**"], **local.stamp(data_yaml.parent)}
 
 
 def test_own_and_shared_dataset_x_never_collide(lakes, step_env, tmp_path):

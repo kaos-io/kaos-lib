@@ -408,7 +408,7 @@ def _keep_locally(produce: Produce, folder: pathlib.Path, root: pathlib.Path) ->
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(folder, target)
     local.staged_marker(target).write_text(json.dumps(
-        {"repo": produce.repo, "commit": commit, "full": True, "layout": "raw"}))
+        {"repo": produce.repo, "commit": commit, "full": True, "layout": "raw", **local.stamp(target)}))
     return commit
 
 
