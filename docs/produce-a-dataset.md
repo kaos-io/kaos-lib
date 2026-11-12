@@ -27,18 +27,21 @@ folder named `myapp` and the step says so ([Try it locally](try-it-locally.md)):
 - **Only the difference is stored.** The folder is compared with the last version. A run that writes the same
   content makes no new version. A run that changes one file uploads one file. Keep each file at the same path from
   run to run.
-- **The newest version moves only when the run asks.** Until the run form has a field for it, the run's advanced
-  config holds the request, with the name from `produces=`:
+- **A step that fails leaves no version.** The next attempt writes it once.
+- **Only the app that declares the dataset in `produces=` writes it.** People and other pipelines read it.
+
+## Move the newest version
+
+The newest version, `latest`, moves only when the run asks (this is called promoting). Until the run form has a field for it, the run's advanced
+config holds the request, with the name from `produces=`:
 
 ```yaml title="advanced config of the run"
 --8<-- "examples/first-pipeline/produce/runs/promote.yaml"
 ```
 
-  A run without it still seals its version, and `latest` stays where it is. An experiment does not change what other
-  pipelines read. When two runs ask at once, the second one writes its version again on top of the first and then
-  moves `latest`: `latest` is always one run's complete version.
-- **A step that fails leaves no version.** The next attempt writes it once.
-- **Only the app that declares the dataset in `produces=` writes it.** People and other pipelines read it.
+A run without it still seals its version, and `latest` stays where it is. An experiment does not change what other
+pipelines read. When two runs ask at once, the second one writes its version again on top of the first and then moves
+`latest`: `latest` is always one run's complete version.
 
 A step that produces a dataset runs on the platform's own machines for now. Its neighbours may run on HPC
 ([page 9](hpc.md)).
