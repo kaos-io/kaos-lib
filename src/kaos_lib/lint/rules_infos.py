@@ -30,7 +30,7 @@ def learned_limits(ctx: LintContext) -> Iterable[Hit]:
         limit = parse_minutes(step.value("walltime", None))
         if limit is not None and limit < SHORT_LIMIT_MINUTES:
             yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"{step_label(step)} has a limit of {pretty_minutes(limit)}. After a few runs the platform "
+                      f"{step_label(step)} has a default limit of {pretty_minutes(limit)}. After a few runs the platform "
                       f"may ask the site for a shorter limit, to fit the step in sooner.")
 
 

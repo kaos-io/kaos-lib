@@ -15,8 +15,8 @@ from .registry import (DECLARED, NOT_VERIFIED, OFF, UNKNOWN_STATE, Hit, LintCont
 
 
 @rule("L-W01", "LongGpuStepNotResumable", WARNING,
-      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten "
-      "walltime.")
+      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten the "
+      "default walltime= (the run form's <step>-walltime starts with it).")
 def long_gpu_step_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     hpc = ctx.catalogue.hpc
     for step in gpu_steps(ctx):
@@ -26,7 +26,7 @@ def long_gpu_step_not_resumable(ctx: LintContext) -> Iterable[Hit]:
         if hpc is not None and limit > hpc.lane_max_minutes:
             continue   # L-E01 reports it as an error
         yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                  f"Step '{step.name}' runs up to {pretty_minutes(limit)} and is not resumable "
+                  f"Step '{step.name}' has a default time limit of {pretty_minutes(limit)} and is not resumable "
                   f"({'set not resumable' if ctx.resumable(step) == OFF else 'the platform recorded that its last continuation did not resume'}). "
                   f"An interruption (a lost machine, the time limit) loses all its work.")
 
@@ -108,8 +108,9 @@ def train_time_limit_not_resumable(ctx: LintContext) -> Iterable[Hit]:
             continue
         if step.value("resumable", None) is None and ctx.resumable(step) == UNKNOWN_STATE:
             yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"Step '{step.name}' is a training step with a time limit and is not resumable: a run cut by "
-                      f"its time limit starts over. Add resumable=True and save checkpoints.")
+                      f"Step '{step.name}' is a training step with a time limit (the default on the run form) and is "
+                      f"not resumable: a run cut by its time limit starts over. Add resumable=True and save "
+                      f"checkpoints.")
 
 
 @rule("L-W07", "DatasetProducerStaysOnCluster", WARNING,

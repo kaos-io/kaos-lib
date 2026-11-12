@@ -30,8 +30,9 @@ _step_label = step_label
 
 
 @rule("L-E01", "TooLongNotResumable", ERROR,
-      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set "
-      "walltime to the longest run or less.", requires=(REQUIRES_HPC,))
+      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set the "
+      "default walltime= to the longest run or less (the run form's <step>-walltime starts with it).",
+      requires=(REQUIRES_HPC,))
 def too_long_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     lane = ctx.catalogue.hpc.lane_max_minutes
     for step in gpu_steps(ctx):
@@ -42,13 +43,14 @@ def too_long_not_resumable(ctx: LintContext) -> Iterable[Hit]:
         how = "is set not resumable" if state == OFF else "is not declared resumable and the platform recorded " \
             f"that its last continuation did not resume ({ctx.evidence(step).reason or 'no reason given'})"
         yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                  f"{_step_label(step)} asks for a time limit of {pretty_minutes(limit)}, but the longest run on "
+                  f"{_step_label(step)} has a default time limit of {pretty_minutes(limit)}, but the longest run on "
                   f"the HPC (Slurm) site is {pretty_minutes(lane)}, and the step {how}, so it would be cut off. "
                   f"The platform refuses it at submit.")
 
 
 @rule("L-E02", "TooLongBeyondContinuations", ERROR,
-      "Shorten walltime, or split the work into steps that each fit within the runs allowed.",
+      "Shorten the default walltime= (the person who starts the run can still set a limit on the run form, and the "
+      "same rule applies), or split the work into steps that each fit within the runs allowed.",
       requires=(REQUIRES_HPC, REQUIRES_CONTINUATIONS))
 def too_long_beyond_continuations(ctx: LintContext) -> Iterable[Hit]:
     lane, cap = ctx.catalogue.hpc.lane_max_minutes, ctx.catalogue.max_continuations
@@ -59,7 +61,7 @@ def too_long_beyond_continuations(ctx: LintContext) -> Iterable[Hit]:
         runs = runs_needed(limit, lane)
         if runs > cap + 1:
             yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"{_step_label(step)} is resumable, but a time limit of {pretty_minutes(limit)} needs {runs} "
+                      f"{_step_label(step)} is resumable, but its default time limit of {pretty_minutes(limit)} needs {runs} "
                       f"runs of at most {pretty_minutes(lane)}, and a step continues at most {cap} times "
                       f"({cap + 1} runs in all, {pretty_minutes(lane * (cap + 1))}). The platform refuses it.")
 
@@ -293,7 +295,8 @@ def _time_arguments(ctx, step) -> Iterable[Hit]:
     if limit is not UNKNOWN and limit is not None:
         if not (isinstance(limit, str) and _TIME.match(limit)):
             yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: "
-                      f"walltime={limit!r} must be minutes or hours as text, like '90m', '12h' or '720'.")
+                      f"walltime={limit!r} must be minutes or hours as text, like '90m', '12h' or '720'. It is the default of "
+                      f"the run form's time limit for the step.")
     if resumable is UNKNOWN or resumable is None or resumable is False:
         return
     ok = resumable is True or (isinstance(resumable, str) and _TIME.match(resumable)

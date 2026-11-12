@@ -81,8 +81,9 @@ _PARAMS = {
         values=[]),
     "walltime": dict(
         type="str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-I02"), snippet='"${1:12h}"',
-        doc="The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or "
-            f"`\"720\"` (minutes). For a step that runs on an HPC (Slurm) class. Without it the platform uses {DEFAULT_LIMIT_MINUTES // 60} "
+        doc="The default time limit of the step, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` "
+            "(minutes). The person who starts the run sets the limit on the run form (`<step>-walltime`, at most 30 "
+            f"days); this value is what the form starts with. Without it the form starts with {DEFAULT_LIMIT_MINUTES // 60} "
             f"hours. A step with a limit above {LONG_GPU_STEP_MINUTES // 60} hours should be resumable.",
         pattern=TIME_PATTERN,
         values=[_value('"90m"', "90 minutes."), _value('"4h"', "4 hours."), _value('"12h"', "12 hours."),
@@ -99,8 +100,9 @@ _PARAMS = {
                 _value('"1h"', "Resumable, told to save 1 hour before its time limit.")]),
     "checkpoint_every": dict(
         type="bool|str|int", rules=("L-E06",), snippet='"${1:20m}"',
-        doc="How often the platform copies the step's checkpoint folder (`KAOS_CHECKPOINT_DIR`): minutes such as "
-            "`\"20m\"`, `\"1h\"` or `20`. `False` turns the copies off. GPU steps copy every 10 minutes by default.",
+        doc="The default for how often the platform copies the step's checkpoint folder (`KAOS_CHECKPOINT_DIR`): "
+            "minutes such as `\"20m\"`, `\"1h\"` or `20`. `False` turns the copies off. The person who starts the run "
+            "can change it on the run form (`<step>-checkpoint-every`). GPU steps copy every 10 minutes by default.",
         pattern=r"^[0-9]+[mh]?$",
         values=[_value('"20m"', "Copy every 20 minutes."), _value('"1h"', "Copy every hour."),
                 _value("False", "Do not copy the checkpoint folder.")]),
