@@ -67,7 +67,7 @@ the guide is real files under `docs/examples/` (the pages include them with `--8
 app is linted and every step run with `kaos_lib.testing.running`, so an example that breaks stops the build.
 `python3 docs_examples.py` runs it alone; `tests/test_docs_examples.py` also runs the test files the pages show. To
 change what a page shows, change the file under `docs/examples/`: `template/` is the hera template, byte for byte
-(hera's `step_tests/test_docs_example.py` compares them), every other folder holds the files one page changes, laid
+(`tests/test_docs_match_templates.py` compares them when `DOCS_CHECK_HERA` names a checkout), every other folder holds the files one page changes, laid
 over the template in the order of `STATES` in `docs_examples.py`.
 
 The second hook, `docs_check.py`, runs three checks before every build, and a finding fails the build. Run them
@@ -77,18 +77,20 @@ alone with `python3 docs_check.py`:
 | --- | --- |
 | words | a page that names what the platform is built from. These pages are for client engineers: the list is `WORDS` in the file |
 | removed names | a step or a folder that no longer exists (`REMOVED` in the file) |
-| links | a link of this repository that does not resolve, here or in the two pipeline templates (hera, yolo), and a link of a template into this site that does not resolve |
+| links | a link that does not resolve, written in this repository or in a template's Markdown, into itself or into another of the three |
 
-This file is the only copy of the checks. The templates carry none, so an app created from a template is never
-checked by it: a template's `scripts/check-docs.sh` and the platform's docs build of the templates run this file
-on the template (`python3 docs_check.py <template folder>`).
+This file is the only copy of the checks, and the guide is this site alone. The templates hold no site, no docs build and
+no check: an app created from a template holds plain Markdown (`README.md`, and for yolo a few pages in `docs/`
+that describe its own pipeline), and no build runs on them. The words, removed names and links of that Markdown are
+checked here, with this repository's own, so the templates' Markdown is held to the same rules. The pages of this guide
+link to those files on GitHub (`https://github.com/novelcore/<template>/blob/dev/...`).
 
-The link check reads the other repositories at their trunk: it downloads them, or reads the checkouts named by
+The checks read the two templates at their trunk (`dev`): they download them, or read the checkouts named by
 `DOCS_CHECK_HERA` and `DOCS_CHECK_YOLO`. A download that fails stops the build with a message that names the
-repository; nothing is skipped silently. `DOCS_CHECK_OFFLINE=1` checks this repository alone and prints what it
+repository; nothing is skipped silently. `DOCS_CHECK_OFFLINE=1` leaves the templates out and prints what it
 skipped; set it yourself to build without the network. `DOCS_CHECK_EXTERNAL=1` also fetches every other address.
 `CHANGELOG.md` and `docs/design/` are not client pages and are not checked for words and removed names.
 `python3 docs_check.py --self-test` runs the checker's own cases; the build runs them too.
 
-One topic has one page. What is true for every pipeline is explained here; a template's guide holds only what is
-specific to that template and links here for the rest.
+One topic has one page. What is true for every pipeline is explained here; a template's README and pages hold only what
+is specific to its pipeline and link here for the rest.

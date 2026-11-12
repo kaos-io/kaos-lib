@@ -2,8 +2,8 @@
 
 You have used every part of a step. The yolo pipeline uses them all in six steps: it trains a YOLO pose model on
 labelled images, makes an INT8 version of it, and registers the result. This page reads its `pipeline.py` with
-what you know. The yolo guide ([yolo pipeline guide](https://novelcore.github.io/yolo-pipelines-template/)) holds what is
-specific to it: the dataset layout, every form field and the Slurm notes.
+what you know. The pages in the yolo repository ([yolo pipeline](https://github.com/novelcore/yolo-pipelines-template/blob/dev/README.md)) hold what is
+specific to it: [the steps](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/the-pipeline.md), [the dataset layout](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/datasets.md), [every form field](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/parameters.md) and [the Slurm notes](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/slurm.md).
 
 ```python title="pipeline.py" hl_lines="26 28 32 37 41"
 --8<-- "examples/yolo-pipeline/pipeline.py"
