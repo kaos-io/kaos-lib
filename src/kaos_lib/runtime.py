@@ -93,6 +93,13 @@ def _step_context(environ: Mapping) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def checkpoint_every_minutes(environ: Optional[Mapping] = None) -> Optional[int]:
+    """Minutes between the step's periodic checkpoints as the run form set them (``checkpoint_every`` of the step
+    context), or None when the step declares no interval or this is not a pipeline step."""
+    value = _step_context(os.environ if environ is None else environ).get("checkpoint_every")
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
 def _support(environ: Mapping) -> Optional[str]:
     from . import __version__, support
     raw = environ.get(support.ENV)

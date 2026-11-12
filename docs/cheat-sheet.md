@@ -10,14 +10,14 @@ that explains it.
 | keyword | one line | page |
 |---|---|---|
 | `name` | the step's name and its folder `steps/<name>`: lowercase letters, digits, hyphens, at most 40 | [Must and can](must-and-can.md#you-must) |
-| `kind=` | required: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control` | [Must and can](must-and-can.md#you-must) |
+| `kind=` | required: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`; each has a contract | [Step kinds](step-kinds.md) |
 | `reads=` | the `config/` sections the step gets in `step.start().params` | [Settings](settings.md) |
 | `inputs=` | top-level `config/` values that hold a dataset reference; read with `step.input` | [Read data](read-data.md) |
 | `needs=` | the steps that run before this one: their results and what they made | [Pass things on](pass-things-on.md) |
 | `produces=` | what the step makes: `dataset("n")`, `model("n")`, `artifact("n")` | [Reference](reference.md#what-produces-makes) |
 | `gpu=` | `True` asks for one GPU | [Bigger machines](bigger-machines.md) |
 | `when=` | the name of a run-form field compared with a value, `"extra-mode != off"`; the step is skipped when it is false | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
-| `walltime=` | the longest run on an HPC (Slurm) class: `"90m"`, `"12h"` | [HPC (Slurm)](hpc.md#set-the-longest-run) |
+| `walltime=` | the longest the step may run, anywhere: `"90m"`, `"12h"`; the default of the run-form field `<step>-walltime` | [Long jobs](long-jobs.md#the-time-limit) |
 | `resumable=` | how long before the limit the step is told to save: `True`, `"20m"`, `False` | [HPC (Slurm)](hpc.md#when-the-limit-is-reached) |
 | `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `False` | [Long jobs](long-jobs.md) |
 | `idle_timeout=` | minutes without GPU use before a GPU step ends as idle; `0` for never | [Reference](reference.md#pipelinepy) |

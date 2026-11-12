@@ -20,6 +20,11 @@ Every plain value under `config/` is a field on the run form. The field's name i
 between the levels: `experiment.name` is the field `experiment-name`, `prepare.min_bytes` is `prepare-min_bytes`, and the
 default is the value in the file. A list is not a field.
 
+The comment you write next to a value is the description of its field. Write it at the end of the line, or on the lines
+directly above the value (no empty line between): `experiment.name` above has the comment "experiment name (used for
+tracking + artifact path prefixes)", and that is what the form shows under the field. A value without a comment has no
+description.
+
 A step gets the settings it asks for, and no others. `pipeline.py` names them with `reads=`, and the step finds them
 in `step.start().params`:
 

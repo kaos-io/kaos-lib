@@ -108,6 +108,7 @@ nav:
   - How it works:
       - Principles: principles.md
       - What you must and what you can: must-and-can.md
+      - Step kinds: step-kinds.md
       - Datasets, versions and hashes: datasets-versions-hashes.md
       - Glossary: glossary.md
   - How to:
@@ -144,6 +145,7 @@ nav:
           - L-W03: lint/L-W03.md
           - L-W04: lint/L-W04.md
           - L-W05: lint/L-W05.md
+          - L-W06: lint/L-W06.md
           - L-I01: lint/L-I01.md
           - L-I02: lint/L-I02.md
           - L-I03: lint/L-I03.md

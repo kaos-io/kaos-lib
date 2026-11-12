@@ -32,7 +32,7 @@ To make the step fail when the folder holds too few files, call `step.check("cle
 
 The name `latest` moves to the new version only when the run asks (this is called promoting). A run without the request
 still seals its version, and `latest` stays where it is, so an experiment does not change what other pipelines read.
-[Move `latest`](flow-datasets.md#move-latest) shows the request.
+[Move `latest`](flow-datasets.md#move-latest) shows the field of the run form that asks.
 
 ## Read it from another pipeline
 

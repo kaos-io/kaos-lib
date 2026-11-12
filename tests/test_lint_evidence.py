@@ -11,9 +11,9 @@ from kaos_lib.lint.catalogue import CatalogueError, from_dict
 from lint_corpus import CHECKPOINT_STEP, NO_PROGRESS, PLAIN_STEP, repo, with_evidence, write_repo
 from test_lint_cli import gate, kaosctl
 
-LONG = '    t = step("work", kind="train", gpu=True, walltime="72h")\n'
-SIX = '    t = step("work", kind="train", gpu=True, walltime="6h")\n'
-DECLARED = '    t = step("work", kind="train", gpu=True, walltime="72h", resumable=True)\n'
+LONG = '    t = step("work", kind="evaluate", gpu=True, walltime="72h")\n'
+SIX = '    t = step("work", kind="evaluate", gpu=True, walltime="6h")\n'
+DECLARED = '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=True)\n'
 
 
 def rules(tmp_path, body, steps, catalogue=None):
@@ -72,7 +72,7 @@ def test_should_not_warn_when_the_declared_step_resumed_or_has_no_record(tmp_pat
 
 
 def test_a_declaration_in_pipeline_py_decides_before_any_evidence(tmp_path):
-    off = '    t = step("work", kind="train", gpu=True, walltime="72h", resumable=False)\n'
+    off = '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=False)\n'
     assert rules(tmp_path, off, {"work": CHECKPOINT_STEP}, with_evidence(("work", True))) == ["L-E01"]
 
 

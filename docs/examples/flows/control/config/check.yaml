@@ -1,0 +1,2 @@
+check:
+  epochs: 5 # how many epochs the run trains for; at least 1

@@ -8,7 +8,7 @@ with pipeline("ml-pipeline") as p:
     # The condition names a field of the run form: the setting extra.mode is the field extra-mode.
     extra = step("extra", kind="evaluate", needs=[base], when="extra-mode != off",
                  produces=[artifact("extra-report")])
-    final = step("final", kind="publish", needs=[base, extra], produces=[artifact("final-report")])
+    final = step("final", kind="evaluate", needs=[base, extra], produces=[artifact("final-report")])
 
 if __name__ == "__main__":
     p.write(Path(__file__).parent / "out" / "raw-workflow-template.yaml")

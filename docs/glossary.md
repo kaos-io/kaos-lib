@@ -4,7 +4,7 @@
 |---|---|
 | app | your pipeline project: `pipeline.py`, `config/` and `steps/`. Its name is the name of the repository |
 | step | one program of the pipeline, in `steps/<name>/`, started as `python -m app.entry` |
-| kind | what a step does: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control` |
+| kind | what a step does: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`; each has a contract ([Step kinds](step-kinds.md)) |
 | run | one start of the pipeline, with the values on the run form. It has a name, and so does each of its steps' logs |
 | experiment | a name you choose for a series of runs (the setting `experiment.name`). The files of a run are kept under it |
 | run form | the form you fill in to start a run. Every plain value in `config/` is a field on it |

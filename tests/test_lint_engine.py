@@ -121,7 +121,7 @@ def test_the_context_may_be_a_configmap(tmp_path):
 
 def test_the_catalogue_follows_the_project_limit_for_l_e01(tmp_path):
     cat = from_context(__import__("yaml").safe_load(CONTEXT))   # 600 minutes
-    files = repo('    t = step("t", kind="train", gpu=True, walltime="12h", resumable=False)\n', {"t": "x = 1\n"})
+    files = repo('    t = step("t", kind="evaluate", gpu=True, walltime="12h", resumable=False)\n', {"t": "x = 1\n"})
     assert [f.rule for f in lint(tmp_path, files, cat).findings if f.rule == "L-E01"] == ["L-E01"]
 
 
@@ -151,7 +151,7 @@ def test_step_folders_that_are_symbolic_links_are_not_read(tmp_path):
     secret = tmp_path / "outside"
     secret.mkdir()
     (secret / "x.py").write_text("import mlflow\nfrom kaos_lib import checkpoint\n")
-    files = repo('    t = step("train-x", kind="train", gpu=True, reads=["train"])\n')
+    files = repo('    t = step("train-x", kind="evaluate", gpu=True, reads=["train"])\n')
     root = write_repo(tmp_path / "repo", files)
     (root / "steps").mkdir()
     (root / "steps" / "train_x").symlink_to(secret)
@@ -170,6 +170,6 @@ def test_a_template_shaped_pipeline_has_no_errors(tmp_path):
 
 
 def test_findings_are_sorted_by_position(tmp_path):
-    report = lint(tmp_path, repo('    a = step("a", kind="train", disk="1 GB")\n    b = step("b", kind="train", disk="2 GB")\n'))
+    report = lint(tmp_path, repo('    a = step("a", kind="evaluate", disk="1 GB")\n    b = step("b", kind="evaluate", disk="2 GB")\n'))
     lines = [f.span.line for f in report.findings]
     assert lines == sorted(lines)

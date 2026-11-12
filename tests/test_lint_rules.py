@@ -55,19 +55,19 @@ def messages(tmp_path, body, steps=None, catalogue=None, rule=None, config=None)
 
 
 @pytest.mark.parametrize("body,expect", [
-    ('    a = step("a", kind="train", needs=[ghost])\n', "not defined anywhere"),
-    ('    a = step("a", kind="train", needs=["b"])\n    b = step("b", kind="train")\n', "as text"),
-    ('    a = step("a", kind="train")\n    b = step("a", kind="train")\n', "Two steps are named 'a'"),
+    ('    a = step("a", kind="evaluate", needs=[ghost])\n', "not defined anywhere"),
+    ('    a = step("a", kind="evaluate", needs=["b"])\n    b = step("b", kind="evaluate")\n', "as text"),
+    ('    a = step("a", kind="evaluate")\n    b = step("a", kind="evaluate")\n', "Two steps are named 'a'"),
     ('    a = step("Bad_Name")\n', "not valid"),
-    ('    a = step("a", kind="train", reads=["nope"])\n', "does not exist in config/"),
-    ('    a = step("a", kind="train")\n    a2 = step("c", kind="train", needs=[a2])\n', "defined after it"),
+    ('    a = step("a", kind="evaluate", reads=["nope"])\n', "does not exist in config/"),
+    ('    a = step("a", kind="evaluate")\n    a2 = step("c", kind="evaluate", needs=[a2])\n', "defined after it"),
 ])
 def test_should_report_each_dependency_or_producer_problem(tmp_path, body, expect):
     assert any(expect in m for m in messages(tmp_path, body, rule="L-E05")), body
 
 
 def test_should_not_report_a_dependency_it_cannot_resolve_statically(tmp_path):
-    body = '    a = step("a", kind="train")\n    prev = [a]\n    b = step("b", kind="train", needs=prev)\n    c = step("c", kind="train", needs=[a])\n'
+    body = '    a = step("a", kind="evaluate")\n    prev = [a]\n    b = step("b", kind="evaluate", needs=prev)\n    c = step("c", kind="evaluate", needs=[a])\n'
     assert not messages(tmp_path, body, rule="L-E05")
 
 
@@ -77,12 +77,12 @@ def test_should_report_a_cycle_in_raw_hera_depends(tmp_path):
 
 
 @pytest.mark.parametrize("body,expect", [
-    ('    a = step("a", kind="train", hpc_time_limit="2h", gpu=True)\n', "no longer takes 'hpc_time_limit'"),
-    ('    a = step("a", kind="train", outputs=["metrics"])\n', "no longer takes 'outputs'"),
-    ('    a = step("a", kind="train", walltime="2 hours", gpu=True)\n', "must be minutes or hours"),
-    ('    a = step("a", kind="train", resumable="soon", gpu=True)\n', "resumable='soon'"),
-    ('    a = step("a", kind="train", checkpoint_every=0, gpu=True)\n', "checkpoint_every=0"),
-    ('    a = step("a", kind="train", idle_timeout="never", gpu=True)\n', "idle_timeout='never'"),
+    ('    a = step("a", kind="evaluate", hpc_time_limit="2h", gpu=True)\n', "hpc_time_limit= is gone. Use walltime="),
+    ('    a = step("a", kind="evaluate", outputs=["metrics"])\n', "outputs= is gone. Declare what the step writes with produces="),
+    ('    a = step("a", kind="evaluate", walltime="2 hours", gpu=True)\n', "must be minutes or hours"),
+    ('    a = step("a", kind="evaluate", resumable="soon", gpu=True)\n', "resumable='soon'"),
+    ('    a = step("a", kind="evaluate", checkpoint_every=0, gpu=True)\n', "checkpoint_every=0"),
+    ('    a = step("a", kind="evaluate", idle_timeout="never", gpu=True)\n', "idle_timeout='never'"),
     ('    a = step()\n', "without a name"),
 ])
 def test_should_report_each_argument_step_refuses(tmp_path, body, expect):
@@ -90,8 +90,8 @@ def test_should_report_each_argument_step_refuses(tmp_path, body, expect):
 
 
 def test_should_accept_the_arguments_step_accepts(tmp_path):
-    body = ('    a = step("a", kind="train", gpu=True, walltime="12h", resumable="20m", checkpoint_every="1h", '
-            'idle_timeout=0, when="experiment-name != x")\n    b = step("b", kind="train", resumable=False, checkpoint_every=False)\n')
+    body = ('    a = step("a", kind="evaluate", gpu=True, walltime="12h", resumable="20m", checkpoint_every="1h", '
+            'idle_timeout=0, when="experiment-name != x")\n    b = step("b", kind="evaluate", resumable=False, checkpoint_every=False)\n')
     assert not messages(tmp_path, body, rule="L-E06")
 
 
@@ -100,7 +100,7 @@ def test_should_accept_the_arguments_step_accepts(tmp_path):
     ('    c = Container(name="c", executor=Executor(service_account_name="x"))\n', "service account"),
     ('    c = {"serviceAccountName": "x"}\n', "service account"),
     ('    c = Container(name="hpc-follower")\n', "reserves"),
-    ('    c = step("meluxina-run", kind="train")\n', "reserves"),
+    ('    c = step("meluxina-run", kind="evaluate")\n', "reserves"),
 ])
 def test_should_report_each_client_identity_form(tmp_path, body, expect):
     assert any(expect in m for m in messages(tmp_path, body, rule="L-E04")), body
@@ -112,29 +112,29 @@ def test_should_not_flag_the_same_reserved_name_twice(tmp_path):
 
 def test_l_e01_does_not_fire_when_the_step_is_resumable_or_its_code_uses_checkpoints(tmp_path):
     from lint_corpus import CHECKPOINT_STEP, NO_PROGRESS, with_evidence
-    body = '    t = step("work", kind="train", gpu=True, walltime="72h")\n'
+    body = '    t = step("work", kind="evaluate", gpu=True, walltime="72h")\n'
     failing = with_evidence(("work", False, NO_PROGRESS))
     assert messages(tmp_path / "a", body, {"work": "def f(): pass\n"}, failing, rule="L-E01")
     assert not messages(tmp_path / "b", body, {"work": CHECKPOINT_STEP}, rule="L-E01")
-    assert not messages(tmp_path / "c", '    t = step("work", kind="train", gpu=True, walltime="72h", resumable=True)\n',
+    assert not messages(tmp_path / "c", '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=True)\n',
                         {"work": "def f(): pass\n"}, failing, rule="L-E01")
 
 
 def test_l_e01_follows_the_catalogues_lane_maximum(tmp_path):
     from lint_corpus import with_lane
-    body = '    t = step("work", kind="train", gpu=True, walltime="72h", resumable=False)\n'
+    body = '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=False)\n'
     assert not messages(tmp_path / "a", body, {"work": "x = 1\n"}, with_lane(5 * 1440), rule="L-E01")
     assert messages(tmp_path / "b", body, {"work": "x = 1\n"}, with_lane(60), rule="L-E01")
 
 
 def test_w01_stays_quiet_when_l_e01_already_reports_the_step(tmp_path):
-    body = '    t = step("work", kind="train", gpu=True, walltime="72h", resumable=False)\n'
+    body = '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=False)\n'
     assert not messages(tmp_path, body, {"work": "x = 1\n"}, rule="L-W01")
 
 
 def test_w04_reports_a_pipeline_that_never_registers_a_model(tmp_path):
     from lint_corpus import CHECKPOINT_STEP
-    out = messages(tmp_path, '    t = step("train-x", kind="train", gpu=True, reads=["train"])\n', {"train-x": CHECKPOINT_STEP},
+    out = messages(tmp_path, '    t = step("train-x", kind="evaluate", gpu=True, reads=["train"])\n', {"train-x": CHECKPOINT_STEP},
                    rule="L-W04")
     assert any("registers a model" in m for m in out)
 
@@ -143,18 +143,18 @@ def test_w04_reports_a_pipeline_that_never_registers_a_model(tmp_path):
 def test_w03_reports_a_dataset_version_named_in_step_code(tmp_path, text):
     code = f"REF = '{text}'\n"
     assert any("names a dataset and a version" in m
-               for m in messages(tmp_path, '    a = step("a", kind="train")\n', {"a": code}, rule="L-W03"))
+               for m in messages(tmp_path, '    a = step("a", kind="evaluate")\n', {"a": code}, rule="L-W03"))
 
 
 @pytest.mark.parametrize("config", ["dataset: dataset-default@latest\n", "dataset: dataset-default\n",
                                     "dataset: dataset-default@v1\n"])
 def test_w03_leaves_the_default_version_in_config_alone(tmp_path, config):
     from lint_corpus import CONFIG
-    got = messages(tmp_path, '    a = step("a", kind="train", reads=["dataset"])\n',
+    got = messages(tmp_path, '    a = step("a", kind="evaluate", reads=["dataset"])\n',
                    config={**CONFIG, "config/dataset.yaml": config}, rule="L-W03")
     assert got == []
 
 
 @pytest.mark.parametrize("kw", ['walltime="2h"', "resumable=True", 'checkpoint_every="20m"', 'idle_timeout="40m"'])
 def test_a_step_without_a_gpu_may_declare_what_the_engine_accepts_for_every_step(tmp_path, kw):
-    assert messages(tmp_path, f'    a = step("a", kind="train", {kw})\n', rule="L-E06") == []
+    assert messages(tmp_path, f'    a = step("a", kind="evaluate", {kw})\n', rule="L-E06") == []

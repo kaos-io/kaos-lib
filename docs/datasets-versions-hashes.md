@@ -27,7 +27,7 @@ three names:
 - **`vN`**, a label such as `v2`, on an uploaded dataset. `kaosctl dataset release dataset-x` gives the version `latest`
   points to the next number. It refuses when that state already has one: `nothing new to release`.
 - **`latest`**, the name that points to the dataset's current version. It moves when a pull request is merged into an
-  uploaded dataset, and when a run that asks for it makes a version of a produced one ([how to ask](flow-datasets.md#move-latest)).
+  uploaded dataset, and when a run that has its `promote-<name>` field set to `true` makes a version of a produced one ([how to ask](flow-datasets.md#move-latest)).
   `latest` can be newer than the newest `vN`, because nobody has released the change yet. A version that a run sealed
   without asking is newer than `latest` in time, but it is not `latest`: nothing reads it unless you name its id.
 

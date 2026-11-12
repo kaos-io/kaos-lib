@@ -18,22 +18,11 @@ start, do something, hand back a result.
 The platform runs the step as `python -m app.entry`, with no arguments. Your code reads no environment variable:
 `step.start()` gives you everything.
 
-## The six kinds
+## The kind of a step
 
-Every step in `pipeline.py` says what it does with `kind=`. The kind is a label you choose by what the step does:
-
-| kind | for a step that |
-|---|---|
-| `ingest` | brings data in from outside ([Bring data in](bring-data-in.md)) |
-| `transform` | turns data into other data: preprocess, filter, split, convert (like `prepare`) |
-| `train` | trains a model |
-| `evaluate` | measures a model or a dataset (like `hello-world`) |
-| `publish` | registers or delivers a result |
-| `control` | decides or coordinates, and does no data work itself |
-
-Three kinds have rules. `ingest`, `publish` and `control` steps always run on the platform's own machines and may not set
-`walltime=`, and a `control` step has no `inputs=` and no `produces=`. A step without a `kind=` is refused. The rules are
-in [What you must and what you can](must-and-can.md#you-must).
+Every step in `pipeline.py` says what it does with `kind=`: `ingest`, `transform`, `train`, `evaluate`, `publish` or
+`control`. Each kind has a contract, for example a `train` step produces a model: [Step kinds](step-kinds.md) has them
+all, with an example of each.
 
 ## Change the step
 

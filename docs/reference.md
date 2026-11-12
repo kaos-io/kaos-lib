@@ -51,16 +51,16 @@ every output: `name`, `type`, `repo`, `commit`.
 | keyword | meaning | the platform refuses |
 |---|---|---|
 | `name` | lowercase letters, digits, hyphens | a name over the limit or one that is kept ([the limits](must-and-can.md#the-limits)); a name starting with `kaos-`; a repeated name |
-| `kind=` | `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`. Required | a missing or unknown kind |
+| `kind=` | `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`. Required. Each kind has a contract: [Step kinds](step-kinds.md) | a missing or unknown kind; a step that breaks its kind's contract |
 | `reads=` | sections of `config/` the step gets in `params` | a section that is not in `config/` |
 | `inputs=` | top-level `config/` values (text) that hold a dataset reference | a name that is not in `config/` or not text; a name that starts with `kaos-`; `control` steps |
 | `needs=` | earlier steps (the variables) | more steps than the limit; a step defined below; an input and a needed output of one name; two needed steps producing one name; more readable datasets than the limit |
-| `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; `control` steps |
+| `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; a kind that may not produce what is listed ([Step kinds](step-kinds.md)) |
 | `gpu=True` | one GPU | |
 | `when="..."` | the name of a run-form field `<field>` compared with a value, written `"<field> == value"` or with `!=`; join comparisons with `and` / `or` (`and` first, no parentheses); a value with spaces is quoted | a `when=` that is not written that way; a field the run form does not have |
-| `walltime=` | the run limit on a Slurm class: `"90m"`, `"12h"`, `"720"` (minutes); without it the default of [the limits](must-and-can.md#the-limits) | a wrong form; `ingest`, `publish`, `control` steps |
+| `walltime=` | the longest the step may run, wherever it runs: `"90m"`, `"12h"`, `"720"` (minutes). It is the default of the run-form field `<step>-walltime`; without it that default is [the limit](must-and-can.md#the-limits) | a wrong form |
 | `resumable=` | `True` (stop signal 10 minutes before the limit), a lead time `"20m"`, or `False` | a wrong form |
-| `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes | a wrong form |
+| `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every`, and `kaos_lib.checkpoint` uses the field's value as the interval of `tick()` when you set none | a wrong form |
 | `idle_timeout=` | minutes without GPU use and log lines before a GPU step ends as idle: `"40m"`, `40`, `0` for never; the default is in [the limits](must-and-can.md#the-limits) | a wrong form |
 
 Refused at render, as well: `outputs=`, `hpc_time_limit=` and `disk=`; a step that produces a dataset and is pinned to
@@ -158,7 +158,7 @@ addresses and tokens the platform gives a running step are not passed, even if y
 | the step ended because | with a checkpoint | without one |
 |---|---|---|
 | its machine was lost (reclaimed, failed, drained) | continues from the newest good copy | runs again from the start, as often as the limit allows ([the limits](must-and-can.md#the-limits)) |
-| the time limit of a Slurm job was reached ([page 9](hpc.md)) | continues in a new job | ends |
+| the time limit was reached, on the platform's own machines or on HPC ([Long jobs](long-jobs.md#the-time-limit)) | continues in a new run | ends |
 | a GPU step showed no GPU use and no new log line for the idle time ([the limits](must-and-can.md#the-limits)) | ends as idle, and is not run again | ends as idle |
 | your code failed (non-zero exit) | ends as failed | ends as failed |
 

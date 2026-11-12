@@ -33,7 +33,7 @@ the command.
 |---|---|
 | `kaos-lib: Zitadel could not be reached (...); the sign-in is tried again in N seconds.` | the sign-in service did not answer. A short outage is normal: the step tries again for about two and a half minutes and goes on when it answers. Do nothing. If the tries run out the step fails with `cannot reach Zitadel` |
 | `output 'x': the same content as the last version of dataset-... (...); no new version.` | the step wrote the files the last version already holds |
-| `output 'x': sealed dataset-... at ... (kept as ...); latest was not moved.` | the run made a version and did not ask to move `latest` |
+| `output 'x': sealed dataset-... at ... (kept as ...); latest was not moved.` | the run made a version and its `promote-<name>` field was `false` |
 | `output 'x': 0 file(s) to upload, 0 to delete, 0 unchanged since the last version of dataset-..., 201 reused from an earlier run (copied, not uploaded).` | the files are the ones an earlier run sealed and did not move `latest` to: they were copied, not uploaded again. The run still has its own version |
 | `output 'x': 1 of the 201 file(s) could not be copied and were uploaded.` | a file of an earlier run could not be copied, so this step uploaded it. Nothing to do |
 
@@ -44,15 +44,39 @@ a page: [Lint checks](lint.md).
 
 | you see | it means | do this |
 |---|---|---|
-| `L-E06 ... step() no longer takes 'outputs'. This app was made before the current pipelines. Create it again from the template.` | `outputs=` is gone | declare the things a step makes in `produces=`, and hand values on with `step.result(...)` |
-| `step() no longer takes 'hpc_time_limit'` | `hpc_time_limit=` is gone | write `walltime="12h"` |
-| `step() no longer takes 'disk'` | a step is not told its disk | pick a bigger class on the run form |
+| `step 'x': outputs= is gone. Declare what the step writes with produces=[...] and hand it on with step.result().` | `outputs=` is gone | declare what a step makes in `produces=`, and hand values on with `step.result(...)` |
+| `step 'x': hpc_time_limit= is gone. Use walltime=, for example walltime="12h".` | `hpc_time_limit=` is gone | write `walltime="12h"` |
+| `step 'x': disk= is gone. The step gets the disk of the machine class it runs on.` | a step is not told its disk | pick a bigger class on the run form |
 | `L-E06 ... when=... is not a run-form field compared with a value`, or `... names 'x', which is not a field of the run form` | `when=` is not written as a field name, `==` or `!=`, and a value, or the field is not on the run form | write `when="mode != off"` with the name of a setting as the run form shows it |
 | `L-E06 ... when= is written with the name of a run-form field` | `when=` still has the `{{workflow.parameters.<field>}}` form | write the field's name instead |
 | `L-E07 ... Step 'x' has no kind=, which every step declares: one of ingest, transform, train, evaluate, publish, control.` | a step has no `kind=` | add the kind that says what the step does. The sentence "This app was made before the current pipelines" follows only when no step has a kind |
 | `L-E05 ... needs 'x', which is defined after it` | a step is defined below the step that needs it | move the line of `x` above |
 | `L-E05 ... reads the config section 'x', which does not exist in config/` | `reads=` names a section that is not there | fix the name, or add the section to `config/` |
 | `L-E07 ... the dataset 'x' is already produced by step 'y'. A dataset has one writer.` | two steps make the same dataset | keep one writer |
+
+## Refused when the pipeline is built
+
+A step that does not keep to the contract of its kind ([Step kinds](step-kinds.md)) is refused with one sentence:
+
+| you see | do this |
+|---|---|
+| `step 'x': an ingest step brings data in, so it produces a dataset. Add produces=[dataset("name")].` | add the dataset, or choose the kind of the work the step does |
+| `step 'x': a transform step turns data into something. Add produces=[...] with a dataset, a model or an artifact.` | add what it makes |
+| `step 'x': a train step produces a model. Add produces=[model("name")], or give the step the kind of the work it does (ingest, transform, evaluate, publish, control).` | add the model, or change the kind |
+| `step 'x': an evaluate step writes reports only, so it may not produce a dataset or a model. Use kind="transform" for a step that makes a dataset, kind="train" for one that makes a model.` | change the kind, or write an artifact |
+| `step 'x': a publish step delivers a result and produces nothing here. Remove produces=, or give the step the kind of the work it does.` | remove `produces=` |
+| `step 'x': a control step steers the run and handles no data, so it takes no inputs= and no produces=.` | remove them, or give the step the kind of the work it does |
+
+## When a run is refused before it starts
+
+| you see | it means | do this |
+|---|---|---|
+| `x-walltime is '1d'. Write minutes or hours, for example 90, 90m or 12h: at least one minute, no other unit.` | the time limit of step `x` on the run form is not minutes or hours | write `90`, `90m` or `12h` in the field |
+| `x-walltime is 15 minutes, which is not longer than the 20 minutes before its limit that the step is told to save (resumable= in pipeline.py). Give the step more time.` | the limit is shorter than the time the step needs to save | raise the field, or lower the lead in `resumable=` |
+| `x-checkpoint-every is 'often'. Write minutes or hours, ...` | the checkpoint interval is not minutes or hours | write `10m` or `1h` |
+| `promote-clean is 'maybe'. Choose true or false.` | the choice of a dataset to promote is not `true` or `false` | choose one of the two |
+| `'plan.promote' is no longer read. Tick the field promote-<dataset> of the run form, one for each dataset a step produces.` | the advanced config of the run still holds `plan:` | remove it and set the field `promote-<name>` to `true` |
+| `step 'x' cannot run on class 'gpu-t4': it is a GPU machine and the step does not declare gpu=True. Add gpu=True to the step in pipeline.py to run it on a GPU machine.` | the run asked for a class the step is not offered | pick a class the form offers, or add `gpu=True` |
 
 ## On the run form
 

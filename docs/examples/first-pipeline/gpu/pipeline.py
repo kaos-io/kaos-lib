@@ -20,7 +20,7 @@ with pipeline("ml-pipeline") as p:
                    produces=[dataset("clean"), artifact("dropped-files")])
     hello = step("hello-world", kind="evaluate", reads=["hello"], inputs=["reference"], needs=[prepare],
                  produces=[artifact("report")])
-    gpu_check = step("gpu-check", kind="train", reads=["experiment"], gpu=True)
+    gpu_check = step("gpu-check", kind="evaluate", reads=["experiment"], gpu=True)
 
 if __name__ == "__main__":
     p.write(Path(__file__).parent / "out" / "raw-workflow-template.yaml")

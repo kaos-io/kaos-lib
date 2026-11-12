@@ -35,7 +35,7 @@ FIRST = EXAMPLES / "first-pipeline"
 SECOND = EXAMPLES / "second-pipeline"
 FLOWS = EXAMPLES / "flows"
 # The folders of FIRST in the order the pages lay them over the template.
-STATES = ("template", "first-step", "settings", "read-data", "pass-on", "produce", "gpu", "long-job", "hpc", "try-locally")
+STATES = ("template", "first-step", "settings", "read-data", "pass-on", "gpu", "long-job", "hpc", "try-locally")
 DOCKERFILE = '''FROM python:3.11-slim
 WORKDIR /app
 ARG KAOS_LIB_PACKAGE="kaos-lib[zitadel]==0.5.0"
@@ -254,13 +254,13 @@ def flow_skip(tmp: pathlib.Path) -> dict:
     base, _ = run_step(app, tmp / "base", "base", "transform", [("artifact", "summary")])
     if base["values"] != {"base": True}:
         raise ExampleError(f"base handed on {base['values']}")
-    skipped, run = run_step(app, tmp / "final-1", "final", "publish", [("artifact", "final-report")],
+    skipped, run = run_step(app, tmp / "final-1", "final", "evaluate", [("artifact", "final-report")],
                             upstream={"base": base["values"], "extra": None}, upstream_writes={"base": {"summary": summary}})
     if skipped["values"] != {"extra_ran": False}:
         raise ExampleError(f"final handed on {skipped['values']} after a skipped extra")
     extra, extra_run = run_step(app, tmp / "extra", "extra", "evaluate", [("artifact", "extra-report")],
                                 upstream={"base": base["values"]}, upstream_writes={"base": {"summary": summary}})
-    ran, run = run_step(app, tmp / "final-2", "final", "publish", [("artifact", "final-report")],
+    ran, run = run_step(app, tmp / "final-2", "final", "evaluate", [("artifact", "final-report")],
                         upstream={"base": base["values"], "extra": extra["values"]},
                         upstream_writes={"extra": {"extra-report": extra_run.output("extra-report")}})
     if ran["values"] != {"extra_ran": True} or "score 7" not in (run.output("final-report") / "final.txt").read_text():
@@ -346,6 +346,35 @@ def flow_ingest(tmp: pathlib.Path) -> dict:
     raise ExampleError("fetch did not fail when the source gave no file")
 
 
+def flow_publish(tmp: pathlib.Path) -> dict:
+    """A `publish` step delivers the model the step before it wrote and produces nothing of its own."""
+    app = flow_app("publish", tmp)
+    trained, run = run_step(app, tmp / "train", "train", "train", [("model", "model")])
+    delivered, _ = run_step(app, tmp / "register", "register", "publish", [], params={"registry": {"name": "my-model"}},
+                            upstream={"train": trained["values"]}, upstream_writes={"train": {"model": run.output("model")}})
+    if delivered["values"] != {"delivered": "my-model"} or delivered["writes"]:
+        raise ExampleError(f"register handed on {delivered}")
+    return delivered
+
+
+def flow_control(tmp: pathlib.Path) -> dict:
+    """A `control` step lets a good run go on, hands its values to the next step, and ends a run with wrong settings."""
+    app = flow_app("control", tmp)
+    checked, _ = run_step(app, tmp / "check", "check", "control", [], params={"check": {"epochs": 5}})
+    if checked["values"] != {"ok": True, "epochs": 5} or checked["writes"]:
+        raise ExampleError(f"check handed on {checked}")
+    worked, run = run_step(app, tmp / "work", "work", "evaluate", [("artifact", "report")], upstream={"check": checked["values"]})
+    if (run.output("report") / "report.txt").read_text() != "checked for 5 epochs\n":
+        raise ExampleError("work did not read the values of check")
+    try:
+        run_step(app, tmp / "bad", "check", "control", [], params={"check": {"epochs": 0}})
+    except SystemExit as exc:
+        if "must be at least 1" not in str(exc):
+            raise ExampleError(f"check ended the run with {exc}") from None
+        return worked
+    raise ExampleError("check did not end a run with 0 epochs")
+
+
 def packages_dockerfile(tmp: pathlib.Path) -> None:
     """The Dockerfile of the page "Add packages", in a one-step app: no error or warning of the Dockerfile rules (L-D*);
     L-D07 (the image runs as root) is an info for every Dockerfile of the template too."""
@@ -395,7 +424,8 @@ def check_all() -> None:
         Walk("template", pathlib.Path(tmp)).second()
     with tempfile.TemporaryDirectory() as tmp:
         ledger_example(pathlib.Path(tmp))
-    for flow in (flow_two_inputs, flow_skip, flow_fan_in, flow_metrics, flow_ingest, packages_dockerfile):
+    for flow in (flow_two_inputs, flow_skip, flow_fan_in, flow_metrics, flow_ingest, flow_publish, flow_control,
+                 packages_dockerfile):
         with tempfile.TemporaryDirectory() as tmp:
             flow(pathlib.Path(tmp))
     shared_reference()
@@ -403,9 +433,9 @@ def check_all() -> None:
         compile(path.read_text(encoding="utf-8"), str(path), "exec")
     for path in sorted(EXAMPLES.rglob("*.yaml")):
         yaml.safe_load(path.read_text(encoding="utf-8"))
-    promote = yaml.safe_load((FIRST / "produce" / "runs" / "promote.yaml").read_text(encoding="utf-8"))
-    if promote != {"plan": {"promote": {"clean": True}}}:
-        raise ExampleError("runs/promote.yaml is not the run's request to move the newest version of `clean`")
+    page = (HERE / "docs" / "flow-datasets.md").read_text(encoding="utf-8")
+    if "promote-clean" not in page or "plan:" in page:
+        raise ExampleError("flow-datasets.md does not name the run-form field `promote-clean`, or still shows `plan:`")
 
 
 if __name__ == "__main__":

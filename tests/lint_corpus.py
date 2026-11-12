@@ -69,13 +69,13 @@ def with_lane(minutes: int, cap: int = 5) -> Catalogue:
 # rule -> (failing repository, clean twin, catalogue or None for the default, expected (line, substring) of the finding)
 CASES = {
     "L-E01": (
-        repo('    t = step("train-x", kind="train", gpu=True, walltime="72h", reads=["train"])\n', {"train-x": PLAIN_STEP}),
-        repo('    t = step("train-x", kind="train", gpu=True, walltime="24h", reads=["train"])\n', {"train-x": PLAIN_STEP}),
+        repo('    t = step("train-x", kind="evaluate", gpu=True, walltime="72h", reads=["train"])\n', {"train-x": PLAIN_STEP}),
+        repo('    t = step("train-x", kind="evaluate", gpu=True, walltime="24h", reads=["train"])\n', {"train-x": PLAIN_STEP}),
         with_evidence(("train-x", False, NO_PROGRESS)), (4, "3 days")),
     "L-E02": (
-        repo('    t = step("train-x", kind="train", gpu=True, walltime="400h", resumable=True, reads=["train"])\n',
+        repo('    t = step("train-x", kind="evaluate", gpu=True, walltime="400h", resumable=True, reads=["train"])\n',
              {"train-x": CHECKPOINT_STEP}),
-        repo('    t = step("train-x", kind="train", gpu=True, walltime="100h", resumable=True, reads=["train"])\n',
+        repo('    t = step("train-x", kind="evaluate", gpu=True, walltime="100h", resumable=True, reads=["train"])\n',
              {"train-x": CHECKPOINT_STEP}),
         None, (4, "9 runs")),
     "L-E03": (
@@ -87,52 +87,57 @@ CASES = {
         repo('    c = Container(name="c")\n'),
         None, (4, "service account")),
     "L-E05": (
-        repo('    a = step("a", kind="train", needs=[b])\n    b = step("b", kind="train")\n'),
-        repo('    b = step("b", kind="train")\n    a = step("a", kind="train", needs=[b])\n'),
+        repo('    a = step("a", kind="evaluate", needs=[b])\n    b = step("b", kind="evaluate")\n'),
+        repo('    b = step("b", kind="evaluate")\n    a = step("a", kind="evaluate", needs=[b])\n'),
         None, (4, "defined after it")),
     "L-E06": (
-        repo('    a = step("a", kind="train", walltime="12 hours")\n'),
-        repo('    a = step("a", kind="train", walltime="12h")\n'),
+        repo('    a = step("a", kind="evaluate", walltime="12 hours")\n'),
+        repo('    a = step("a", kind="evaluate", walltime="12h")\n'),
         None, (4, "walltime=")),
     "L-E07": (
         repo('    a = step("a", reads=["dataset"])\n'),
         repo('    a = step("a", kind="transform", reads=["dataset"], inputs=["dataset"], produces=[dataset("clean")])\n'),
         None, (4, "has no kind=")),
     "L-E08": (
-        repo('    a = step("a", kind="train")\n', {"a": OLD_STEP}),
-        repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP}),
+        repo('    a = step("a", kind="evaluate")\n', {"a": OLD_STEP}),
+        repo('    a = step("a", kind="evaluate")\n', {"a": PLAIN_STEP}),
         None, (5, "takes --params")),
     "L-E09": (
-        repo('    a = step("a", kind="train")\n',
+        repo('    a = step("a", kind="evaluate")\n',
              config={**CONFIG, "config/config.yaml": "defaults:\n  - experiment\n  - platform: live\n"}),
-        repo('    a = step("a", kind="train")\n'),
+        repo('    a = step("a", kind="evaluate")\n'),
         None, (3, "names the `platform` config group")),
     "L-W01": (
-        repo('    t = step("work", kind="train", gpu=True, walltime="6h")\n', {"work": PLAIN_STEP}),
-        repo('    t = step("work", kind="train", gpu=True, walltime="6h", resumable=True)\n', {"work": PLAIN_STEP}),
+        repo('    t = step("work", kind="evaluate", gpu=True, walltime="6h")\n', {"work": PLAIN_STEP}),
+        repo('    t = step("work", kind="evaluate", gpu=True, walltime="6h", resumable=True)\n', {"work": PLAIN_STEP}),
         with_evidence(("work", False, NO_PROGRESS)), (4, "6 hours")),
     "L-W05": (
-        repo('    t = step("work", kind="train", gpu=True, resumable=True)\n', {"work": CHECKPOINT_STEP}),
-        repo('    t = step("work", kind="train", gpu=True)\n', {"work": CHECKPOINT_STEP}),
+        repo('    t = step("work", kind="evaluate", gpu=True, resumable=True)\n', {"work": CHECKPOINT_STEP}),
+        repo('    t = step("work", kind="evaluate", gpu=True)\n', {"work": CHECKPOINT_STEP}),
         with_evidence(("work", False, NO_PROGRESS)), (4, "NoProgress")),
+    "L-W06": (
+        repo('    t = step("work", kind="train", walltime="12h", produces=[model("m")])\n', {"work": PLAIN_STEP}),
+        repo('    t = step("work", kind="train", walltime="12h", resumable=True, produces=[model("m")])\n',
+             {"work": PLAIN_STEP}),
+        None, (4, "starts over")),
     "L-W02": (
-        repo('    t = step("work", kind="train", gpu=True, idle_timeout=0)\n'),
-        repo('    t = step("work", kind="train", gpu=True, idle_timeout="40m")\n'),
+        repo('    t = step("work", kind="evaluate", gpu=True, idle_timeout=0)\n'),
+        repo('    t = step("work", kind="evaluate", gpu=True, idle_timeout="40m")\n'),
         None, (4, "idle limit")),
     "L-W03": (
-        repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP + "REF = 'dataset-default@latest'\n"}),
-        repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP}),
+        repo('    a = step("a", kind="evaluate")\n', {"a": PLAIN_STEP + "REF = 'dataset-default@latest'\n"}),
+        repo('    a = step("a", kind="evaluate")\n', {"a": PLAIN_STEP}),
         None, (7, "names a dataset and a version")),
     "L-W04": (
-        repo('    t = step("train-x", kind="train", gpu=True, reads=["train"])\n', {"train-x": PLAIN_STEP}),
-        repo('    t = step("train-x", kind="train", gpu=True, reads=["train"])\n', {"train-x": MLFLOW_STEP}),
+        repo('    t = step("train-x", kind="evaluate", gpu=True, reads=["train"])\n', {"train-x": PLAIN_STEP}),
+        repo('    t = step("train-x", kind="evaluate", gpu=True, reads=["train"])\n', {"train-x": MLFLOW_STEP}),
         None, (4, "no MLflow")),
     "L-I01": (
-        repo('    t = step("work", kind="train", gpu=True)\n'),
-        repo('    t = step("work", kind="train", gpu=True, walltime="4h")\n'),
+        repo('    t = step("work", kind="evaluate", gpu=True)\n'),
+        repo('    t = step("work", kind="evaluate", gpu=True, walltime="4h")\n'),
         None, (4, "no time limit")),
     "L-I02": (
-        repo('    t = step("work", kind="train", gpu=True, walltime="90m")\n'),
-        repo('    t = step("work", kind="train", gpu=True, walltime="3h")\n'),
+        repo('    t = step("work", kind="evaluate", gpu=True, walltime="90m")\n'),
+        repo('    t = step("work", kind="evaluate", gpu=True, walltime="3h")\n'),
         None, (4, "90 minutes")),
 }
