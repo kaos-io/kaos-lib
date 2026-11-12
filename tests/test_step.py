@@ -650,3 +650,64 @@ def test_an_output_named_like_an_input_of_a_needed_step_is_refused_at_start(monk
     write = next(iter(context["upstream"].values()))["writes"][0]
     context["produces"][0]["name"] = write["name"]
     assert "different name" in refused(capsys, monkeypatch, context)
+
+
+# ------------------------------------------------------------------------------- what the log says an output changed
+def _write_dataset(monkeypatch, lake, context, files, capsys):
+    """Run one step that writes ``files`` into its dataset output; returns the lines it printed."""
+    begin(monkeypatch, lake.context(context), lake.client())
+    fill("embeddings", files)
+    capsys.readouterr()
+    step.result()
+    lines = capsys.readouterr().out.splitlines()
+    step.stop()
+    return lines
+
+
+def test_the_log_says_what_a_first_version_uploaded_and_that_it_is_the_latest(monkeypatch, lake, capsys):
+    lines = _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"b"}, capsys)
+    head = lake.head("dataset-hera-demo-embeddings")
+    assert lines == [
+        "output 'embeddings': 2 file(s) to upload, 1 to delete, 0 unchanged since the last version of "
+        "dataset-hera-demo-embeddings.",
+        f"output 'embeddings': dataset-hera-demo-embeddings is now at {head[:12]} (latest)."]
+
+
+def test_the_log_says_when_a_run_changed_one_file_and_when_it_changed_nothing(monkeypatch, lake, capsys):
+    _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"b"}, capsys)
+    first = lake.head("dataset-hera-demo-embeddings")
+    lines = _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"changed"}, capsys)
+    second = lake.head("dataset-hera-demo-embeddings")
+    assert second != first and lines[0] == (
+        "output 'embeddings': 1 file(s) to upload, 0 to delete, 1 unchanged since the last version of "
+        "dataset-hera-demo-embeddings.")
+    assert lines[1] == f"output 'embeddings': dataset-hera-demo-embeddings is now at {second[:12]} (latest)."
+    lines = _write_dataset(monkeypatch, lake, "context-promote", {"a.bin": b"a", "b.bin": b"changed"}, capsys)
+    assert lines == [
+        "output 'embeddings': 0 file(s) to upload, 0 to delete, 2 unchanged since the last version of "
+        "dataset-hera-demo-embeddings.",
+        f"output 'embeddings': the same content as the last version of dataset-hera-demo-embeddings "
+        f"({second[:12]}); no new version."]
+
+
+def test_the_log_says_a_run_that_does_not_promote_kept_its_version_and_left_latest(monkeypatch, lake, capsys):
+    before = lake.head("dataset-hera-demo-embeddings")
+    lines = _write_dataset(monkeypatch, lake, "context-no-upstream", {"a.bin": b"new"}, capsys)
+    tag = next(t for t in lake.repos["dataset-hera-demo-embeddings"]["tags"] if t.startswith("k-"))
+    sealed = lake.repos["dataset-hera-demo-embeddings"]["tags"][tag]
+    assert lake.head("dataset-hera-demo-embeddings") == before != sealed
+    assert lines[1] == (f"output 'embeddings': sealed dataset-hera-demo-embeddings at {sealed[:12]} (kept as {tag}); "
+                        "latest was not moved.")
+
+
+def test_the_log_says_where_a_model_was_saved(monkeypatch, lake, capsys):
+    begin(monkeypatch, lake.context("context-one-upstream"), lake.client())
+    step.input("labels")
+    fill("model", {"best.pt": b"w"})
+    capsys.readouterr()
+    step.result()
+    commit = lake.head("outputs-hera-demo")
+    assert capsys.readouterr().out.splitlines() == [
+        "output 'model': 1 file(s) to upload, 0 to delete, 0 unchanged since the last version of outputs-hera-demo "
+        "(model/baseline/hera-demo-x7k2p/).",
+        f"output 'model': saved at {commit[:12]}."]

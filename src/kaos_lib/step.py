@@ -489,7 +489,9 @@ def _save(run: _Running) -> list:
             sealed.append((produce, _seal(run, produce)))
         for produce, s in sorted(sealed, key=lambda item: item[0].type == "dataset"):
             repo = produce.repo
-            commit = writer.promote(s) if produce.type != "dataset" or produce.promote else s.commit
+            promoted = produce.type != "dataset" or produce.promote
+            commit = writer.promote(s) if promoted else s.commit
+            writer.report(s, commit, promoted)
             writes.append(lock.Write(produce.name, produce.type, produce.repo, commit))
     except PermissionDenied as exc:
         _fail(f"this app may not write {repo}: only what the step declares in produces=[...] in pipeline.py can "

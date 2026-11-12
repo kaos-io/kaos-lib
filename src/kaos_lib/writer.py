@@ -75,6 +75,24 @@ class Sealed:
         return self.tag_prefix is not None
 
 
+def say(line: str) -> None:
+    """One line of the step's log, printed at once: what an output changed is how an engineer sees that a second
+    run uploaded only what differs."""
+    print(line, flush=True)
+
+
+def report(s: Sealed, saved: str, promoted: bool) -> None:
+    """The last line of an output: where it ended up. ``saved`` is the commit ``promote`` returned (or ``s.commit``)."""
+    if s.tag_prefix is None:
+        say(f"output '{s.name}': saved at {saved[:12]}.")
+    elif s.commit == s.head:
+        say(f"output '{s.name}': the same content as the last version of {s.repo} ({saved[:12]}); no new version.")
+    elif promoted:
+        say(f"output '{s.name}': {s.repo} is now at {saved[:12]} (latest).")
+    else:
+        say(f"output '{s.name}': sealed {s.repo} at {saved[:12]} (kept as {s.tag}); latest was not moved.")
+
+
 def _differences(client: LakeFS, repo: str, ref: str, files: dict, prefix: str) -> list:
     """The paths where ``ref`` and the folder differ below ``prefix`` (missing, extra, another size or checksum)."""
     held = {o["path"]: (o.get("size_bytes"), o.get("checksum", "")) for o in client.list_objects(repo, ref, prefix)}
@@ -150,7 +168,10 @@ def seal(client: LakeFS, repo: str, folder: pathlib.Path, *, name: str, prefix: 
         client.delete_branch(repo, branch)            # an earlier attempt's: its base may not be this head
         client.create_branch(repo, branch, head)
         s.open = True
-        apply_plan(client, repo, branch, plan_mirror(client, repo, branch, s.folder, prefix, local))
+        plan = plan_mirror(client, repo, branch, s.folder, prefix, local)
+        say(f"output '{name}': {len(plan.add)} file(s) to upload, {len(plan.delete)} to delete, {plan.unchanged} "
+            f"unchanged since the last version of {repo}{f' ({prefix})' if prefix else ''}.")
+        apply_plan(client, repo, branch, plan)
         _check(s, branch, "Nothing was sealed.")
         s.commit = client.commit(repo, branch, message, meta, tolerate_empty=True)
         if s.commit != head:
