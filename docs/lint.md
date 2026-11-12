@@ -23,18 +23,6 @@ steps/train/app/entry.py:7:7: warning L-W03 DatasetVersionInCode: This string na
 The exit code is `0` when there are no errors and `2` when there is at least one error. Warnings and infos never change
 it. (`1` means the check could not run, for example the folder does not exist.)
 
-## Fix what can be fixed for you
-
-```bash
-kaosctl lint --fix
-```
-
-rewrites `pipeline.py` for the step contract of kaos-lib 0.5 and then checks as usual: it renames `hpc_time_limit=`
-to `walltime=`, removes `outputs=`, gives every step without a `kind=` a placeholder, and removes the `platform`
-line from the defaults of `config/config.yaml`. The placeholder lists the
-six kinds and is not one of them, so the check keeps failing until you choose: `--fix` never chooses a kind for you.
-Nothing else in the file is touched. If a change would leave a file that is not valid Python, `--fix` writes nothing to that file, says so and exits non-zero: make that change by hand. [Move to kaos-lib 0.5](migrate-to-0.5.md) has the rest of the change.
-
 ## The same check on your pull request
 
 When you open a pull request, the platform runs this same check and reports it as the `pipeline-lint` status on the
@@ -124,8 +112,8 @@ render and when a step is submitted.
 | error | [L-E05 DependencyOrProducer](lint/L-E05.md) | a wrong `needs=`, `reads=`, name or cycle |
 | error | [L-E06 RefusedArgument](lint/L-E06.md) | a `step()` argument the library refuses |
 | error | [L-E07 StepDeclaration](lint/L-E07.md) | a step without a `kind`, or with a wrong `inputs=` or `produces=` |
-| error | [L-E08 StepNotMoved](lint/L-E08.md) | a step whose code is still written for kaos-lib 0.4 |
-| error | [L-E09 PlatformConfigGroup](lint/L-E09.md) | the `platform` group still in the app's config |
+| error | [L-E08 OldStepCode](lint/L-E08.md) | code from before the current pipelines: a copy of the platform's pipeline code, `--params`, old environment variables |
+| error | [L-E09 PlatformConfigGroup](lint/L-E09.md) | the `platform` group in the app's config |
 | warning | [L-W01 LongGpuStepNotResumable](lint/L-W01.md) | a long GPU step known not to continue |
 | warning | [L-W02 IdleTimeoutOff](lint/L-W02.md) | the idle limit turned off |
 | warning | [L-W03 DatasetVersionInCode](lint/L-W03.md) | a dataset version written in step code |

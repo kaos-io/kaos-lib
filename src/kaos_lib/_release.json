@@ -3,5 +3,5 @@
   "supported": ">=0.5.0.dev0",
   "deprecated": [],
   "breaking": true,
-  "migration": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html"
+  "migration": ""
 }

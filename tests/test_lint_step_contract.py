@@ -1,11 +1,10 @@
-"""The step contract in the linter: kind, inputs and produces (L-E07), steps not moved yet (L-E08), `lint --fix`."""
+"""The step contract in the linter: kind, inputs and produces (L-E07), an app made before the contract (L-E06..L-E09)."""
 import pytest
 
 from kaos_lib.lint import lint_project
 from kaos_lib.lint.cli import main as kaosctl_lint
-from kaos_lib.lint.constants import KIND_PLACEHOLDER, STEP_KINDS
-from kaos_lib.lint.fix import fix_config, fix_pipeline
-from lint_corpus import CONFIG, HEADER, OLD_STEP, PLAIN_STEP, repo, write_repo
+from kaos_lib.lint.constants import OLD_APP_NOTICE, STEP_KINDS
+from lint_corpus import CONFIG, OLD_STEP, PLAIN_STEP, repo, write_repo
 
 
 def findings(tmp_path, body, steps=None, rule="L-E07", config=None):
@@ -19,10 +18,9 @@ def messages(tmp_path, body, steps=None, rule="L-E07", config=None):
 
 # ------------------------------------------------------------------------------------------------------ L-E07
 @pytest.mark.parametrize("body,expect", [
-    ('    a = step("a")\n', "Step 'a' has no kind. Every step says what it is: one of ingest, transform, train, "
-                            "evaluate, publish, control."),
+    ('    a = step("a")\n', "Step 'a' has no kind=, which every step declares: one of ingest, transform, train, "
+                            "evaluate, publish, control. " + OLD_APP_NOTICE),
     ('    a = step("a", kind="training")\n', "kind is 'training', which is not a kind"),
-    (f'    a = step("a", kind="{KIND_PLACEHOLDER}")\n', "is still the placeholder `kaosctl lint --fix` wrote"),
     ('    a = step("a", kind="train", inputs="dataset")\n', "inputs must be a list of names"),
     ('    a = step("a", kind="train", inputs=["dataset", "dataset"])\n', "lists the input 'dataset' twice"),
     ('    a = step("a", kind="train", produces=["model"])\n', 'produces takes model("name")'),
@@ -64,18 +62,19 @@ def test_a_full_declaration_is_clean_and_values_that_are_not_literals_are_not_ju
     assert findings(tmp_path, body, config={**CONFIG, "config/data.yaml": "raw: dataset-raw@latest\nlabels: dataset-l@v1\n"}) == []
 
 
-def test_a_missing_kind_links_the_guide(tmp_path):
+def test_a_missing_kind_is_an_old_app_and_names_no_conversion(tmp_path):
     found = findings(tmp_path, '    a = step("a")\n')
-    assert len(found) == 1 and found[0].fix.endswith("/migrate-to-0.5.html") and found[0].span.line == 4
+    assert len(found) == 1 and found[0].message.endswith(OLD_APP_NOTICE) and found[0].span.line == 4
+    assert "choose one" not in found[0].message + found[0].fix and "lint --fix" not in found[0].fix
 
 
 # ------------------------------------------------------------------------------------------------------ L-E08
 def test_should_report_each_sign_of_a_step_written_for_the_old_contract(tmp_path):
     got = findings(tmp_path, '    a = step("a", kind="train")\n', {"a": OLD_STEP}, rule="L-E08")
     assert [(f.file, f.span.line) for f in got] == [("steps/a/app/entry.py", 5), ("steps/a/app/entry.py", 6)]
-    assert "still takes --params on its command line" in got[0].message
-    assert "still reads KUBECORE_RUN_ID from the environment" in got[1].message
-    assert "migrate-to-0.5.html" in got[0].fix
+    assert "takes --params on its command line" in got[0].message
+    assert "reads KUBECORE_RUN_ID from the environment" in got[1].message
+    assert all(f.message.endswith(OLD_APP_NOTICE) for f in got)
 
 
 def test_should_report_an_entry_that_never_starts_the_step(tmp_path):
@@ -93,95 +92,32 @@ def test_a_docstring_that_mentions_the_old_names_is_not_code(tmp_path):
     assert findings(tmp_path, '    a = step("a", kind="train")\n', {"a": code}, rule="L-E08") == []
 
 
-# ------------------------------------------------------------------------------------------------------- --fix
-BEFORE = HEADER + """    load = step("load", reads=["dataset"], outputs=["dataset-info"])
-    train = step("train", reads=["train"], needs=[load], gpu=True,
-                 hpc_time_limit="12h",   # a comment that stays
-                 outputs=["training-result"])
-    report = step(
-        "report",
-        outputs=["report"],
-        needs=[train],
-    )
-    done = step("done", kind="publish", needs=[report])
-"""
-PLACE = f'kind="{KIND_PLACEHOLDER}"'
-AFTER = HEADER + f"""    load = step("load", {PLACE}, reads=["dataset"])
-    train = step("train", {PLACE}, reads=["train"], needs=[load], gpu=True,
-                 walltime="12h",   # a comment that stays
-                 )
-    report = step(
-        "report", {PLACE},
-        needs=[train],
-    )
-    done = step("done", kind="publish", needs=[report])
-"""
+# ----------------------------------------------------------------------- what only an app from before the contract has
+@pytest.mark.parametrize("arg", ["outputs=['x']", "hpc_time_limit='2h'", "disk='20Gi'"])
+def test_a_removed_argument_is_refused_with_the_old_app_sentence_and_no_conversion(tmp_path, arg):
+    got = findings(tmp_path, f'    a = step("a", kind="train", {arg})\n', rule="L-E06")
+    name = arg.split("=")[0]
+    assert len(got) == 1 and got[0].message == f"step() no longer takes '{name}'. {OLD_APP_NOTICE}"
+    assert got[0].fix == "Remove the argument or write it as the message says; step() raises on it when the " \
+                         "pipeline is rendered."
 
 
-def test_fix_renames_removes_and_adds_a_kind_placeholder_and_nothing_else():
-    fixed, changes = fix_pipeline(BEFORE)
-    assert fixed == AFTER
-    compile(fixed, "pipeline.py", "exec")
-    assert changes == [
-        "line 4: step 'load': outputs= removed (hand values on with step.result(...))",
-        "line 4: step 'load': kind= added as a placeholder; choose one of the kinds it lists",
-        "line 5: step 'train': hpc_time_limit= renamed to walltime=",
-        "line 5: step 'train': outputs= removed (hand values on with step.result(...))",
-        "line 5: step 'train': kind= added as a placeholder; choose one of the kinds it lists",
-        "line 8: step 'report': outputs= removed (hand values on with step.result(...))",
-        "line 8: step 'report': kind= added as a placeholder; choose one of the kinds it lists",
-    ]
-    assert fix_pipeline(fixed) == (fixed, [])                       # a second run changes nothing
+def test_an_unknown_argument_is_not_an_old_app(tmp_path):
+    got = findings(tmp_path, '    a = step("a", kind="train", colour="red")\n', rule="L-E06")
+    assert len(got) == 1 and OLD_APP_NOTICE not in got[0].message
 
 
-def test_fix_never_chooses_a_kind_so_the_check_still_fails_and_lists_the_kinds(tmp_path, capsys):
-    root = write_repo(tmp_path, {**repo(""), "pipeline.py": BEFORE})
-    assert kaosctl_lint([str(root), "--fix"]) == 2
-    out = capsys.readouterr()
-    assert (root / "pipeline.py").read_text() == AFTER
-    compile((root / "pipeline.py").read_text(), "pipeline.py", "exec")
-    assert out.err.count("fixed pipeline.py line") == 7
-    assert out.out.count("is still the placeholder `kaosctl lint --fix` wrote. A step is one of ingest, transform, "
-                         "train, evaluate, publish, control.") == 3
-    assert "no argument 'outputs'" not in out.out and "no argument 'hpc_time_limit'" not in out.out
-    assert KIND_PLACEHOLDER not in STEP_KINDS and all(kind in KIND_PLACEHOLDER for kind in STEP_KINDS)
+def test_an_app_with_a_kubecore_folder_of_its_own_is_an_old_app(tmp_path):
+    files = {**repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP}), "kubecore/authoring.py": "x = 1\n"}
+    got = [f for f in lint_project(str(write_repo(tmp_path, files))).findings if f.rule == "L-E08"]
+    assert len(got) == 1 and "has a kubecore/ folder of its own" in got[0].message
+    assert got[0].message.endswith(OLD_APP_NOTICE)
 
 
-def test_fix_on_a_file_with_nothing_to_fix_and_on_one_that_does_not_parse(tmp_path, capsys):
-    root = write_repo(tmp_path, repo('    a = step("a", kind="train")\n'))
-    before = (root / "pipeline.py").read_text()
-    kaosctl_lint([str(root), "--fix"])
-    assert (root / "pipeline.py").read_text() == before and "nothing to fix in pipeline.py" in capsys.readouterr().err
-    assert fix_pipeline("with pipeline(") == ("with pipeline(", [])
-
-
-def test_fix_keeps_text_that_is_not_ascii():
-    text = HEADER + '    a = step("a", reads=["données"], hpc_time_limit="2h", gpu=True)   # é\n'
-    fixed = fix_pipeline(text)[0]
-    assert fixed == HEADER + f'    a = step("a", {PLACE}, reads=["données"], walltime="2h", gpu=True)   # é\n'
-    compile(fixed, "pipeline.py", "exec")
-
-
-@pytest.mark.parametrize("body", [
-    '    a = step("a", gpu=True, walltime="1h", hpc_time_limit="2h")\n',
-    '    a = step("a", gpu=True, hpc_time_limit="2h", walltime="1h")\n',
-    '    a = step("a", outputs=["x"])\n',
-    '    a = step(outputs=["x"], name="a")\n',
-    '    a = step("a", gpu=True,\n             outputs=["x"],\n             hpc_time_limit="2h")\n',
-])
-def test_the_fixed_file_is_always_valid_python_and_a_duplicate_keyword_is_never_written(body):
-    fixed, changes = fix_pipeline(HEADER + body)
-    compile(fixed, "pipeline.py", "exec")
-    assert fixed.count("walltime=") <= 1
-    if "walltime=" in body and "hpc_time_limit" in body:
-        assert "hpc_time_limit" in fixed and any("left as it is: walltime= is already there" in c for c in changes)
-    assert fix_pipeline(fixed)[0] == fixed                                         # a second run changes nothing
-
-
-def test_fix_refuses_text_from_standard_input(tmp_path, capsys):
-    root = write_repo(tmp_path, repo('    a = step("a")\n'))
-    assert kaosctl_lint([str(root), "--fix", "--stdin-path", "pipeline.py"]) == 1
-    assert "--fix rewrites the pipeline file on disk" in capsys.readouterr().err
+def test_the_linter_has_no_fix_option(capsys):
+    with pytest.raises(SystemExit):
+        kaosctl_lint(["--fix"])
+    assert "unrecognized arguments: --fix" in capsys.readouterr().err
 
 
 # ------------------------------------------------------------------------------------------------------ L-E09
@@ -195,21 +131,8 @@ def test_should_report_the_platform_group_in_the_defaults_and_its_folder(tmp_pat
     report = lint_project(str(write_repo(tmp_path, files)))
     got = sorted((f for f in report.findings if f.rule == "L-E09"), key=lambda f: f.span.line)
     assert [(f.file, f.span.line) for f in got] == [("config/config.yaml", 1), ("config/config.yaml", 4)]
-    assert "still has the folder config/platform/" in got[0].message and got[0].fix == "Delete the folder config/platform/."
-    assert "still names the `platform` config group" in got[1].message and "kaosctl lint --fix" in got[1].fix
-
-
-def test_fix_removes_the_platform_line_from_the_defaults_and_nothing_else(tmp_path, capsys):
-    assert fix_config(CONFIG_BEFORE) == (CONFIG_AFTER, ["line 4: the `platform` config group removed from the defaults"])
-    assert fix_config(CONFIG_AFTER) == (CONFIG_AFTER, [])
-    root = write_repo(tmp_path, {**repo('    a = step("a", kind="train")\n'), "config/config.yaml": CONFIG_BEFORE})
-    assert kaosctl_lint([str(root), "--fix"]) == 0
-    assert (root / "config/config.yaml").read_text() == CONFIG_AFTER
-    assert "fixed config/config.yaml line 4" in capsys.readouterr().err
-
-
-def test_a_section_called_platform_inside_a_file_is_not_the_group(tmp_path):
-    assert fix_config("defaults:\n  - train\nplatform:\n  note: mine\n")[1] == []
+    assert "has a config/platform/ folder" in got[0].message and got[0].message.endswith(OLD_APP_NOTICE)
+    assert "names the `platform` config group" in got[1].message and got[1].message.endswith(OLD_APP_NOTICE)
 
 
 # ------------------------------------------------------------------------------- what the linter does not read
@@ -266,49 +189,3 @@ def test_an_attribute_call_in_produces_is_the_same_as_a_name(tmp_path):
     assert findings(tmp_path, body) == []
     body = '    import kubecore.authoring as au\n    a = step("a", kind="train", produces=[au.model("kaos-m")])\n'
     assert any("names starting with 'kaos-'" in m for m in messages(tmp_path, body))
-
-
-# ------------------------------------------------------------------------- --fix: parenthesised values, line endings, guard
-@pytest.mark.parametrize("body", [
-    '    a = step(name=("a"), outputs=["x"])\n',
-    '    a = step(name=(\n "a"\n ), cmd="x")\n',
-    '    a = step(("a"), outputs=["x"])\n',
-    '    a = step(("a" \n "b"), outputs=["x"])\n',
-    '    a = step(name="a", outputs=(["x"]))\n',
-    '    a = step(name="a", outputs=(\n["x"]\n), cmd="y")\n',
-    '    a = step(name=(  # c\n "a"), cmd="y")\n',
-])
-def test_fix_places_edits_outside_the_parentheses_of_a_parenthesised_argument(body):
-    fixed, changes = fix_pipeline(HEADER + body)
-    compile(fixed, "pipeline.py", "exec")
-    assert changes and KIND_PLACEHOLDER in fixed and "outputs" not in fixed
-    assert fix_pipeline(fixed)[0] == fixed
-
-
-@pytest.mark.parametrize("eol", ["\r", "\r\n"])
-def test_fix_handles_cr_and_crlf_line_endings(eol):
-    text = (HEADER + '    x = 1\n    a = step(name="a", outputs=["x"], cmd="y")\n').replace("\n", eol)
-    fixed, changes = fix_pipeline(text)
-    assert len(changes) == 2
-    assert fixed == (HEADER + f'    x = 1\n    a = step(name="a", {PLACE}, cmd="y")\n').replace("\n", eol)
-    compile(fixed, "pipeline.py", "exec")
-
-
-def test_fix_on_disk_keeps_crlf_endings(tmp_path):
-    root = write_repo(tmp_path, repo(""))
-    (root / "pipeline.py").write_bytes((HEADER + '    a = step("a", outputs=["x"])\n').replace("\n", "\r\n").encode())
-    kaosctl_lint([str(root), "--fix"])
-    assert (root / "pipeline.py").read_bytes() == \
-        (HEADER + f'    a = step("a", {PLACE})\n').replace("\n", "\r\n").encode()
-
-
-def test_fix_writes_nothing_when_the_fixed_text_would_not_compile(tmp_path, capsys, monkeypatch):
-    from kaos_lib.lint import cli as lint_cli
-    root = write_repo(tmp_path, {**repo(""), "pipeline.py": BEFORE})
-    before = (root / "pipeline.py").read_bytes()
-    monkeypatch.setattr(lint_cli, "fix_pipeline", lambda text, rel: (text + "    a = step(name=(\"a\", kind=\"x\")\n",
-                                                                     ["line 4: made up"]))
-    assert kaosctl_lint([str(root), "--fix"]) != 0
-    assert (root / "pipeline.py").read_bytes() == before
-    err = capsys.readouterr().err
-    assert "could not be applied to pipeline.py" in err and "by hand" in err and "fixed pipeline.py" not in err

@@ -23,14 +23,12 @@ CONFIG_DIR = "config"
 STEPS_DIR = "steps"
 
 # What the library's step() accepts, in order (positional arguments map onto it).
-STEP_PARAMS = ("name", "kind", "reads", "inputs", "needs", "produces", "gpu", "disk", "when", "walltime",
+STEP_PARAMS = ("name", "kind", "reads", "inputs", "needs", "produces", "gpu", "when", "walltime",
                "resumable", "checkpoint_every", "idle_timeout")
-# Arguments step() took before the step contract of kaos-lib 0.5, and what to do about each.
-REMOVED_STEP_PARAMS = {
-    "hpc_time_limit": "Rename it to walltime.",
-    "outputs": "Remove it: a step hands values on with step.result(...), and a step that needs them reads "
-               "step.upstream(...).values.",
-}
+# Arguments step() no longer takes: an app that still passes one was made before the current pipelines.
+REMOVED_STEP_PARAMS = ("outputs", "hpc_time_limit", "disk")
+# The sentence every refusal of an old app ends with: the same one the engine ends its refusals with.
+OLD_APP_NOTICE = "This app was made before the current pipelines. Create it again from the template."
 # What a step is (kind=), and what it may declare in produces=[...].
 STEP_KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 PRODUCE_TYPES = ("model", "artifact", "dataset")
@@ -40,20 +38,16 @@ RESERVED_STEP_SUFFIX = "-hpc"
 NAME_MAX = 40                        # characters of a step name, an input name and a produces name
 MAX_READABLE = 16                    # datasets a step can read by name: its inputs and what its needed steps produce
 MAX_NEEDS = 10                       # steps in one step's needs=: each may hand on a result of up to 8 KiB
-# What `kaosctl lint --fix` writes for a missing kind: it is not a kind, so the check keeps failing until one is chosen.
-KIND_PLACEHOLDER = "choose one: " + " | ".join(STEP_KINDS)
-# What step code used before the step contract: finding one means the step was not moved to kaos_lib.step.
+# What step code used before the step contract: finding one means the app was made before it.
 OLD_ENTRY_ARGUMENT = "--params"
 OLD_ENTRY_VARIABLES = ("KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME", "CHECKPOINT_BUCKET", "CHECKPOINT_PREFIX",
                        "OUTPUTS_REPO",
                        "KUBECORE_DATASET_REF", "KUBECORE_DATASET_COMMIT", "DATASET_REPO", "DATASET_REF",
                        "DATASET_COMMIT", "KUBECORE_STAGED_DIR", "KAOS_LIB_LOCK")
-MIGRATION_URL = DOC_BASE[: -len("lint/")] + "migrate-to-0.5.html"
 
 # A DNS-label step name, as the library requires.
 STEP_NAME_PATTERN = r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
-# A Kubernetes quantity such as 20Gi; a time such as 90m, 12h or 720 (minutes).
-DISK_PATTERN = r"^[0-9]+(Ki|Mi|Gi|Ti|K|M|G|T)?$"
+# A time such as 90m, 12h or 720 (minutes).
 TIME_PATTERN = r"^[0-9]+[mh]?$"
 
 # Template names only the platform may produce (the HPC (Slurm) follower and its earlier name).
@@ -89,3 +83,4 @@ CUDA_PACKAGE_PATTERN = (r"(?<![a-z0-9_-])(torch|torchvision|tensorflow|jax|jaxli
                         r"cudf|nvidia-[a-z0-9-]+)(?![a-z0-9_])")
 KAOS_LIB_ARG = "KAOS_LIB_PACKAGE"
 ENTRY_MODULE = "app.entry"
+ENGINE_FOLDER = "kubecore"            # an app carries no copy of the engine: a folder of this name is an old app

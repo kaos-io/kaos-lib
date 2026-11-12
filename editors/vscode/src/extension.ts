@@ -9,7 +9,6 @@ import { Debouncer } from "./debounce";
 import { DATASET_CONFIG_FILE, FolderReader, PIPELINE_FILE, detectKaosRepo } from "./detect";
 import { MappedDiagnostic, describeSkipped, mapReport, skippedToPrint, statusText } from "./diagnostics";
 import { renderGraphHtml } from "./graphHtml";
-import { quickFixesFor } from "./quickfix";
 import { Report, parseGraph, parseReport } from "./report";
 import { LOGIN_ARGS, SCHEMA_ARGS, checkArgs, explainFailure, graphArgs, producedReport, run } from "./runner";
 import { Schema, SchemaChoice, chooseSchema, completionsFor, hoverFor } from "./schema";
@@ -111,26 +110,7 @@ function registerLanguageFeatures(state: State): vscode.Disposable[] {
       return new vscode.Hover(md, new vscode.Range(pos.line, h.start, pos.line, h.end));
     },
   });
-  const fixes = vscode.languages.registerCodeActionsProvider(PIPELINE_SELECTOR, {
-    provideCodeActions(doc, _range, ctx) {
-      const renamed = schemaNow(state)?.step.renamed_arguments ?? {};
-      const actions: vscode.CodeAction[] = [];
-      for (const d of ctx.diagnostics.filter((x) => x.source === DIAGNOSTIC_SOURCE)) {
-        const rule = typeof d.code === "object" ? String(d.code.value) : String(d.code);
-        const lineText = doc.lineAt(d.range.start.line).text.slice(d.range.start.character);
-        for (const q of quickFixesFor({ rule, startLine: d.range.start.line, startCharacter: d.range.start.character }, lineText, renamed)) {
-          const action = new vscode.CodeAction(q.title, vscode.CodeActionKind.QuickFix);
-          action.diagnostics = [d];
-          action.isPreferred = true;
-          action.edit = new vscode.WorkspaceEdit();
-          action.edit.replace(doc.uri, new vscode.Range(q.edit.startLine, q.edit.startCharacter, q.edit.endLine, q.edit.endCharacter), q.edit.newText);
-          actions.push(action);
-        }
-      }
-      return actions;
-    },
-  }, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] });
-  return [completion, hover, fixes];
+  return [completion, hover];
 }
 
 // ------------------------------------------------------------------------------------------ check

@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from . import proc
-from .constants import VENV_DIR
 
 STAMP = ".kaos-env.json"
 UV_INSTALL_HELP = ("uv (a fast Python package installer) was not found, so pip is used: slower, same result. To get uv "
@@ -35,6 +34,14 @@ class EnvResult:
 
 def find_uv(which=None) -> Optional[str]:
     return (which or shutil.which)("uv")
+
+
+def step_env(step_dir: pathlib.Path) -> pathlib.Path:
+    """Where a step's environment lives: the user's cache folder, keyed by the step's real folder, so that nothing
+    is written into the app's repository, whichever way the folder was reached (a link, a relative path)."""
+    real = step_dir.resolve()
+    cache = pathlib.Path(os.environ.get("XDG_CACHE_HOME") or pathlib.Path.home() / ".cache")
+    return cache / "kaos-lib" / "envs" / f"{real.name}-{hashlib.sha256(str(real).encode()).hexdigest()[:12]}"
 
 
 def venv_python(venv: pathlib.Path) -> pathlib.Path:
@@ -89,9 +96,8 @@ def _is_venv(path: pathlib.Path) -> bool:
     return (path / "pyvenv.cfg").is_file()
 
 
-def ensure_env(step_dir: pathlib.Path, requirements_text: str, python: str, uv: Optional[str]) -> EnvResult:
-    """Create or update `<step>/.venv` so that it holds exactly `requirements_text`; idempotent."""
-    venv = step_dir / VENV_DIR
+def ensure_env(venv: pathlib.Path, requirements_text: str, python: str, uv: Optional[str]) -> EnvResult:
+    """Create or update the environment `venv` so that it holds exactly `requirements_text`; idempotent."""
     version = interpreter_version(python)
     key = fingerprint(requirements_text, _minor(version))
     existing = venv_python(venv).is_file() and _is_venv(venv)

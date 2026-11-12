@@ -65,3 +65,67 @@ def test_the_environment_and_the_step_are_put_back(tmp_path):
     with testing.running(tmp_path):
         step.start()
     assert dict(os.environ) == before and step._running is None
+
+
+# ------------------------------------------------------------------ workdir, a writable input, what an upstream step wrote
+def test_workdir_is_one_emptied_folder_that_is_not_an_output(tmp_path):
+    with testing.running(tmp_path, produces=[("artifact", "report")]) as run:
+        step.start()
+        scratch = step.workdir()
+        (scratch / "runs").mkdir()
+        (scratch / "runs" / "cache.bin").write_text("x")
+        assert step.workdir() == scratch and (scratch / "runs" / "cache.bin").exists()
+        (step.output("report") / "r.txt").write_text("r")
+        step.result()
+    assert not (run.output("report") / "runs").exists() and not list(run.output("report").glob("**/cache.bin"))
+    with testing.running(tmp_path):                       # the next attempt finds it empty
+        step.start()
+        assert list(step.workdir().iterdir()) == []
+
+
+def test_a_writable_input_is_a_private_copy_that_changes_nothing_else(tmp_path):
+    data = folder(tmp_path, ["a.txt"])
+    with testing.running(tmp_path, inputs={"dataset": data}, produces=[("artifact", "report")]) as run:
+        step.start()
+        read_only = step.input("dataset")
+        copy = step.input("dataset", writable=True)
+        assert copy != read_only and (copy / "a.txt").read_text() == "a.txt" and step.input("dataset", writable=True) == copy
+        (copy / "a.txt").write_text("changed")               # a tool that rewrites a file beside its input
+        (copy / "labels.cache").write_text("cache")
+        assert (read_only / "a.txt").read_text() == "a.txt" and not (read_only / "labels.cache").exists()
+        assert not os.path.samefile(copy / "a.txt", read_only / "a.txt")
+        (step.output("report") / "r.txt").write_text("r")
+        step.result()
+    assert (data / "a.txt").read_text() == "a.txt" and sorted(p.name for p in data.iterdir()) == ["a.txt"]
+    assert sorted(p.name for p in run.output("report").iterdir()) == ["r.txt"]
+
+
+def test_a_writable_input_that_is_missing_is_still_none_when_optional(tmp_path):
+    with testing.running(tmp_path, upstream={"prepare": None}):
+        step.start()
+        assert step.input("rows", optional=True, writable=True) is None
+
+
+def test_a_step_reads_what_an_upstream_step_wrote(tmp_path):
+    ckpt = tmp_path / "ckpt"
+    ckpt.mkdir()
+    (ckpt / "best.pt").write_text("weights")
+    with testing.running(tmp_path, kind="evaluate", upstream={"train": {"epochs": 3}},
+                         upstream_writes={"train": {"checkpoints": ckpt}}) as run:
+        step.start()
+        train = step.upstream("train")
+        assert train.values == {"epochs": 3}
+        (write,) = train.writes
+        assert (write.name, write.type, write.repo) == ("checkpoints", "artifact", "outputs-app") and write.commit
+        assert (step.input("checkpoints") / "best.pt").read_text() == "weights"
+        step.result()
+    assert run.result["values"] == {}
+
+
+def test_an_upstream_step_that_only_wrote_needs_no_values(tmp_path):
+    ckpt = tmp_path / "ckpt"
+    ckpt.mkdir()
+    (ckpt / "best.pt").write_text("w")
+    with testing.running(tmp_path, upstream_writes={"train": {"checkpoints": ckpt}}):
+        step.start()
+        assert step.upstream("train").values == {} and (step.input("checkpoints") / "best.pt").exists()

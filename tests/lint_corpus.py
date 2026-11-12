@@ -91,13 +91,13 @@ CASES = {
         repo('    b = step("b", kind="train")\n    a = step("a", kind="train", needs=[b])\n'),
         None, (4, "defined after it")),
     "L-E06": (
-        repo('    a = step("a", kind="train", disk="20 GB")\n'),
-        repo('    a = step("a", kind="train", disk="20Gi")\n'),
-        None, (4, "disk=")),
+        repo('    a = step("a", kind="train", walltime="12 hours")\n'),
+        repo('    a = step("a", kind="train", walltime="12h")\n'),
+        None, (4, "walltime=")),
     "L-E07": (
         repo('    a = step("a", reads=["dataset"])\n'),
         repo('    a = step("a", kind="transform", reads=["dataset"], inputs=["dataset"], produces=[dataset("clean")])\n'),
-        None, (4, "has no kind")),
+        None, (4, "has no kind=")),
     "L-E08": (
         repo('    a = step("a", kind="train")\n', {"a": OLD_STEP}),
         repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP}),
@@ -106,7 +106,7 @@ CASES = {
         repo('    a = step("a", kind="train")\n',
              config={**CONFIG, "config/config.yaml": "defaults:\n  - experiment\n  - platform: live\n"}),
         repo('    a = step("a", kind="train")\n'),
-        None, (3, "still names the `platform` config group")),
+        None, (3, "names the `platform` config group")),
     "L-W01": (
         repo('    t = step("work", kind="train", gpu=True, walltime="6h")\n', {"work": PLAIN_STEP}),
         repo('    t = step("work", kind="train", gpu=True, walltime="6h", resumable=True)\n', {"work": PLAIN_STEP}),

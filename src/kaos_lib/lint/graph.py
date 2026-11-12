@@ -41,7 +41,6 @@ def _node(facts: PipelineFacts, step: Step, index: int) -> dict:
         "kind": _text(step.value("kind", None)),
         "walltime": _text(step.value("walltime", None)),
         "resumable": _text(step.value("resumable", None)),
-        "disk": _text(step.value("disk", None)),
     }
 
 

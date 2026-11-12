@@ -1,8 +1,9 @@
 # Design: `kaos_lib.step` (kaos-lib 0.5, PRD kaos#1911 F-02, F-11, F-12)
 
 Status: implemented on branch `prd1911/step-api` (package W1). This page is not part of the published site
-(`exclude_docs` in `mkdocs.yml`). The client pages are `docs/step.md`, `docs/results.md` and
-`docs/migrate-to-0.5.md`.
+(`exclude_docs` in `mkdocs.yml`). The client pages are `docs/step.md` and `docs/results.md`. No app is moved to
+this contract: every app is created again from the template, so kaos-lib has no migration guide and no
+`lint --fix`.
 
 The sections below are the design as it was reviewed. Where the implementation differs, this list wins:
 
@@ -153,8 +154,8 @@ and new runs.
 ## 5. The result
 
 `result(**values)` writes one file, `/work/output/kaos-result.json`, atomically (a temporary file in the same
-folder, then a rename), once. The file is in the contract's wire form: no whitespace, ASCII only, and `{` and
-`}` inside strings written as `\u007b` and `\u007d`. `lock.py` gets the one writer, `wire(obj) -> str`, tested
+folder, then a rename), once. The file is in the contract's wire form: no whitespace, ASCII only, and `{`, `}` and `$` inside
+strings written as `\u007b`, `\u007d` and `\u0024` (Kubernetes expands `$(NAME)` in an environment value). `lock.py` gets the one writer, `wire(obj) -> str`, tested
 byte for byte against every `.wire` fixture. Shown here indented for reading:
 
 ```json
@@ -328,7 +329,7 @@ Line numbers are on `main` at `6ccbc96`. "Rewrite" means the file stays and the 
 | `pyproject.toml:33-34` | The `kaos-cli` and `kubecore` script entries |
 | `src/kaos_lib/cli.py:587-598`, and the first line of its docstring (`:1`) | `kubecore_alias`, `kaos_cli_alias` |
 | `src/kaos_lib/errors.py:9` | `KubecoreError`, "removed together with the shim" |
-| `src/kaos_lib/_release.json:6` | The `migration` link to `README.md#formerly-kubecore`; it becomes the link to the migration guide |
+| `src/kaos_lib/_release.json:6` | The `migration` link to `README.md#formerly-kubecore`; it is empty: no app is moved |
 | `src/kaos_lib/runtime.py:18-20`, `:46-47`, `:75-76`, `:136-138` | `dataset_ref`, `dataset_commit` and their variables `KUBECORE_DATASET_REF`, `DATASET`, `DATASET_REPO`, `DATASET_REF`, `KUBECORE_DATASET_COMMIT`, `DATASET_COMMIT` (8.3: unused dataset fields) |
 | `src/kaos_lib/runtime.py:10-15`, `:38-43`, `:89-93`, `:135`, `:142-144` | The environment sources of `run_id`, `workflow`, `app`, `project`, `step`, `outputs_repo` (`KUBECORE_RUN_ID`, `KUBECORE_WORKFLOW_NAME`, `KUBECORE_APP`, `KUBECORE_PROJECT`, `KUBECORE_STEP`, `STEP_NAME`, `OUTPUTS_REPO`, `CHECKPOINT_BUCKET`), `_app_of`, and `run_id()`'s own read: the step context is the one source (`outputs_repo` is `outputs-<app>`). To execute only once the contract document confirms the platform stops setting them |
 | `src/kaos_lib/__init__.py:26`, `src/kaos_lib/studio/run.py:98`, `src/kaos_lib/studio/constants.py:36-37` | Direct uses of `KUBECORE_RUN_ID`, `CHECKPOINT_BUCKET`, `OUTPUTS_REPO`, `KUBECORE_WORKFLOW_NAME` outside `runtime.py` |

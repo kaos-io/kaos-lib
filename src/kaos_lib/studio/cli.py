@@ -54,6 +54,9 @@ def add_commands(sub: argparse._SubParsersAction) -> None:
                          "the step is treated as not run)")
     sp.add_argument("--sample-mb", type=int, default=DEFAULT_SAMPLE_MB, metavar="MB",
                     help=f"the most the sample downloads (default {DEFAULT_SAMPLE_MB})")
+    sp.add_argument("--python", metavar="INTERPRETER",
+                    help="run the step with this existing Python (it must have kaos-lib) instead of building an "
+                         "environment: for steps with heavy dependencies")
     sp.add_argument("--kaos-lib", metavar="REQUIREMENT|PATH", help=KAOS_LIB_HELP)
     sp.add_argument("--context", metavar="FILE", help=CONTEXT_HELP)
     sp.add_argument("--engine-wheel", metavar="URL#sha256=HEX", help=ENGINE_WHEEL_HELP)

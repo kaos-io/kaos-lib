@@ -129,7 +129,7 @@ def test_packaged_release_json_is_valid_and_matches_this_version():
     assert support.validate_release(meta) == []
     assert meta["version"] == kaos_lib.__version__ == "0.5.0"
     assert meta["supported"] == ">=0.5.0.dev0" and meta["deprecated"] == [] and meta["breaking"] is True   # the step contract
-    assert meta["migration"].endswith("/docs/migrate-to-0.5.html")      # a live page: only the policy is still 0.4's
+    assert meta["migration"] == ""                                      # no app is moved: it is created again
     assert support.check(kaos_lib.__version__, meta)["verdict"] == "current"
 
 
@@ -365,8 +365,8 @@ def test_from_lakefs_survives_a_network_error(fake):
 
 
 # ----------------------------------------- a release that changes how a step is written (``breaking``)
-BREAKING = dict(POLICY, version="0.5.0", supported=">=0.5.0.dev0", deprecated=[], breaking=True,
-                migration="https://example.test/migrate-to-0.5.html")
+BREAKING = dict(POLICY, version="0.5.0", supported=">=0.5.0.dev0", deprecated=[], breaking=True, migration="")
+OLD_APP = "This app was made before the current pipelines. Create it again from the template."
 
 
 @pytest.mark.parametrize("installed", ["0.5.0", "0.5.0rc1", "0.5.0rc25", "0.5.0.dev3", "0.5.1", "0.6.0rc2"])
@@ -379,12 +379,11 @@ def test_the_line_before_it_is_not(installed):
     assert support.check(installed, BREAKING)["verdict"] == "unsupported"
 
 
-def test_a_step_on_the_old_line_is_told_that_its_code_has_to_change_and_where_the_guide_is(capsys):
+def test_a_step_on_the_old_line_is_told_to_create_the_app_again(capsys):
     with pytest.raises(UnsupportedVersion) as err:
         support.at_step_start("0.4.0", env_with(BREAKING))
     for text in (str(err.value), capsys.readouterr().err):
-        assert "this app's code has to change" in text and "rebuilding the image with a newer kaos-lib is not enough" in text
-        assert "https://example.test/migrate-to-0.5.html" in text and "must be rebuilt" not in text
+        assert text.rstrip().endswith(OLD_APP) and "must be rebuilt" not in text and "migrat" not in text
 
 
 def test_a_policy_that_is_not_breaking_keeps_the_rebuild_advice(capsys):
@@ -402,8 +401,7 @@ def test_the_served_policy_admits_every_version_of_the_0_5_line_the_channels_pub
     assert (verdict in ("current", "behind")) is ok, verdict
 
 
-def test_a_0_4_step_is_told_to_change_its_code_and_where_the_guide_is():
+def test_an_app_of_the_old_line_is_told_to_create_it_again_from_the_template():
     with pytest.raises(UnsupportedVersion) as err:
         support.at_step_start("0.4.0", env_with(support.packaged()))
-    assert "this app's code has to change" in str(err.value)
-    assert "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html" in str(err.value)
+    assert str(err.value).endswith(OLD_APP) and "migrat" not in str(err.value)

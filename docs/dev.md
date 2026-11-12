@@ -10,8 +10,8 @@ kaosctl dev
 ```
 
 ```text
-data-check: setting up steps/data_check/.venv ...
-export-report: setting up steps/export_report/.venv ...
+data-check: setting up its environment in ~/.cache/kaos-lib/envs/data_check-1f3a9c0d2b44 ...
+export-report: setting up its environment in ~/.cache/kaos-lib/envs/export_report-7c2e8a51d9f0 ...
   data-check: created (Python 3.11.9, kaos-lib from the default of ARG KAOS_LIB_PACKAGE in the Dockerfile)
   export-report: created (Python 3.11.9)
   model-training: skipped, its dependencies are large (torch ...). Set it up with: kaosctl dev --step model-training
@@ -30,14 +30,15 @@ For each step of `pipeline.py`:
 2. **Picks the Python of the step's image.** `FROM python:3.11-slim` means Python 3.11. If this machine has a Python 3.11
    (found on the `PATH`, or by `uv`), that one is used. If not, the Python that runs `kaosctl` is used and the command says
    so, with the link to install the right one. `uv` never downloads a Python by itself.
-3. **Creates `steps/<name>/.venv`** and installs the dependencies into it. It uses [`uv`](https://docs.astral.sh/uv/)
+3. **Creates the step's environment** in your cache folder (`~/.cache/kaos-lib/envs/`, or `$XDG_CACHE_HOME/kaos-lib/envs/`), one per step, named after the step and its folder on disk, and installs the dependencies into it. It uses [`uv`](https://docs.astral.sh/uv/)
    when it is installed (much faster) and `python -m venv` with `pip` otherwise. When `uv` is missing, the command prints
    the link to install it and carries on with `pip`; it never installs `uv` for you.
 4. **Adds kaos-lib** to a step that uses it (its Dockerfile declares `ARG KAOS_LIB_PACKAGE`, or its code imports
    `kaos_lib`). A step that does not, such as a step that needs only PyYAML, does not get it.
 5. **With `--vscode`, writes `steps/<name>/.vscode/settings.json`** so VS Code picks that environment when you open
-   the step's folder (`code steps/data_check`). An existing settings file is merged, not replaced; one with comments
-   in it is left alone. Without `--vscode` nothing is written outside `.venv`.
+   the step's folder (`code steps/data_check`). The file names the environment by its path on this machine, so do
+   not commit it. An existing settings file is merged, not replaced; one with comments in it is left alone. Without
+   `--vscode` nothing is written into your app folder.
 
 Run it again whenever you like: an environment whose dependencies did not change is left as it is (`up-to-date`).
 
@@ -76,6 +77,5 @@ Exit code `0` when every selected step is ready, `1` when one failed (the instal
 
 ## What it never does
 
-It installs nothing outside your app folder: environments live in `steps/<name>/.venv` (each has its own `.gitignore`, so
-they are never committed), and `kaosctl` never installs `uv`, Python, Docker or anything else on your machine. It writes
+It writes nothing into your app folder (without `--vscode`): environments live in your cache folder, and `kaosctl` never installs `uv`, Python, Docker or anything else on your machine. It writes
 no secret, and needs no cluster.

@@ -53,7 +53,6 @@ the `/kaos/v1` answers stay scripted, and a test that rewrites the fake's state 
 | `editor.py` | `kaosctl vscode install`: find the editor's command, download the published `.vsix` and check its SHA-256 |
 | `cli.py` | the `kaosctl` command |
 | `lint/` | the pipeline linter: `engine.py` runs the rules of `rules_errors.py`, `rules_warnings.py`, `rules_infos.py` over what `pipeline_reader.py` / `project_reader.py` read, with the facts of `catalogue.py`; `model.py` (report), `render.py`, `cli.py`; `standalone.py` runs it without importing the rest of kaos-lib (PR gate). Static: never runs client code. Standard library + PyYAML only |
-| `lint/fix.py` | `kaosctl lint --fix`: the mechanical edits of `pipeline.py` for the step contract |
 | `lint/schema.py`, `lint/graph.py` | `kaosctl lint --schema` (what `step()` accepts, for editors) and `--graph` (the step DAG); the extension's bundled copy of the schema is `editors/vscode/resources/step-schema.json`, kept equal by `tests/test_lint_schema.py` |
 | `editors/vscode/` | the VS Code extension (TypeScript, no runtime dependencies): `npm test`, `npm run package`; see its README |
 

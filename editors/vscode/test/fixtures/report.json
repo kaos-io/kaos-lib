@@ -70,8 +70,8 @@
           "column": 74
         }
       },
-      "message": "step() has no argument 'hpc_time_limit', so the render fails.",
-      "fix": "Rename it to walltime. `kaosctl lint --fix` does it. Guide: https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html",
+      "message": "step() no longer takes 'hpc_time_limit'. This app was made before the current pipelines. Create it again from the template.",
+      "fix": "Remove the argument or write it as the message says; step() raises on it when the pipeline is rendered.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
     },
     {

@@ -6,18 +6,17 @@ replaced, and left alone when it cannot be read (VS Code allows comments in it, 
 from __future__ import annotations
 
 import json
-import os
 import pathlib
 
-from .constants import SETTINGS_DIR, SETTINGS_FILE, VENV_DIR
+from . import pyenv
+from .constants import SETTINGS_DIR, SETTINGS_FILE
 
 INTERPRETER_KEY = "python.defaultInterpreterPath"
 
 
-def interpreter_value() -> str:
-    """The workspace-relative interpreter path for this OS (the folder opened in VS Code is the step folder)."""
-    tail = "Scripts/python.exe" if os.name == "nt" else "bin/python"
-    return f"${{workspaceFolder}}/{VENV_DIR}/{tail}"
+def interpreter_value(step_dir: pathlib.Path) -> str:
+    """The interpreter of the step's environment, which lives in the cache folder: a path on this machine."""
+    return str(pyenv.venv_python(pyenv.step_env(step_dir)))
 
 
 def write_interpreter_hint(step_dir: pathlib.Path) -> str:
@@ -31,9 +30,9 @@ def write_interpreter_hint(step_dir: pathlib.Path) -> str:
             return f"left {path.relative_to(step_dir)} alone: it is not plain JSON; set {INTERPRETER_KEY} yourself"
         if not isinstance(settings, dict):
             return f"left {path.relative_to(step_dir)} alone: it is not a JSON object"
-    if settings.get(INTERPRETER_KEY) == interpreter_value():
+    if settings.get(INTERPRETER_KEY) == interpreter_value(step_dir):
         return "unchanged"
-    settings[INTERPRETER_KEY] = interpreter_value()
+    settings[INTERPRETER_KEY] = interpreter_value(step_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=4) + "\n", encoding="utf-8")
     return "written"

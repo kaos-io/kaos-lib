@@ -24,7 +24,7 @@ export interface Schema {
   ruleset_version: string;
   guide: string;
   authoring_modules: string[];
-  step: { function: string; parameters: SchemaParam[]; renamed_arguments: Record<string, string> };
+  step: { function: string; parameters: SchemaParam[] };
 }
 
 type Obj = Record<string, unknown>;
@@ -76,7 +76,6 @@ export function parseSchema(text: string): Schema {
     throw new Error(`schema version ${String(version)} is not one this extension reads (it reads ${SUPPORTED_SCHEMA_VERSION})`);
   }
   const step = asObj(o.step, "schema.step");
-  const renamed = asObj(step.renamed_arguments ?? {}, "schema.step.renamed_arguments");
   return {
     schema_version: SUPPORTED_SCHEMA_VERSION,
     ruleset_version: asStr(o, "ruleset_version", "schema"),
@@ -85,7 +84,6 @@ export function parseSchema(text: string): Schema {
     step: {
       function: asStr(step, "function", "schema.step"),
       parameters: asList(step.parameters, "schema.step.parameters").map(parseParam),
-      renamed_arguments: Object.fromEntries(Object.entries(renamed).filter(([, v]) => typeof v === "string")) as Record<string, string>,
     },
   };
 }
@@ -276,9 +274,5 @@ export function hoverFor(schema: Schema, textBeforeLine: string, line: string, c
 function paramHover(schema: Schema, name: string, start: number, end: number): HoverResult | null {
   const p = schema.step.parameters.find((x) => x.name === name);
   if (p) { return { markdown: `**${p.name}** \`${p.type}\`\n\n${docMarkdown(p)}`, start, end }; }
-  const renamed = schema.step.renamed_arguments[name];
-  if (renamed) {
-    return { markdown: `**${name}** is not an argument of \`step()\`. Use \`${renamed}\` instead.`, start, end };
-  }
   return null;
 }

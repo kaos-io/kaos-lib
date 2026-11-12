@@ -3,8 +3,8 @@
 Every release states which kaos-lib versions are supported (`release.json`, packaged as `kaos_lib/_release.json`):
 
 ```json
-{"version": "0.4.0", "supported": ">=0.3", "deprecated": [{"range": "<0.3", "unsupported_after": "YYYY-MM-DD"}],
- "breaking": false, "migration": "<url>"}
+{"version": "0.6.0", "supported": ">=0.5", "deprecated": [{"range": "<0.5", "unsupported_after": "YYYY-MM-DD"}],
+ "breaking": false, "migration": ""}
 ```
 
 The newest release's file is the policy. `kaos_lib.support.check(installed, support_json)` returns
@@ -52,7 +52,7 @@ repository.
 ## Your range: `.kaos/compat.yaml`
 
 ```yaml
-kaos-lib: ">=0.4.0rc15,<0.5"
+kaos-lib: ">=0.5.0rc15,<0.6"
 ```
 
 This file says which released versions your code works with. The platform only moves your app to a released
@@ -62,12 +62,12 @@ missing.
 
 ## How a new version arrives
 
-- **Inside your range** (for example 0.4.1 → 0.4.2): the platform rebuilds your step images with the new version
+- **Inside your range** (for example 0.5.1 → 0.5.2): the platform rebuilds your step images with the new version
   and updates your pipeline. Nothing is committed to your repository and you do nothing.
-- **Outside your range** (for example 0.4.2 → 0.5.0): your images stay on the version they have, and the platform
+- **Outside your range** (for example 0.5.2 → 0.6.0): your images stay on the version they have, and the platform
   opens a **bump pull request**. Until you merge it, every build of your app keeps the version it already runs.
 
-The bump pull request is on the branch `kaos-lib/bump-<version>`, for example `kaos-lib/bump-0.5.0`. It changes
+The bump pull request is on the branch `kaos-lib/bump-<version>`, for example `kaos-lib/bump-0.6.0`. It changes
 `.kaos/compat.yaml` to the new range (and any code the release needs changed, if it names one), and its description
 has the release notes of that version.
 
@@ -79,14 +79,14 @@ has the release notes of that version.
 
 ## Hold a version
 
-- **From your repository**: narrow the range. `kaos-lib: "==0.4.2"` keeps exactly 0.4.2; a newer released version
+- **From your repository**: narrow the range. `kaos-lib: "==0.5.2"` keeps exactly 0.5.2; a newer released version
   arrives as a bump pull request instead of a rebuild.
 - **Through your KAOS contact**: ask to pin your app to one version. A pinned app is never moved when the
   platform's default changes, and gets no bump pull requests.
 
 ## Which version a pipeline runs
 
-- The first line of a step's log, when the step prints it (the template steps do): `kaos-lib 0.4.0rc20`.
+- The first line of a step's log, when the step prints it (the template steps do): `kaos-lib 0.5.0rc20`.
 - The MLflow tag `kaos_lib.version`, on a run whose step sets it.
 - Each step image carries the label `io.kaos.lib` with the exact requirement it was built with.
 

@@ -205,42 +205,8 @@
         ]
       },
       {
-        "name": "disk",
-        "position": 7,
-        "type": "str",
-        "required": false,
-        "default": null,
-        "gpu_only": false,
-        "pattern": "^[0-9]+(Ki|Mi|Gi|Ti|K|M|G|T)?$",
-        "doc": "Scratch disk the step asks for, as a quantity: digits and an optional Ki, Mi, Gi, Ti, K, M, G or T, for example `\"20Gi\"`. Set it for steps that need more than the platform's default.",
-        "snippet": "\"${1:20Gi}\"",
-        "values": [
-          {
-            "insert": "\"20Gi\"",
-            "label": "\"20Gi\"",
-            "doc": "20 gibibytes."
-          },
-          {
-            "insert": "\"50Gi\"",
-            "label": "\"50Gi\"",
-            "doc": "50 gibibytes."
-          },
-          {
-            "insert": "\"200Gi\"",
-            "label": "\"200Gi\"",
-            "doc": "200 gibibytes."
-          }
-        ],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          }
-        ]
-      },
-      {
         "name": "when",
-        "position": 8,
+        "position": 7,
         "type": "str",
         "required": false,
         "default": null,
@@ -253,7 +219,7 @@
       },
       {
         "name": "walltime",
-        "position": 9,
+        "position": 8,
         "type": "str",
         "required": false,
         "default": null,
@@ -308,7 +274,7 @@
       },
       {
         "name": "resumable",
-        "position": 10,
+        "position": 9,
         "type": "bool|str",
         "required": false,
         "default": null,
@@ -363,7 +329,7 @@
       },
       {
         "name": "checkpoint_every",
-        "position": 11,
+        "position": 10,
         "type": "bool|str|int",
         "required": false,
         "default": null,
@@ -397,7 +363,7 @@
       },
       {
         "name": "idle_timeout",
-        "position": 12,
+        "position": 11,
         "type": "bool|str|int",
         "required": false,
         "default": null,
@@ -433,10 +399,7 @@
           }
         ]
       }
-    ],
-    "renamed_arguments": {
-      "hpc_time_limit": "walltime"
-    }
+    ]
   },
   "pipeline": {
     "function": "pipeline",
@@ -545,7 +508,7 @@
       "id": "L-E06",
       "name": "RefusedArgument",
       "level": "error",
-      "fix": "Fix the argument as the message says; step() raises on it when the pipeline is rendered.",
+      "fix": "Remove the argument or write it as the message says; step() raises on it when the pipeline is rendered.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
     },
     {
@@ -557,16 +520,16 @@
     },
     {
       "id": "L-E08",
-      "name": "StepNotMoved",
+      "name": "OldStepCode",
       "level": "error",
-      "fix": "Move the step to kaos_lib.step: step.start() gives the config and the run, step.input() the datasets, step.result() hands values on. Guide: https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html",
+      "fix": "Create the app again from the template.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E08.html"
     },
     {
       "id": "L-E09",
       "name": "PlatformConfigGroup",
       "level": "error",
-      "fix": "Remove the `- platform: ...` line from the defaults of config/config.yaml (`kaosctl lint --fix` does it) and delete the folder config/platform/ if your app has one. Guide: https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html",
+      "fix": "Create the app again from the template.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E09.html"
     },
     {

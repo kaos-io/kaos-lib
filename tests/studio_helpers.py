@@ -6,7 +6,7 @@ import os
 import pathlib
 import sys
 
-from kaos_lib.studio import proc
+from kaos_lib.studio import proc, pyenv
 
 PIPELINE = '''from kubecore.authoring import artifact, dataset, model, pipeline, step
 
@@ -114,12 +114,13 @@ def template_repo(root: pathlib.Path, extra: dict = None) -> pathlib.Path:
 
 def fake_venv(step_dir: pathlib.Path) -> None:
     """Make `<step>/.venv/bin/python` run the Python that runs the tests, so a step 'runs in its environment' offline."""
-    py = step_dir / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    venv = pyenv.step_env(step_dir)
+    py = pyenv.venv_python(venv)
     py.parent.mkdir(parents=True, exist_ok=True)
     if not py.exists():       # a wrapper, not a symlink: a symlinked interpreter loses its own site-packages
         py.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
         py.chmod(0o755)
-    (step_dir / ".venv" / "pyvenv.cfg").write_text("home = test\n")
+    (venv / "pyvenv.cfg").write_text("home = test\n")
 
 
 class StubEngine:

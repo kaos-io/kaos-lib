@@ -30,19 +30,8 @@ const kaosChecks: Record<string, () => Promise<void>> = {
     const doc = await pipelineDoc();
     const d = await until("L-E06 diagnostic", () => vscode.languages.getDiagnostics(doc.uri).find((x) => typeof x.code === "object" && x.code.value === "L-E06"));
     assert.equal(d.severity, vscode.DiagnosticSeverity.Error);
-    assert.match(d.message, /Fix: Rename it to walltime/);
+    assert.match(d.message, /step\(\) no longer takes 'hpc_time_limit'/);
     assert.match(String(typeof d.code === "object" ? d.code.target : ""), /L-E06\.html$/);
-  },
-  async should_offer_the_rename_quick_fix_and_apply_it() {
-    const doc = await pipelineDoc();
-    const editor = await vscode.window.showTextDocument(doc);
-    const d = vscode.languages.getDiagnostics(doc.uri).find((x) => typeof x.code === "object" && x.code.value === "L-E06")!;
-    const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>("vscode.executeCodeActionProvider", doc.uri, d.range, vscode.CodeActionKind.QuickFix.value);
-    const fix = actions.find((a) => a.title === "Rename 'hpc_time_limit' to 'walltime'");
-    assert.ok(fix, "the rename quick fix is offered");
-    await vscode.workspace.applyEdit(fix!.edit!);
-    assert.ok(editor.document.getText().includes('walltime="12h"'));
-    assert.ok(!editor.document.getText().includes("hpc_time_limit"));
   },
   async should_lint_unsaved_text_without_a_save() {
     const doc = await pipelineDoc();
@@ -50,7 +39,7 @@ const kaosChecks: Record<string, () => Promise<void>> = {
     edit.insert(doc.uri, new vscode.Position(doc.lineCount, 0), '\n    step("zz", disk="20 GB")\n');
     await vscode.workspace.applyEdit(edit);
     assert.ok(doc.isDirty, "the buffer is unsaved");
-    await until("a finding for the unsaved line", () => vscode.languages.getDiagnostics(doc.uri).find((x) => /disk='20 GB'/.test(x.message)));
+    await until("a finding for the unsaved line", () => vscode.languages.getDiagnostics(doc.uri).find((x) => /no longer takes 'disk'/.test(x.message)));
   },
   async should_complete_values_from_the_schema_after_resumable_equals() {
     const doc = await pipelineDoc();

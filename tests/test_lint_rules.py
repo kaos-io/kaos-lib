@@ -77,8 +77,8 @@ def test_should_report_a_cycle_in_raw_hera_depends(tmp_path):
 
 
 @pytest.mark.parametrize("body,expect", [
-    ('    a = step("a", kind="train", hpc_time_limit="2h", gpu=True)\n', "no argument 'hpc_time_limit'"),
-    ('    a = step("a", kind="train", outputs=["metrics"])\n', "no argument 'outputs'"),
+    ('    a = step("a", kind="train", hpc_time_limit="2h", gpu=True)\n', "no longer takes 'hpc_time_limit'"),
+    ('    a = step("a", kind="train", outputs=["metrics"])\n', "no longer takes 'outputs'"),
     ('    a = step("a", kind="train", walltime="2 hours", gpu=True)\n', "must be minutes or hours"),
     ('    a = step("a", kind="train", resumable="soon", gpu=True)\n', "resumable='soon'"),
     ('    a = step("a", kind="train", checkpoint_every=0, gpu=True)\n', "checkpoint_every=0"),
@@ -91,7 +91,7 @@ def test_should_report_each_argument_step_refuses(tmp_path, body, expect):
 
 def test_should_accept_the_arguments_step_accepts(tmp_path):
     body = ('    a = step("a", kind="train", gpu=True, walltime="12h", resumable="20m", checkpoint_every="1h", '
-            'idle_timeout=0, disk="20Gi", when="x")\n    b = step("b", kind="train", resumable=False, checkpoint_every=False)\n')
+            'idle_timeout=0, when="x")\n    b = step("b", kind="train", resumable=False, checkpoint_every=False)\n')
     assert not messages(tmp_path, body, rule="L-E06")
 
 

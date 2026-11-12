@@ -48,9 +48,11 @@ WRITE_TYPES = ("model", "artifact", "dataset")
 DATASET_PREFIX = "dataset-"
 
 
-# Inside strings: braces (the platform would read "{{...}}" as a template) and the three characters the
+# Inside strings: braces (the platform would read "{{...}}" as a template), the dollar sign (Kubernetes expands
+# "$(NAME)" and reduces "$$" in an environment value, and the context travels as one) and the three characters the
 # platform's own JSON writer escapes, so that a text costs the same wherever it is carried.
-_WIRE_ESCAPES = (("{", "\\u007b"), ("}", "\\u007d"), ("&", "\\u0026"), ("<", "\\u003c"), (">", "\\u003e"))
+_WIRE_ESCAPES = (("{", "\\u007b"), ("}", "\\u007d"), ("$", "\\u0024"), ("&", "\\u0026"), ("<", "\\u003c"),
+                 (">", "\\u003e"))
 
 
 def wire(value) -> str:

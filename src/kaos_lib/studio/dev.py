@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from . import kaoslib, pyenv, steps, vscode
-from .constants import LOCAL_DIR, VENV_DIR
+from .constants import LOCAL_DIR
 from .deps import StepDeps, read_step_deps
 
 
@@ -48,7 +48,7 @@ def setup_step(step: steps.StepInfo, spec_flag: Optional[str], context: Optional
     python, note = pyenv.find_python(deps.python, uv)
     for n in deps.notes:
         echo(f"  note: {n}")
-    result = pyenv.ensure_env(step.path, requirements_text(deps, spec), python, uv)
+    result = pyenv.ensure_env(pyenv.step_env(step.path), requirements_text(deps, spec), python, uv)
     if result.status == "failed":
         echo(result.log[-2000:])
         return DevOutcome(step.name, "failed", result.note)
@@ -71,7 +71,7 @@ def run_dev(args) -> int:
         if not args.step and not args.all and read_step_deps(step.path).heavy():
             skipped.append(step)
             continue
-        print(f"{step.name}: setting up {step.folder}/{VENV_DIR} ...")
+        print(f"{step.name}: setting up its environment in {pyenv.step_env(step.path)} ...")
         outcomes.append(setup_step(step, args.kaos_lib, args.context, uv, editor_hint=args.vscode))
     for o in outcomes:
         print(f"  {o.step}: {o.status} ({o.detail})" if o.detail else f"  {o.step}: {o.status}")
@@ -82,5 +82,5 @@ def run_dev(args) -> int:
     if failed:
         print(f"ERROR: {len(failed)} step(s) could not be set up: {', '.join(o.step for o in failed)}.", file=sys.stderr)
         return 1
-    print(f"Next: kaosctl step run <step>   (environments live in steps/<name>/{VENV_DIR}; {LOCAL_DIR} is where runs write)")
+    print(f"Next: kaosctl step run <step>   (environments live in your cache folder; {LOCAL_DIR} is where runs write)")
     return 0

@@ -61,7 +61,7 @@ def test_status_form_is_one_line_with_the_counts_and_the_rule_set(tmp_path, caps
 
 
 def test_markdown_lists_skipped_rules_and_caps_long_lists(tmp_path, capsys):
-    many = "".join(f'    a{i} = step("a{i}", kind="train", disk="x")\n' for i in range(60))
+    many = "".join(f'    a{i} = step("a{i}", kind="train", walltime="x")\n' for i in range(60))
     root = write_repo(tmp_path / "r", repo(many))
     _, md, _ = kaosctl(capsys, str(root), "--format", "markdown")
     assert "and 10 more" in md and "Rules that did not run" in md
