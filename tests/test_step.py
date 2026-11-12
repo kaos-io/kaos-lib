@@ -588,3 +588,31 @@ def test_result_after_a_failed_result_works_once(monkeypatch, lake):
     step.result()
     with pytest.raises(StepError, match=r"step.result\(\) was already called"):
         step.result()
+
+
+# ------------------------------------------------------------------ an output folder that is a link; a name that is both
+def test_an_output_folder_that_is_a_symlink_is_refused_and_nothing_is_deleted_through_it(monkeypatch, tmp_path):
+    begin(monkeypatch, wire("context-no-upstream"))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "keep").write_text("x")
+    folder = tmp_path / "work" / "kaos" / "outputs" / "embeddings"
+    folder.parent.mkdir(parents=True)
+    folder.symlink_to(elsewhere)
+    with pytest.raises(StepError, match=r"output 'embeddings'.*must be a real folder"):
+        step.output("embeddings")
+    assert (elsewhere / "keep").read_text() == "x" and folder.is_symlink()
+
+
+def test_a_step_whose_output_has_the_name_of_one_of_its_inputs_is_refused_at_start(monkeypatch, capsys):
+    context = fixture("context-no-upstream")
+    context["produces"][0]["name"] = "raw"                       # the step reads 'raw' and writes 'raw'
+    err = refused(capsys, monkeypatch, context)
+    assert "'raw'" in err and "output" in err and "input" in err and "different name" in err
+
+
+def test_an_output_named_like_an_input_of_a_needed_step_is_refused_at_start(monkeypatch, capsys):
+    context = fixture("context-one-upstream")
+    write = next(iter(context["upstream"].values()))["writes"][0]
+    context["produces"][0]["name"] = write["name"]
+    assert "different name" in refused(capsys, monkeypatch, context)

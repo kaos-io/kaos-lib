@@ -215,6 +215,16 @@ def _pinned(step: Step) -> lock.DataLock:
     return lock.DataLock(step.ledger.reads + made)
 
 
+def _one_meaning(step: Step) -> None:
+    """A name is an input or an output of a step, never both: the folder of an output would replace the input."""
+    inputs = {r.name for r in step.ledger.reads} | {w.name for up in step.upstream.values() if up for w in up.writes}
+    for produce in step.produces:
+        if produce.name in inputs:
+            _fail(f"step '{step.step}' writes the output '{produce.name}' and also reads an input named "
+                  f"'{produce.name}'. Give the output a different name: an input and an output of one step must "
+                  "not share a name.")
+
+
 def start(environ=None) -> Step:
     """Read and check the step context; call it once, first. A second call returns the same step.
 
@@ -229,6 +239,7 @@ def start(environ=None) -> Step:
         if not text:
             _fail(f"this is not a pipeline step: {ENV} is not set. Run the step with: kaosctl step run <step>")
         step = parse(text)
+        _one_meaning(step)
     except StepError as exc:        # nothing of the step ran yet: one line that names the cause, no traceback
         print(f"ERROR: {exc}", file=sys.stderr, flush=True)
         raise SystemExit(1) from None
@@ -364,6 +375,9 @@ def output(name: str) -> pathlib.Path:
     _produce(run, name)
     if name not in run.outputs:
         folder = _work(WORK) / "kaos" / "outputs" / name
+        if folder.is_symlink():
+            _fail(f"output '{name}': {folder} is a link, and the folder of an output must be a real folder. "
+                  "Nothing was changed.")
         shutil.rmtree(folder, ignore_errors=True)       # an earlier attempt's files are never part of this one
         folder.mkdir(parents=True)
         run.outputs[name] = folder
