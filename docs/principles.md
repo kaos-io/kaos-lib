@@ -55,7 +55,7 @@ Once the checks pass, `step.result()` saves in two stages, and a failure in a st
 
 1. **Seal.** Every output is uploaded and checked, and no model, artifact or `latest` changes. A failure here changes
    nothing that anyone reads, except that a dataset version already sealed for an earlier output of the same step
-   stays in its dataset, kept under a name that starts `k-<run>-<step>`. It is not `latest`.
+   stays in its dataset, kept under a name that starts `k-` and the time it was sealed, followed by the run and the step. It is not `latest`.
 2. **Promote.** Models and artifacts are saved first, then the datasets that the run asked to move `latest` for. When a
    promotion fails, a model or artifact that was already saved stays under its folder `<name>/<experiment>/<run>/`;
    no result refers to it. A dataset whose promotion failed keeps its sealed version, and `latest` does not move. If a

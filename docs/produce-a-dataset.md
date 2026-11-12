@@ -19,8 +19,9 @@ You have a step that produces a dataset. `prepare` declares it, and writes the f
 
 - **It seals a version.** When `step.result()` runs, the files of the folder become one version of the dataset. A
   version never changes afterwards, and the steps after `prepare` in the same run read exactly that version.
-- **Only the difference is stored.** A run that writes the same content makes no new version
-  ([how](datasets-versions-hashes.md#only-the-difference-is-stored)).
+- **Only the difference is uploaded.** A run uploads only the files that differ from what the dataset holds and from
+  what the last run sealed. A run that writes the same content as `latest` makes no new version; every other run makes
+  its own version ([how](datasets-versions-hashes.md#only-the-difference-is-uploaded)).
 - **A step that fails.** [What is saved](principles.md#what-is-saved) says what a failed step can leave behind.
 - **Only the app that declares the dataset in `produces=` writes it.** People and other pipelines read it.
 

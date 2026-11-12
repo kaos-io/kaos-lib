@@ -34,6 +34,8 @@ the command.
 | `kaos-lib: Zitadel could not be reached (...); the sign-in is tried again in N seconds.` | the sign-in service did not answer. A short outage is normal: the step tries again for about two and a half minutes and goes on when it answers. Do nothing. If the tries run out the step fails with `cannot reach Zitadel` |
 | `output 'x': the same content as the last version of dataset-... (...); no new version.` | the step wrote the files the last version already holds |
 | `output 'x': sealed dataset-... at ... (kept as ...); latest was not moved.` | the run made a version and did not ask to move `latest` |
+| `output 'x': 0 file(s) to upload, 0 to delete, 0 unchanged since the last version of dataset-..., 201 reused from an earlier run (copied, not uploaded).` | the files are the ones an earlier run sealed and did not move `latest` to: they were copied, not uploaded again. The run still has its own version |
+| `output 'x': 1 of the 201 file(s) could not be copied and were uploaded.` | a file of an earlier run could not be copied, so this step uploaded it. Nothing to do |
 
 ## The pipeline is refused
 

@@ -2,6 +2,8 @@
 
 Run with ``KAOS_LIB_TEST_LAKEFS=real`` (or ``both``); skipped otherwise, and when docker is not available.
 """
+import re
+
 import pytest
 
 import real_lakefs
@@ -86,6 +88,13 @@ def write(client, repo, root, run, promote=True):
         writer.discard(s)
 
 
+def kept_as(client, repo, run):
+    """The commit the one tag of ``run``'s step ``prepare`` points at."""
+    found = [t for t in client.tags(repo) if re.fullmatch(rf"k-\d{{8}}T\d{{6}}Z-{run}-prepare-[0-9a-f]{{12}}", t["id"])]
+    assert len(found) == 1
+    return found[0]["commit_id"]
+
+
 def test_an_app_seals_and_promotes_the_dataset_it_declares_and_a_second_run_uploads_one_file(lake, tmp_path):
     client = lake.wait_for_dataset("writer", "dataset-written-1")
     files = {"a/1.bin": b"one", "a/2.bin": b"two", "b/3.bin": b"three"}
@@ -97,7 +106,7 @@ def test_an_app_seals_and_promotes_the_dataset_it_declares_and_a_second_run_uplo
     assert sent == ["a/2.bin"] and second == client.branch_commit("dataset-written-1", "main") != first
     assert write(client, "dataset-written-1", folder(tmp_path, {**files, "a/2.bin": b"two, changed"}, "same"), "run-3") == second
     assert not client.branch_exists("dataset-written-1", "run-run-2-prepare-out")
-    assert [t for t in client.tags("dataset-written-1") if t["id"].startswith("k-run-2-prepare-")]
+    assert [t for t in client.tags("dataset-written-1") if re.fullmatch(r"k-\d{8}T\d{6}Z-run-2-prepare-[0-9a-f]{12}", t["id"])]
 
 
 def test_a_run_that_does_not_promote_leaves_latest_where_it_was(lake, tmp_path):
@@ -105,7 +114,7 @@ def test_a_run_that_does_not_promote_leaves_latest_where_it_was(lake, tmp_path):
     head = client.branch_commit("dataset-written-2", "main")
     sealed = write(client, "dataset-written-2", folder(tmp_path, {"x.bin": b"x"}), "run-1", promote=False)
     assert client.branch_commit("dataset-written-2", "main") == head != sealed
-    assert tree(client, "dataset-written-2", sealed) == ["x.bin"] and client.tag_commit("dataset-written-2", f"k-run-1-prepare-{sealed[:12]}") == sealed
+    assert tree(client, "dataset-written-2", sealed) == ["x.bin"] and kept_as(client, "dataset-written-2", "run-1") == sealed
 
 
 def test_the_server_refuses_a_merge_without_an_expected_head_and_one_onto_a_moved_head(lake, tmp_path):
@@ -177,7 +186,7 @@ def test_a_retry_with_the_same_content_reuses_the_sealed_commit_and_its_tag(lake
     client = lake.wait_for_dataset("writer", "dataset-written-5")
     commits = {write(client, "dataset-written-5", folder(tmp_path, {"x": b"x"}, f"o{i}"), "run-1", promote=False)
                for i in range(4)}
-    assert len(commits) == 1 and [t["id"] for t in client.tags("dataset-written-5")] == [f"k-run-1-prepare-{next(iter(commits))[:12]}"]
+    assert len(commits) == 1 and [t["commit_id"] for t in client.tags("dataset-written-5")] == list(commits)
 
 
 def test_more_than_a_page_of_files_is_listed_mirrored_and_shrunk(lake, tmp_path):
@@ -211,3 +220,46 @@ def test_a_failing_seal_leaves_no_run_branch_and_the_merge_commit_carries_the_ru
     version = write(client, "dataset-written-8", folder(tmp_path, {"x": b"x"}), "run-1")
     info = client.commit_info("dataset-written-8", version)
     assert info["metadata"].get("kaos.run") == "run-1" and info["message"] == "out: run-1"
+
+
+def test_an_app_key_may_copy_from_the_last_sealed_version_so_a_run_that_does_not_promote_uploads_nothing(
+        lake, tmp_path, monkeypatch):
+    """The copy needs read on the source and write on the branch: what the app's policy for its dataset gives."""
+    monkeypatch.setattr(writer, "MIN_REUSE_BYTES", 0)
+    ds = "dataset-written-9"
+    client = lake.wait_for_dataset("writer", ds)
+    files = {"a/1.bin": b"one", "a/2.bin": b"two", "b/3.bin": b"three"}
+    first = write(client, ds, folder(tmp_path, files), "run-1", promote=False)
+    sent, copied, real_upload, real_copy = [], [], client.upload_object, client.copy_object
+    client.upload_object = lambda repo, branch, path, local: sent.append(path) or real_upload(repo, branch, path, local)
+    client.copy_object = lambda *a: real_copy(*a) or copied.append(a[2])        # appended only when the server accepted it
+    second = write(client, ds, folder(tmp_path, files, "second"), "run-2", promote=False)
+    assert sent == [] and sorted(copied) == sorted(files)
+    assert second != first and tree(client, ds, second) == tree(client, ds, first) == sorted(files)
+    assert client.branch_commit(ds, "main") not in (first, second)
+
+
+def test_the_newest_kept_version_is_found_in_a_few_calls_among_hundreds_and_unicode_paths_are_copied(
+        lake, tmp_path, monkeypatch):
+    """The names sort by time: a listing after a point in time, never one read per version."""
+    monkeypatch.setattr(writer, "MIN_REUSE_BYTES", 0)
+    ds = "dataset-written-10"
+    client = lake.wait_for_dataset("writer", ds)
+    files = {"dir é/ファイル 1.bin": b"one", "a b/c#d?e&f.bin": b"two"}
+    old = write(client, ds, folder(tmp_path, {"x": b"old"}, "old"), "run-z", promote=False)
+    import datetime as dt, time
+    time.sleep(1.1)                            # versions are named by the second
+    newest = write(client, ds, folder(tmp_path, files, "new"), "run-a", promote=False)
+    base = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=2)
+    for i in range(320):                       # older than the newest, of other content
+        stamp = writer._stamp(base - dt.timedelta(seconds=i))
+        client.create_tag(ds, f"k-{stamp}-run-f-prepare-{old[:12]}", old)
+    calls = []
+    real_tags, real_info = client.tags, client.commit_info
+    client.tags = lambda *a, **k: calls.append("tags") or real_tags(*a, **k)
+    client.commit_info = lambda *a, **k: calls.append("commit") or real_info(*a, **k)
+    sent, real_upload = [], client.upload_object
+    client.upload_object = lambda repo, branch, path, local: sent.append(path) or real_upload(repo, branch, path, local)
+    again = write(client, ds, folder(tmp_path, files, "again"), "run-b", promote=False)
+    assert sent == [] and tree(client, ds, again) == tree(client, ds, newest) == sorted(files)
+    assert calls == ["tags", "tags"]           # an earlier attempt of this step, the newest version

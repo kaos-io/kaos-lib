@@ -115,8 +115,7 @@ class LakeFS:
             return NotFoundError(f"not found ({what}): {detail}", status)
         return LakeFSError(f"{what} failed: HTTP {status} {detail}", status)
 
-    def _pages(self, path: str, params: Optional[dict] = None) -> Iterator[dict]:
-        after = ""
+    def _pages(self, path: str, params: Optional[dict] = None, after: str = "") -> Iterator[dict]:
         while True:
             body = self._call("GET", path, params={**(params or {}), "after": after, "amount": 1000}).json()
             yield from body.get("results", [])
@@ -208,9 +207,10 @@ class LakeFS:
         """Where kaos-lake wants new repositories (``GET /kaos/v1/dataset-templates``), or None if it does not say."""
         return (self.dataset_templates() or {}).get("storage_namespace_prefix") or None
 
-    def tags(self, repo: str) -> list:
-        """Every tag: dicts with ``id`` (name) and ``commit_id``."""
-        return list(self._pages(f"/repositories/{_q(repo)}/tags"))
+    def tags(self, repo: str, prefix: str = "", after: str = "") -> list:
+        """The tags in name order (those whose name starts with ``prefix`` and sorts after ``after``): dicts with
+        ``id`` (name) and ``commit_id``."""
+        return list(self._pages(f"/repositories/{_q(repo)}/tags", {"prefix": prefix} if prefix else None, after))
 
     def tag_commit(self, repo: str, tag: str) -> str:
         return self._call("GET", f"/repositories/{_q(repo)}/tags/{_q(tag)}",
@@ -249,6 +249,13 @@ class LakeFS:
         with local.open("rb") as fh:
             self._call("POST", f"/repositories/{_q(repo)}/branches/{_q(branch)}/objects",
                        params={"path": path}, files={"content": (local.name, fh)}, what=f"upload {path}")
+
+    def copy_object(self, repo: str, branch: str, path: str, src_path: str, src_ref: str) -> None:
+        """Put the object ``src_path`` of ``src_ref`` (a commit id pins it) on ``branch`` as ``path``, copied by the
+        server inside the repository: the bytes are not sent again."""
+        self._call("POST", f"/repositories/{_q(repo)}/branches/{_q(branch)}/objects/copy",
+                   params={"dest_path": path}, json={"src_path": src_path, "src_ref": src_ref},
+                   what=f"copy {src_path} to {path}")
 
     def delete_object(self, repo: str, branch: str, path: str) -> None:
         self._call("DELETE", f"/repositories/{_q(repo)}/branches/{_q(branch)}/objects",

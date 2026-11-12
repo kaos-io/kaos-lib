@@ -41,7 +41,7 @@ ACCESS_KEY, SECRET_KEY = "AKIAIOSFOLKAOSTEST00", "kaos-lib-test-secret-key-00000
 # The apps of the test project on kaos-lake: each may write its outputs repository and the datasets it declares.
 APPS = {
     "writer": {"user": "kaos-app-writer", "access_key_id": "AKIAJWRITER0000001Q", "secret_access_key": "writer-secret",
-               "outputs_repository": "outputs-writer", "datasets": [f"dataset-written-{i}" for i in range(1, 9)]},
+               "outputs_repository": "outputs-writer", "datasets": [f"dataset-written-{i}" for i in range(1, 11)]},
     "other": {"user": "kaos-app-other", "access_key_id": "AKIAJOTHER00000001Q", "secret_access_key": "other-secret",
               "outputs_repository": "outputs-other", "datasets": ["dataset-others-1"]},
 }
