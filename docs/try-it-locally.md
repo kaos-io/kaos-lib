@@ -68,9 +68,12 @@ Done: hello-world exited 0. Next: kaosctl step run <the step that needs hello-wo
   you see is a fingerprint of the content: the same files give the same commit.
 - The step runs with a short list of your environment variables. The addresses and tokens the platform gives a running
   step are not passed, even if your shell has them.
-- Without `--params-file` the settings are composed from `config/` by the platform's own composer. For that, pass the
-  context file of your app with `--context`.
-- `--python <interpreter>` runs the step with a Python you already have, for a step with heavy dependencies.
+- `--params-file` is the way to run with what you have: write the settings your step reads in a `params.yaml`, as above
+  (a section per config file, with the values you want). Without it, the settings are composed from `config/` by the
+  platform's own composer, and that needs the pipeline-context file the platform keeps for your app (`--context`). You
+  do not make that file yourself.
+- `--python <interpreter>` runs the step with a Python you already have, for a step with heavy dependencies. A relative
+  path is taken from the folder you run the command in.
 
 ## Check the pipeline
 

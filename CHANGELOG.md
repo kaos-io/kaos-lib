@@ -50,6 +50,12 @@ template.** Nothing in kaos-lib converts an old app.
 - `kaosctl lint` reads only the repository's own files (no virtualenv, `.kaos/`, caches or ignored folders) and its
   `L-W03` now warns about a dataset version written in step code instead of the default version in config.
 - `kaosctl dataset versions BAD` and other invalid names answer "invalid dataset name" instead of an HTTP error.
+- A machine-key sign-in (the MLflow token a step asks for at its start) is tried again after a failure that can pass (no
+  connection, a timeout, HTTP 502/503/504), for about 2.5 minutes, with one line on stderr per try. A refused key still
+  fails at once.
+- `kaosctl step run --python` with a relative path now resolves it from the folder you ran the command in, and names the
+  path when no interpreter is there, instead of "exited with code 127".
+- `kaosctl step run` without `--params-file` or `--context` now starts by telling you to write a `params.yaml`.
 
 ### Removed
 - `hpc_time_limit=` (use `walltime=`) and `outputs=` (use `step.result()`), with no alias.

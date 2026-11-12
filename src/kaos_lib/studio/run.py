@@ -46,9 +46,9 @@ def ensure_environment(step: steps.StepInfo, args) -> pathlib.Path:
     """The step's Python: `--python` as given (nothing is built), else the step's environment in the cache folder,
     set up first (as `kaosctl dev` would) when it is not there."""
     if args.python:
-        py = pathlib.Path(args.python)
+        py = pathlib.Path(os.path.abspath(args.python))      # the step starts in its own folder: a relative path would not resolve
         if not py.is_file():
-            raise KaosLibError(f"--python {args.python}: no such interpreter.")
+            raise KaosLibError(f"--python {args.python}: no such interpreter ({py}).")
         if not proc.run([str(py), "-c", "import kaos_lib"]).ok:
             raise KaosLibError(f"--python {args.python} cannot import kaos_lib: install kaos-lib into that "
                                "environment. Nothing was changed there.")
@@ -73,7 +73,10 @@ def compose_params(root: pathlib.Path, args, local: pathlib.Path) -> str:
     try:
         pin = pipeline_engine.resolve_pin(getattr(args, "engine_wheel", None), args.context)
     except KaosLibError as exc:
-        raise KaosLibError(f"{exc} Or pass --params-file with a params.yaml you already have.") from None
+        raise KaosLibError("To run with the settings you have, write a params.yaml (a section per config file the step "
+                           "reads, e.g. `prepare:` with `min_bytes: 1` below it) and pass --params-file params.yaml. "
+                           "Composing the settings from config/ needs the platform's pipeline-context file for your "
+                           f"app, which you do not make yourself. {exc}") from None
     py = pipeline_engine.ensure(root, pin, pyenv.find_uv())
     profile = pipeline_engine.profile_of(root, getattr(args, "profile", None))
     return pipeline_engine.compose(root, py, profile, list(args.override), local / "params.yaml")

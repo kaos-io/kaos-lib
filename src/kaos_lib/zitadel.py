@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import sys
 import time
 from typing import Optional
 
@@ -24,6 +25,8 @@ GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 BASE_SCOPE = "openid email profile urn:zitadel:iam:org:projects:roles"
 ASSERTION_LIFETIME = 60
 TIMEOUT = 30
+RETRY_WAITS = (5, 10, 20, 30, 30, 30, 30)      # seconds before each new try: about 2.5 minutes in all
+RETRY_STATUSES = (502, 503, 504)               # answers that can pass; a 4xx (a refused key) is never tried again
 
 
 def _jwt():
@@ -78,16 +81,27 @@ def assertion(key: dict, domain: str, now: Optional[int] = None) -> str:
 def grant(key_file, domain: str, project_id: str, session: Optional[requests.Session] = None) -> dict:
     """Zitadel's token response (``access_token``, ``expires_in``, ...) for the machine user of ``key_file``.
 
-    POSTs the JWT-profile grant to ``https://<domain>/oauth/v2/token`` with the project-audience scope.
+    POSTs the JWT-profile grant to ``https://<domain>/oauth/v2/token`` with the project-audience scope. A request
+    that fails in a way that can pass (no connection, a timeout, HTTP 502/503/504) is tried again after a growing
+    wait, for about 2.5 minutes (``RETRY_WAITS``); a refusal (4xx) is raised at once.
     """
     _jwt()   # the missing extra is reported first, before any key-file problem
-    signed = assertion(load_key(key_file), domain)
+    key = load_key(key_file)
     url = f"https://{domain}/oauth/v2/token"
-    try:
-        resp = (session or _session()).post(url, timeout=TIMEOUT, data={
-            "grant_type": GRANT_TYPE, "scope": scope(project_id), "assertion": signed})
-    except requests.RequestException as exc:
-        raise AuthError(f"cannot reach Zitadel at {url} ({exc.__class__.__name__}).") from None
+    for wait in (*RETRY_WAITS, None):
+        signed = assertion(key, domain)      # signed again each try: an assertion is good for a minute only
+        try:
+            resp = (session or _session()).post(url, timeout=TIMEOUT, data={
+                "grant_type": GRANT_TYPE, "scope": scope(project_id), "assertion": signed})
+            what = f"answered HTTP {resp.status_code}" if resp.status_code in RETRY_STATUSES else None
+        except requests.RequestException as exc:
+            resp, what = None, f"could not be reached ({exc.__class__.__name__})"
+            if wait is None:
+                raise AuthError(f"cannot reach Zitadel at {url} ({exc.__class__.__name__}).") from None
+        if what is None or wait is None:
+            break
+        print(f"kaos-lib: Zitadel {what}; the sign-in is tried again in {wait} seconds.", file=sys.stderr, flush=True)
+        time.sleep(wait)
     try:
         body = resp.json()
     except ValueError:
