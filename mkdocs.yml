@@ -22,6 +22,8 @@ exclude_docs: |
   requirements.txt
   generated/built.md
   generated/install.md
+  design/
+  examples/
 hooks:
   - docs/hooks.py
   - docs_check.py   # words, removed names, links: a finding fails the build
@@ -79,6 +81,9 @@ markdown_extensions:
       permalink: true
       toc_depth: 3
   - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
   - pymdownx.snippets:
       base_path: [docs, "."]
       check_paths: true
@@ -88,58 +93,47 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Install: install.md
-  - Quickstart: quickstart.md
-  - Steps:
-      - How a step works: steps.md
-      - Step examples: step-examples.md
-      - How steps use datasets: steps-and-datasets.md
-  - Guides:
-      - Datasets: datasets.md
-      - Outputs: outputs.md
-      - Long runs on HPC (Slurm): checkpoint.md
-      - Check your pipeline: lint.md
-      - Set up your steps (kaosctl dev): dev.md
-      - Run a step locally: step-run.md
-      - Render your pipeline locally: render.md
-      - Build a step image: build.md
-      - MLflow: mlflow.md
-      - Data lock: data-lock.md
-      - Datasets shared with your project: shared-datasets.md
-      - Make your own dataset layout: make-your-own-layout.md
-  - Lint checks:
-      - L-E00: lint/L-E00.md
-      - L-E01: lint/L-E01.md
-      - L-E02: lint/L-E02.md
-      - L-E03: lint/L-E03.md
-      - L-E04: lint/L-E04.md
-      - L-E05: lint/L-E05.md
-      - L-E06: lint/L-E06.md
-      - L-W01: lint/L-W01.md
-      - L-W02: lint/L-W02.md
-      - L-W03: lint/L-W03.md
-      - L-W04: lint/L-W04.md
-      - L-W05: lint/L-W05.md
-      - L-I01: lint/L-I01.md
-      - L-I02: lint/L-I02.md
-      - L-I03: lint/L-I03.md
-      - L-D01: lint/L-D01.md
-      - L-D02: lint/L-D02.md
-      - L-D03: lint/L-D03.md
-      - L-D04: lint/L-D04.md
-      - L-D05: lint/L-D05.md
-      - L-D06: lint/L-D06.md
-      - L-D07: lint/L-D07.md
-      - L-D08: lint/L-D08.md
-  - Reference:
-      - CLI: generated/cli.md
+  - 1. Run it: run-it.md
+  - 2. Your first step: first-step.md
+  - 3. Settings: settings.md
+  - 4. Read data: read-data.md
+  - 5. Pass things on: pass-things-on.md
+  - 6. Produce a dataset: produce-a-dataset.md
+  - 7. Bigger machines: bigger-machines.md
+  - 8. Long jobs: long-jobs.md
+  - 9. HPC (Slurm): hpc.md
+  - 10. Try it locally: try-it-locally.md
+  - 11. A real pipeline: a-real-pipeline.md
+  - 12. Reference:
+      - Reference: reference.md
+      - Commands: generated/cli.md
       - Python API: api.md
-      - Run context: runtime.md
-      - Progress of a step: progress.md
-      - Credentials: credentials.md
-      - Support policy and upgrades: support-window.md
-      - Troubleshooting: troubleshooting.md
-      - Troubleshooting dev, run, build: troubleshooting-build.md
-      - Formerly kubecore: formerly-kubecore.md
-      - Develop: develop.md
+      - Lint checks: lint.md
+      - Lint rules:
+          - L-E00: lint/L-E00.md
+          - L-E01: lint/L-E01.md
+          - L-E02: lint/L-E02.md
+          - L-E03: lint/L-E03.md
+          - L-E04: lint/L-E04.md
+          - L-E05: lint/L-E05.md
+          - L-E06: lint/L-E06.md
+          - L-E07: lint/L-E07.md
+          - L-E08: lint/L-E08.md
+          - L-E09: lint/L-E09.md
+          - L-W01: lint/L-W01.md
+          - L-W02: lint/L-W02.md
+          - L-W03: lint/L-W03.md
+          - L-W04: lint/L-W04.md
+          - L-W05: lint/L-W05.md
+          - L-I01: lint/L-I01.md
+          - L-I02: lint/L-I02.md
+          - L-I03: lint/L-I03.md
+          - L-D01: lint/L-D01.md
+          - L-D02: lint/L-D02.md
+          - L-D03: lint/L-D03.md
+          - L-D04: lint/L-D04.md
+          - L-D05: lint/L-D05.md
+          - L-D06: lint/L-D06.md
+          - L-D07: lint/L-D07.md
+          - L-D08: lint/L-D08.md
   - Changelog: changelog.md

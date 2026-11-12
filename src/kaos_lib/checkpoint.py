@@ -345,7 +345,7 @@ def _end_step(final: pathlib.Path) -> None:
     print("kaos-lib: checkpoint saved to %s; ending the step with exit code %d so it continues in a new job"
           % (final, CONTINUE_EXIT_CODE), file=sys.stderr, flush=True)
     sys.stdout.flush()
-    raise SystemExit(CONTINUE_EXIT_CODE)
+    sys.exit(CONTINUE_EXIT_CODE)
 
 
 _MISSING = object()
@@ -453,7 +453,7 @@ def progress(value: Any) -> None:
 def exit_for_restart() -> None:
     """End the step so it is continued: exit code 85. Call it after ``save`` when ``stop_requested()`` is true."""
     sys.stdout.flush()
-    raise SystemExit(CONTINUE_EXIT_CODE)
+    sys.exit(CONTINUE_EXIT_CODE)
 
 
 def _save_and_end(save_fn: Optional[Callable[[pathlib.Path], Any]]) -> bool:

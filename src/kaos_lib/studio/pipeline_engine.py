@@ -181,7 +181,7 @@ def ensure(root: pathlib.Path, pin: EnginePin, uv: Optional[str] = None, get: Op
     """The Python of `.kaos/engine/.venv`, holding exactly the pinned engine (set up or updated when it does not)."""
     home = engine_home(root)
     wheel = fetch(pin, home, get)
-    outcome = pyenv.ensure_env(home, f"{wheel}\n", find_python(uv), uv)
+    outcome = pyenv.ensure_env(home / VENV_DIR, f"{wheel}\n", find_python(uv), uv)
     if outcome.status == "failed":
         raise KaosLibError(f"cannot set up the pipeline engine in {home / VENV_DIR}: {outcome.detail}\n"
                            + (outcome.output or "")[-1500:])

@@ -127,8 +127,9 @@ def test_malformed_installed_version_is_unknown():
 def test_packaged_release_json_is_valid_and_matches_this_version():
     meta = support.packaged()
     assert support.validate_release(meta) == []
-    assert meta["version"] == kaos_lib.__version__
-    assert meta["supported"] == ">=0.2" and meta["deprecated"] == [] and meta["breaking"] is False
+    assert meta["version"] == kaos_lib.__version__ == "0.5.0"
+    assert meta["supported"] == ">=0.5.0.dev0" and meta["deprecated"] == [] and meta["breaking"] is True   # the step contract
+    assert meta["migration"] == ""                                      # no app is moved: it is created again
     assert support.check(kaos_lib.__version__, meta)["verdict"] == "current"
 
 
@@ -174,7 +175,7 @@ def test_step_start_logs_and_continues(capsys, installed, expected):
 
 
 def test_step_start_continues_when_deprecated(capsys):
-    meta = dict(POLICY, deprecated=[{"range": "<0.3", "unsupported_after": "2999-01-01"}])
+    meta = dict(POLICY, breaking=False, deprecated=[{"range": "<0.3", "unsupported_after": "2999-01-01"}])
     assert support.at_step_start("0.2.0", env_with(meta))["verdict"] == "deprecated"
     err = capsys.readouterr().err
     assert "must be rebuilt with a newer kaos-lib" in err and "tell the platform team" in err
@@ -361,3 +362,46 @@ def test_from_lakefs_survives_a_network_error(fake):
 
     client.session = Down()
     assert support.from_lakefs(client) is None
+
+
+# ----------------------------------------- a release that changes how a step is written (``breaking``)
+BREAKING = dict(POLICY, version="0.5.0", supported=">=0.5.0.dev0", deprecated=[], breaking=True, migration="")
+OLD_APP = "This app was made before the current pipelines. Create it again from the template."
+
+
+@pytest.mark.parametrize("installed", ["0.5.0", "0.5.0rc1", "0.5.0rc25", "0.5.0.dev3", "0.5.1", "0.6.0rc2"])
+def test_every_prerelease_and_release_of_the_breaking_line_is_supported(installed):
+    assert support.check(installed, BREAKING)["verdict"] in ("current", "behind")
+
+
+@pytest.mark.parametrize("installed", ["0.4.0", "0.4.9", "0.4.0rc25", "0.3.0"])
+def test_the_line_before_it_is_not(installed):
+    assert support.check(installed, BREAKING)["verdict"] == "unsupported"
+
+
+def test_a_step_on_the_old_line_is_told_to_create_the_app_again(capsys):
+    with pytest.raises(UnsupportedVersion) as err:
+        support.at_step_start("0.4.0", env_with(BREAKING))
+    for text in (str(err.value), capsys.readouterr().err):
+        assert text.rstrip().endswith(OLD_APP) and "must be rebuilt" not in text and "migrat" not in text
+
+
+def test_a_policy_that_is_not_breaking_keeps_the_rebuild_advice(capsys):
+    with pytest.raises(UnsupportedVersion) as err:
+        support.at_step_start("0.1.0", env_with(dict(POLICY, breaking=False)))
+    assert "must be rebuilt with a newer kaos-lib" in str(err.value)
+
+
+@pytest.mark.parametrize("installed,ok", [
+    ("0.5.0", True), ("0.5.1", True), ("0.5.0rc1", True), ("0.5.0rc25", True), ("0.5.0.dev3", True),
+    ("0.6.0rc2", True), ("0.4.0", False), ("0.4.9", False), ("0.4.0rc25", False), ("0.3.0", False)])
+def test_the_served_policy_admits_every_version_of_the_0_5_line_the_channels_publish(installed, ok):
+    """A prerelease of 0.5 sorts below 0.5.0, so ">=0.5" would stop every step built on one."""
+    verdict = support.check(installed, support.packaged())["verdict"]
+    assert (verdict in ("current", "behind")) is ok, verdict
+
+
+def test_an_app_of_the_old_line_is_told_to_create_it_again_from_the_template():
+    with pytest.raises(UnsupportedVersion) as err:
+        support.at_step_start("0.4.0", env_with(support.packaged()))
+    assert str(err.value).endswith(OLD_APP) and "migrat" not in str(err.value)

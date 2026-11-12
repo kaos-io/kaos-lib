@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "1.3.0",
+  "ruleset_version": "2.0.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -31,8 +31,57 @@
         ]
       },
       {
-        "name": "reads",
+        "name": "kind",
         "position": 1,
+        "type": "str",
+        "required": true,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "What the step is. Required. The platform labels the step with it and offers only the compute classes that fit the kind.",
+        "snippet": "\"${1|ingest,transform,train,evaluate,publish,control|}\"",
+        "values": [
+          {
+            "insert": "\"ingest\"",
+            "label": "\"ingest\"",
+            "doc": "Brings data in from outside."
+          },
+          {
+            "insert": "\"transform\"",
+            "label": "\"transform\"",
+            "doc": "Turns data into other data: preprocess, filter, split, convert."
+          },
+          {
+            "insert": "\"train\"",
+            "label": "\"train\"",
+            "doc": "Trains a model."
+          },
+          {
+            "insert": "\"evaluate\"",
+            "label": "\"evaluate\"",
+            "doc": "Measures a model or a dataset."
+          },
+          {
+            "insert": "\"publish\"",
+            "label": "\"publish\"",
+            "doc": "Registers or delivers a result."
+          },
+          {
+            "insert": "\"control\"",
+            "label": "\"control\"",
+            "doc": "Decides or coordinates; does no data work itself."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E07",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
+          }
+        ]
+      },
+      {
+        "name": "reads",
+        "position": 2,
         "type": "list[str]",
         "required": false,
         "default": null,
@@ -49,14 +98,84 @@
         ]
       },
       {
+        "name": "inputs",
+        "position": 3,
+        "type": "list[str]",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "The names of the config values that hold a dataset reference, for example `\"dataset\"` for `dataset: dataset-my-data@latest`. The platform pins each to one exact version when the run starts, and the step reads it with `step.input(\"dataset\")`. Step code never names a version.",
+        "snippet": "[\"${1:dataset}\"]",
+        "values": [],
+        "links": [
+          {
+            "title": "L-E07",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
+          }
+        ]
+      },
+      {
+        "name": "needs",
+        "position": 4,
+        "type": "list[step]",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "The steps that must finish first. Give the step variables (`needs=[prepare]`), not their names, and define each step above the steps that need it.",
+        "snippet": "[${1:previous_step}]",
+        "values": [],
+        "links": [
+          {
+            "title": "L-E05",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
+          }
+        ]
+      },
+      {
+        "name": "produces",
+        "position": 5,
+        "type": "list[model|artifact|dataset]",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "What the step writes: `model(\"name\")`, `artifact(\"name\")` or `dataset(\"name\")`. The step writes each into the folder `step.output(\"name\")` gives it, and `step.result()` saves them.",
+        "snippet": "[${1|model,artifact,dataset|}(\"${2:name}\")]",
+        "values": [
+          {
+            "insert": "[model(\"model\")]",
+            "label": "[model(\"model\")]",
+            "doc": "The step writes a model."
+          },
+          {
+            "insert": "[artifact(\"report\")]",
+            "label": "[artifact(\"report\")]",
+            "doc": "The step writes files that belong to this run."
+          },
+          {
+            "insert": "[dataset(\"clean\")]",
+            "label": "[dataset(\"clean\")]",
+            "doc": "The step writes a version of the dataset `clean`."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E07",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
+          }
+        ]
+      },
+      {
         "name": "gpu",
-        "position": 2,
+        "position": 6,
         "type": "bool",
         "required": false,
         "default": "False",
         "gpu_only": false,
         "pattern": null,
-        "doc": "Run the step on a GPU. Only GPU steps can run on the HPC (Slurm) site, so `hpc_time_limit` and `resumable` need `gpu=True`.",
+        "doc": "Run the step on a GPU: the platform gives it one. Without it the step runs on a CPU machine.",
         "snippet": "True",
         "values": [
           {
@@ -86,39 +205,8 @@
         ]
       },
       {
-        "name": "needs",
-        "position": 3,
-        "type": "list[step]",
-        "required": false,
-        "default": null,
-        "gpu_only": false,
-        "pattern": null,
-        "doc": "The steps that must finish first. Give the step variables (`needs=[prepare]`), not their names, and define each step above the steps that need it.",
-        "snippet": "[${1:previous_step}]",
-        "values": [],
-        "links": [
-          {
-            "title": "L-E05",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
-          }
-        ]
-      },
-      {
-        "name": "outputs",
-        "position": 4,
-        "type": "list[str]",
-        "required": false,
-        "default": null,
-        "gpu_only": false,
-        "pattern": null,
-        "doc": "The names of the values this step passes on. Every step that lists this step in `needs` receives them as inputs.",
-        "snippet": "[\"${1:metrics}\"]",
-        "values": [],
-        "links": []
-      },
-      {
         "name": "when",
-        "position": 5,
+        "position": 7,
         "type": "str",
         "required": false,
         "default": null,
@@ -130,48 +218,14 @@
         "links": []
       },
       {
-        "name": "disk",
-        "position": 6,
+        "name": "walltime",
+        "position": 8,
         "type": "str",
         "required": false,
         "default": null,
         "gpu_only": false,
-        "pattern": "^[0-9]+(Ki|Mi|Gi|Ti|K|M|G|T)?$",
-        "doc": "Scratch disk the step asks for, as a quantity: digits and an optional Ki, Mi, Gi, Ti, K, M, G or T, for example `\"20Gi\"`. Set it for steps that need more than the platform's default.",
-        "snippet": "\"${1:20Gi}\"",
-        "values": [
-          {
-            "insert": "\"20Gi\"",
-            "label": "\"20Gi\"",
-            "doc": "20 gibibytes."
-          },
-          {
-            "insert": "\"50Gi\"",
-            "label": "\"50Gi\"",
-            "doc": "50 gibibytes."
-          },
-          {
-            "insert": "\"200Gi\"",
-            "label": "\"200Gi\"",
-            "doc": "200 gibibytes."
-          }
-        ],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          }
-        ]
-      },
-      {
-        "name": "hpc_time_limit",
-        "position": 7,
-        "type": "str",
-        "required": false,
-        "default": null,
-        "gpu_only": true,
         "pattern": "^[0-9]+[mh]?$",
-        "doc": "The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). Only for `gpu=True` steps. Without it the platform uses 4 hours. A step with a limit above 4 hours should be resumable.",
+        "doc": "The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). For a step that runs on an HPC (Slurm) class. Without it the platform uses 4 hours. A step with a limit above 4 hours should be resumable.",
         "snippet": "\"${1:12h}\"",
         "values": [
           {
@@ -220,13 +274,13 @@
       },
       {
         "name": "resumable",
-        "position": 8,
+        "position": 9,
         "type": "bool|str",
         "required": false,
         "default": null,
-        "gpu_only": true,
+        "gpu_only": false,
         "pattern": "^[0-9]+[mh]?$",
-        "doc": "Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save 10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says the step never continues. Only for `gpu=True` steps; save with `kaos_lib.checkpoint`.",
+        "doc": "Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save 10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says the step never continues. Save with `kaos_lib.checkpoint`.",
         "snippet": "True",
         "values": [
           {
@@ -275,7 +329,7 @@
       },
       {
         "name": "checkpoint_every",
-        "position": 9,
+        "position": 10,
         "type": "bool|str|int",
         "required": false,
         "default": null,
@@ -309,7 +363,7 @@
       },
       {
         "name": "idle_timeout",
-        "position": 10,
+        "position": 11,
         "type": "bool|str|int",
         "required": false,
         "default": null,
@@ -345,10 +399,7 @@
           }
         ]
       }
-    ],
-    "renamed_arguments": {
-      "walltime": "hpc_time_limit"
-    }
+    ]
   },
   "pipeline": {
     "function": "pipeline",
@@ -422,14 +473,14 @@
       "id": "L-E01",
       "name": "TooLongNotResumable",
       "level": "error",
-      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set hpc_time_limit to the longest run or less.",
+      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set walltime to the longest run or less.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
     },
     {
       "id": "L-E02",
       "name": "TooLongBeyondContinuations",
       "level": "error",
-      "fix": "Shorten hpc_time_limit, or split the work into steps that each fit within the runs allowed.",
+      "fix": "Shorten walltime, or split the work into steps that each fit within the runs allowed.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
     },
     {
@@ -457,14 +508,35 @@
       "id": "L-E06",
       "name": "RefusedArgument",
       "level": "error",
-      "fix": "Fix the argument as the message says; step() raises on it when the pipeline is rendered.",
+      "fix": "Remove the argument or write it as the message says; step() raises on it when the pipeline is rendered.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+    },
+    {
+      "id": "L-E07",
+      "name": "StepDeclaration",
+      "level": "error",
+      "fix": "Give every step a kind, name its dataset inputs in inputs=[...] and what it writes in produces=[...].",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
+    },
+    {
+      "id": "L-E08",
+      "name": "OldStepCode",
+      "level": "error",
+      "fix": "Create the app again from the template.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E08.html"
+    },
+    {
+      "id": "L-E09",
+      "name": "PlatformConfigGroup",
+      "level": "error",
+      "fix": "Create the app again from the template.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E09.html"
     },
     {
       "id": "L-I01",
       "name": "NodeSharing",
       "level": "info",
-      "fix": "Nothing to fix. Set hpc_time_limit, for example hpc_time_limit='4h', to let the step share a node.",
+      "fix": "Nothing to fix. Set walltime, for example walltime='4h', to let the step share a node.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
     },
     {
@@ -485,7 +557,7 @@
       "id": "L-W01",
       "name": "LongGpuStepNotResumable",
       "level": "warning",
-      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten hpc_time_limit.",
+      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten walltime.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
     },
     {
@@ -497,9 +569,9 @@
     },
     {
       "id": "L-W03",
-      "name": "UnpinnedDataset",
+      "name": "DatasetVersionInCode",
       "level": "warning",
-      "fix": "Pin a version: use <dataset>@v1 (a released version) instead of @latest, so a run always reads the same data.",
+      "fix": "Declare the dataset in inputs=[...] in pipeline.py and read it with step.input(): the version is chosen on the run form, never in step code.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W03.html"
     },
     {

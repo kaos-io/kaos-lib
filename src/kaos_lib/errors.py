@@ -6,15 +6,16 @@ class KaosLibError(Exception):
     """A user-facing failure: the message says what happened and what to do next."""
 
 
-KubecoreError = KaosLibError  # the 0.2 name; removed together with the ``kubecore`` shim
-
-
 class ConfigError(KaosLibError):
     """A required setting (lakeFS URL, ...) could not be determined."""
 
 
 class AuthError(KaosLibError):
     """No usable credential, or lakeFS rejected the one we carry."""
+
+
+class PermissionDenied(AuthError):
+    """The credential is fine but this is not allowed to it (a policy refusal, a protected branch)."""
 
 
 class LakeFSError(KaosLibError):
@@ -49,5 +50,9 @@ class UnsupportedVersion(KaosLibError):
     """This kaos-lib is past its support deadline (``kaos_lib.support``): steps stop, writes are refused."""
 
 
+class StepError(KaosLibError):
+    """A pipeline step cannot start, read an input, or hand its result on (``kaos_lib.step``)."""
+
+
 class LockError(KaosLibError):
-    """A data lock (``kaos_lib.lock``) is malformed, missing from its MLflow run, or cannot be written."""
+    """A ledger (``kaos_lib.lock``) is malformed, missing from its MLflow run, or cannot be written."""

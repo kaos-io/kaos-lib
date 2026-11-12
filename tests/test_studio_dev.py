@@ -23,21 +23,23 @@ def venv_stub(monkeypatch):
 
 
 def requirements_of(repo, step):
-    return (repo / "steps" / step / ".venv" / "kaos-requirements.txt").read_text().splitlines()
+    return (pyenv.step_env(repo / "steps" / step) / "kaos-requirements.txt").read_text().splitlines()
 
 
 # --- reading, statically ----------------------------------------------------------------------------------------
 
-def test_should_find_every_step_with_its_outputs_and_what_it_needs(repo):
+def test_should_find_every_step_with_what_it_reads_produces_and_needs(repo):
     found = {s.name: s for s in steps.discover(repo)}
     assert set(found) == {"dataset-loading", "data-summary", "model-training", "compose-and-validate"}
-    assert found["dataset-loading"].outputs == ["dataset-info"] and found["data-summary"].needs == ["dataset-loading"]
+    load, summary = found["dataset-loading"], found["data-summary"]
+    assert (load.kind, load.inputs, load.produces) == ("transform", ["dataset"], [("dataset", "clean")])
+    assert summary.needs == ["dataset-loading"] and summary.produces == [("artifact", "summary")]
     assert found["model-training"].gpu and found["compose-and-validate"].implicit
 
 
-def test_should_read_a_steps_that_needs_only_pyyaml(repo):
+def test_should_read_a_step_that_needs_pyyaml_and_kaos_lib(repo):
     d = deps.read_step_deps(repo / "steps/data_summary")
-    assert (d.python, d.requirements, d.imports_kaos_lib, d.declares_kaos_lib_arg) == ("3.11", ["PyYAML"], False, False)
+    assert (d.python, d.requirements, d.imports_kaos_lib, d.declares_kaos_lib_arg) == ("3.11", ["PyYAML"], True, True)
 
 
 def test_should_read_the_kaos_lib_default_of_a_step_that_declares_the_argument(repo):
@@ -122,10 +124,11 @@ def test_should_refuse_a_spec_that_is_not_kaos_lib():
 
 def test_should_set_up_a_venv_per_step_with_the_requirements_and_kaos_lib_where_used(repo, venv_stub, capsys):
     assert cli.main(["dev", str(repo), "--kaos-lib", "kaos-lib[zitadel]==0.4.0rc20"]) == 0
-    assert requirements_of(repo, "data_summary") == ["PyYAML"]                       # AC-32: PyYAML only
+    summary = requirements_of(repo, "data_summary")
+    assert "PyYAML" in summary and summary[-1] == "kaos-lib[zitadel]==0.4.0rc20"
     lib = requirements_of(repo, "dataset_loading")
     assert lib[-1] == "kaos-lib[zitadel]==0.4.0rc20" and lib[0].startswith("--extra-index-url") and "kaos-lib-rc" in lib[0]
-    assert not (repo / "steps/model_training/.venv").exists()                         # torch: skipped by default
+    assert not pyenv.step_env(repo / "steps/model_training").exists()                         # torch: skipped by default
     out = capsys.readouterr().out
     assert "model-training: skipped, its dependencies are large (torch" in out and "kaosctl dev --step model-training" in out
 
@@ -136,21 +139,26 @@ def test_should_set_up_a_heavy_step_when_it_is_named_or_all_is_given(repo, venv_
     assert venv_stub.calls and any(c[:2] == ["/usr/bin/uv", "venv"] for c in venv_stub.calls)
 
 
-def test_should_write_the_interpreter_hint_into_each_step_folder(repo, venv_stub):
+def test_should_not_write_the_interpreter_hint_unless_asked(repo, venv_stub):
     cli.main(["dev", str(repo), "--step", "data-summary"])
+    assert not (repo / "steps/data_summary/.vscode").exists()
+
+
+def test_should_write_the_interpreter_hint_into_each_step_folder_on_request(repo, venv_stub):
+    cli.main(["dev", str(repo), "--step", "data-summary", "--vscode"])
     settings = json.loads((repo / "steps/data_summary/.vscode/settings.json").read_text())
-    assert settings == {"python.defaultInterpreterPath": vscode.interpreter_value()}
-    assert settings["python.defaultInterpreterPath"].startswith("${workspaceFolder}/.venv/")
+    assert settings == {"python.defaultInterpreterPath": vscode.interpreter_value(repo / "steps/data_summary")}
+    assert settings["python.defaultInterpreterPath"] == str(pyenv.venv_python(pyenv.step_env(repo / "steps/data_summary")))
 
 
 def test_should_merge_into_an_existing_settings_file_and_leave_a_commented_one_alone(repo, venv_stub, capsys):
     d = repo / "steps/data_summary/.vscode"
     d.mkdir()
     (d / "settings.json").write_text('{"editor.tabSize": 2}')
-    cli.main(["dev", str(repo), "--step", "data-summary"])
+    cli.main(["dev", str(repo), "--step", "data-summary", "--vscode"])
     assert json.loads((d / "settings.json").read_text())["editor.tabSize"] == 2
     (d / "settings.json").write_text('// mine\n{"a": 1}\n')
-    cli.main(["dev", str(repo), "--step", "data-summary"])
+    cli.main(["dev", str(repo), "--step", "data-summary", "--vscode"])
     assert (d / "settings.json").read_text().startswith("// mine") and "left" in capsys.readouterr().out
 
 
@@ -172,7 +180,7 @@ def test_should_install_again_when_the_dependencies_change(repo, venv_stub):
 
 def test_should_ignore_the_environment_in_git_without_editing_any_repository_file(repo, venv_stub):
     cli.main(["dev", str(repo), "--step", "data-summary"])
-    assert (repo / "steps/data_summary/.venv/.gitignore").read_text() == "*\n"
+    assert (pyenv.step_env(repo / "steps/data_summary") / ".gitignore").read_text() == "*\n"
     assert not (repo / ".gitignore").exists()
 
 
@@ -218,5 +226,16 @@ def test_should_build_a_real_environment_offline_for_a_step_with_no_dependencies
     code = cli.main(["dev", str(repo), "--step", "data-summary"])
     if code != 0:
         pytest.skip("this machine cannot create a virtual environment here: " + capsys.readouterr().out[-300:])
-    py = pyenv.venv_python(repo / "steps/data_summary/.venv")
-    assert py.is_file() and (repo / "steps/data_summary/.venv/.kaos-env.json").is_file()
+    py = pyenv.venv_python(pyenv.step_env(repo / "steps/data_summary"))
+    assert py.is_file() and (pyenv.step_env(repo / "steps/data_summary") / ".kaos-env.json").is_file()
+
+
+def test_should_install_a_kaos_lib_from_a_path_on_this_machine(tmp_path):
+    checkout = tmp_path / "kaos-lib"
+    checkout.mkdir()
+    spec = kaoslib.resolve(str(checkout))
+    assert spec.requirement == f"kaos-lib[zitadel] @ {checkout.resolve().as_uri()}" and spec.index_urls == []
+    wheel = tmp_path / "kaos_lib-0.5.0-py3-none-any.whl"
+    wheel.write_bytes(b"x")
+    assert kaoslib.resolve(str(wheel)).requirement.endswith(wheel.resolve().as_uri())
+    assert kaoslib.resolve("kaos-lib==0.5.0").requirement.endswith("==0.5.0")           # a requirement stays one

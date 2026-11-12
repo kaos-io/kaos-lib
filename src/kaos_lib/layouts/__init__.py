@@ -183,8 +183,8 @@ class Layout:
         """A local copy of ``ref`` at its pinned commit; returns the hook's entry (yolo: ``data.yaml``) or the folder.
 
         Downloads what ``materialize.include`` names (default: the whole tree), cached by (owner, repo, commit,
-        prefix) in ``dest`` (default: the cache); a second call is free. A staged copy (KUBECORE_STAGED_DIR holding
-        the commit) is used in place. ``prefix`` (one folder, stripped) works only for layouts that download the
+        prefix) in ``dest`` (default: the cache); a second call is free. A whole staged copy of the commit (a
+        folder under KAOS_STAGED_ROOT) is used in place. ``prefix`` (one folder, stripped) works only for layouts that download the
         whole tree with no materialize hook. A shared reference (``<owner>/dataset-x@v1``) is read from the owner.
         """
         entry = self._hook_fn("materialize")
@@ -208,6 +208,14 @@ class Layout:
             local.fetch(client, ref.repo, commit, prefixes, target, pre, strip=pre or "", owner=ref.owner,
                         include=include, keep=keep, empty_message=f"{ref} holds no files{what}.")
             data = target
+        entry = self.entry_of(data, target)
+        if data == target:
+            local.restamp(target)
+        return entry
+
+    def entry_of(self, data: pathlib.Path, target: pathlib.Path) -> pathlib.Path:
+        """The entry of a copy that is already on disk in ``data``: the hook's (written into ``target``), or ``data``."""
+        entry = self._hook_fn("materialize")
         return pathlib.Path(entry(data, target, self)) if entry else data
 
 

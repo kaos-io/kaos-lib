@@ -1,28 +1,27 @@
-"""Where a step runs: the run, app, endpoints and dataset the platform injected, read from the environment only.
+"""Where a step runs: the run, the app, the step and the endpoints the platform gave it.
 
-Nothing here is hardcoded: when the platform changes what it injects, an older
-kaos-lib keeps reading the names below. Every field is None when its variables are unset or empty; ``context()``
-never raises.
+The run, app, project, step, kind and experiment come from the step context, the one value the platform hands a
+pipeline step (``$KAOS_STEP_CONTEXT``, read in full by ``kaos_lib.step``). The endpoints, the support verdict and
+the slot come from the environment. Every field is None when it was not given; ``context()`` never raises, so it
+is safe on a laptop. ``kaos_lib.step.start()`` is the call that refuses a missing or malformed context.
 
-=================  ==============================================  ==========================================
-field              variables (first non-empty wins)                set today by
-=================  ==============================================  ==========================================
-run_id             KUBECORE_RUN_ID                                 the platform, every step (``workflow.name``)
-workflow           KUBECORE_WORKFLOW_NAME                          the platform, every step (names the MLflow run)
-app                KUBECORE_APP, else derived from outputs_repo    outputs_repo ``outputs-<app>``
-project            KUBECORE_PROJECT                                not injected yet
-step               KUBECORE_STEP, STEP_NAME                        STEP_NAME: HPC (Slurm) jobs
-outputs_repo       OUTPUTS_REPO, CHECKPOINT_BUCKET                 CHECKPOINT_BUCKET every step; OUTPUTS_REPO HPC
-lakefs_endpoint    LAKEFS_ENDPOINT, LAKEFS_URL                     the platform (the public URL on HPC)
-mlflow_uri         MLFLOW_TRACKING_URI                             the platform (the public URL on HPC)
-dataset_ref        KUBECORE_DATASET_REF, DATASET,                  steps set KUBECORE_DATASET_REF; DATASET and
-                   DATASET_REPO + "@" + DATASET_REF                DATASET_REPO/DATASET_REF in HPC (Slurm) jobs
-dataset_commit     KUBECORE_DATASET_COMMIT, DATASET_COMMIT         steps / HPC (Slurm) jobs
-support            verdict of kaos_lib.support.check against       the platform (``KAOS_LIB_SUPPORT``)
-                   KAOS_LIB_SUPPORT
-slot               KUBECORE_SLOT_GPUS, KUBECORE_SLOT_CPUS,         the platform, on a shared HPC (Slurm) node
-                   KUBECORE_SLOT_MEM_GIB, KUBECORE_SLOT_SHARED     (gpus only for a GPU step alone; else None)
-=================  ==============================================  ==========================================
+=================  =====================================================  =====================================
+field              source                                                 None when
+=================  =====================================================  =====================================
+run_id             the step context (``run``)                             not a pipeline step
+app                the step context                                       not a pipeline step
+project            the step context                                       not a pipeline step
+step               the step context                                       not a pipeline step
+kind               the step context                                       not a pipeline step
+experiment         the step context                                       not a pipeline step
+outputs_repo       ``outputs-<app>``                                      not a pipeline step
+lakefs_endpoint    ``LAKEFS_ENDPOINT``, else ``LAKEFS_URL``               unset
+mlflow_uri         ``MLFLOW_TRACKING_URI``                                unset
+support            verdict of ``kaos_lib.support.check`` against          ``KAOS_LIB_SUPPORT`` unset
+                   ``KAOS_LIB_SUPPORT``
+slot               ``KUBECORE_SLOT_GPUS``, ``KUBECORE_SLOT_CPUS``,        the step has a node of its own
+                   ``KUBECORE_SLOT_MEM_GIB``, ``KUBECORE_SLOT_SHARED``
+=================  =====================================================  =====================================
 
 On a shared HPC (Slurm) node a step gets one slot: its GPUs, its cores and its memory share
 (``slot``). ``usable_cpus()`` is the number of cores a step should size its worker pools by: the slot's,
@@ -30,21 +29,17 @@ else the CPUs this process may run on, else the machine's.
 """
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
+STEP_CONTEXT_ENV = "KAOS_STEP_CONTEXT"
+FROM_CONTEXT = {"run_id": "run", "app": "app", "project": "project", "step": "step", "kind": "kind",
+                "experiment": "experiment"}
 ENV = {
-    "run_id": ("KUBECORE_RUN_ID",),
-    "workflow": ("KUBECORE_WORKFLOW_NAME",),
-    "app": ("KUBECORE_APP",),
-    "project": ("KUBECORE_PROJECT",),
-    "step": ("KUBECORE_STEP", "STEP_NAME"),
-    "outputs_repo": ("OUTPUTS_REPO", "CHECKPOINT_BUCKET"),
     "lakefs_endpoint": ("LAKEFS_ENDPOINT", "LAKEFS_URL"),
     "mlflow_uri": ("MLFLOW_TRACKING_URI",),
-    "dataset_ref": ("KUBECORE_DATASET_REF", "DATASET"),
-    "dataset_commit": ("KUBECORE_DATASET_COMMIT", "DATASET_COMMIT"),
 }
 
 
@@ -65,17 +60,20 @@ SLOT_ENV = {"gpus": "KUBECORE_SLOT_GPUS", "cpus": "KUBECORE_SLOT_CPUS", "mem_gib
 class Context:
     """What the platform told this step about where it runs (see the module table)."""
     run_id: Optional[str] = None
-    workflow: Optional[str] = None
     app: Optional[str] = None
     project: Optional[str] = None
     step: Optional[str] = None
-    outputs_repo: Optional[str] = None
+    kind: Optional[str] = None
+    experiment: Optional[str] = None
     lakefs_endpoint: Optional[str] = None
     mlflow_uri: Optional[str] = None
-    dataset_ref: Optional[str] = None
-    dataset_commit: Optional[str] = None
     support: Optional[str] = None
     slot: Optional[Slot] = None
+
+    @property
+    def outputs_repo(self) -> Optional[str]:
+        """The app's outputs repository, ``outputs-<app>``."""
+        return f"outputs-{self.app}" if self.app else None
 
 
 def _first(environ: Mapping, names: tuple) -> Optional[str]:
@@ -86,11 +84,13 @@ def _first(environ: Mapping, names: tuple) -> Optional[str]:
     return None
 
 
-def _app_of(outputs_repo: Optional[str]) -> Optional[str]:
-    from .outputs import OUTPUTS_PREFIX
-    if outputs_repo and outputs_repo.startswith(OUTPUTS_PREFIX) and len(outputs_repo) > len(OUTPUTS_PREFIX):
-        return outputs_repo[len(OUTPUTS_PREFIX):]
-    return None
+def _step_context(environ: Mapping) -> dict:
+    """The step context as far as it can be read: {} when it is unset or not a JSON object."""
+    try:
+        value = json.loads(environ.get(STEP_CONTEXT_ENV) or "")
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _support(environ: Mapping) -> Optional[str]:
@@ -131,14 +131,13 @@ def usable_cpus(environ: Optional[Mapping] = None) -> int:
 def context(environ: Optional[Mapping] = None) -> Context:
     """The step's context from ``environ`` (default ``os.environ``); missing values are None."""
     env = os.environ if environ is None else environ
-    values = {name: _first(env, names) for name, names in ENV.items()}
-    values["app"] = values["app"] or _app_of(values["outputs_repo"])
-    if not values["dataset_ref"]:
-        repo, ref = _first(env, ("DATASET_REPO",)), _first(env, ("DATASET_REF",))
-        values["dataset_ref"] = f"{repo}@{ref}" if repo and ref else None
+    given = _step_context(env)
+    values = {name: (given.get(key) if isinstance(given.get(key), str) and given.get(key) else None)
+              for name, key in FROM_CONTEXT.items()}
+    values.update({name: _first(env, names) for name, names in ENV.items()})
     return Context(**values, support=_support(env), slot=_slot(env))
 
 
 def run_id(environ: Optional[Mapping] = None) -> Optional[str]:
-    """The platform's run id (``$KUBECORE_RUN_ID``), or None outside a pipeline run."""
-    return _first(os.environ if environ is None else environ, ENV["run_id"])
+    """The run's name, or None outside a pipeline run."""
+    return context(environ).run_id

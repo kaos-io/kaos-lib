@@ -79,6 +79,7 @@ class LintContext:
     catalogue: Catalogue
     sections: Optional[set] = None
     dataset: Optional[DatasetDefault] = None
+    values: Optional[dict] = None       # top-level config value -> whether it is a plain text value; None: unknown
     _sources: dict = field(default_factory=dict)
 
     @property

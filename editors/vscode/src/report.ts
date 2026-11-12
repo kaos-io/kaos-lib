@@ -32,7 +32,7 @@ export interface GraphNode {
   line: number;
   dynamic: boolean;
   gpu: boolean | null;
-  hpc_time_limit: string | number | boolean | null;
+  walltime: string | number | boolean | null;
   resumable: string | number | boolean | null;
   disk: string | number | boolean | null;
 }
@@ -134,7 +134,7 @@ function node(value: unknown, i: number): GraphNode {
     id: str(o, "id", what), name: typeof o.name === "string" ? o.name : null,
     variable: typeof o.variable === "string" ? o.variable : null, line: num(o, "line", what),
     dynamic: o.dynamic === true, gpu: typeof o.gpu === "boolean" ? o.gpu : null,
-    hpc_time_limit: scalar("hpc_time_limit"), resumable: scalar("resumable"), disk: scalar("disk"),
+    walltime: scalar("walltime"), resumable: scalar("resumable"), disk: scalar("disk"),
   };
 }
 

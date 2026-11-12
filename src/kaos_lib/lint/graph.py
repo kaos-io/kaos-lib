@@ -38,9 +38,9 @@ def _node(facts: PipelineFacts, step: Step, index: int) -> dict:
         "id": f"s{index}", "name": name, "variable": step.var, "line": span.line, "range": span.to_dict(),
         "dynamic": step.dynamic,
         "gpu": None if step.is_gpu is None else step.is_gpu,
-        "hpc_time_limit": _text(step.value("hpc_time_limit", None)),
+        "kind": _text(step.value("kind", None)),
+        "walltime": _text(step.value("walltime", None)),
         "resumable": _text(step.value("resumable", None)),
-        "disk": _text(step.value("disk", None)),
     }
 
 

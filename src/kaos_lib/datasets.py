@@ -38,6 +38,25 @@ _COMMIT_RE = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 _OWNER_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")   # a project name, as kaos-lake validates it
 
 
+def is_repo_name(name: str) -> bool:
+    """Whether ``name`` can be a lakeFS repository name at all (lakeFS answers anything else with an error)."""
+    return bool(_REPO_RE.match(name or ""))
+
+
+def is_dataset_name(repo: str) -> bool:
+    """Whether ``repo`` is a name a dataset can have: ``dataset-`` and 3 to 48 characters."""
+    return repo.startswith(DATASET_PREFIX) and bool(_NAME_RE.match(repo[len(DATASET_PREFIX):]))
+
+
+def produced_repo(app: str, name: str) -> str:
+    """The repository of the dataset ``name`` that a step of app ``app`` produces: ``dataset-<app>-<name>``.
+
+    The engine writes the repository of every produced dataset into the step context and kaos-lib takes it from
+    there. This is the one place that spells the rule out, for ``kaosctl step run``, where there is no engine.
+    """
+    return f"{DATASET_PREFIX}{app}-{name}"
+
+
 def dataset_repo(name: str) -> str:
     """``dataset-<name>`` from ``name`` or ``dataset-<name>``; validates the 3-48 char ``[a-z0-9-]`` rule."""
     short = name[len(DATASET_PREFIX):] if name.startswith(DATASET_PREFIX) else name
@@ -178,15 +197,22 @@ def resolve(ref: DatasetRef, client: Optional[LakeFS] = None, commit: Optional[s
 
     ``latest`` is the head of the default branch, ``vN`` a tag, anything else a branch, tag or commit id
     (tried in that order). A pinned ``commit`` (argument, or carried by ``ref``) is returned as is,
-    with no lakeFS call. While a data lock is replayed (``kaos_lib.lock``) a locked repository returns
+    with no lakeFS call. While a ledger is replayed (``kaos_lib.lock``) a locked repository returns
     its locked commit, also with no lakeFS call. Every answer is recorded in ``lock.current()``.
+
+    Inside a pipeline step the run's ledger is replayed and nothing else is read: a repository it does not
+    cover, or a commit it does not hold for that repository, is refused, so a step never picks a version by itself.
     """
     pinned = commit or ref.commit
     found = ref.with_commit(pinned).commit if pinned else _lock.pinned(ref.repo, ref.version, ref.owner)
+    if _lock.refusing() and found not in _lock.commits(ref.repo, ref.owner):
+        raise DatasetError(f"{ref.repo} is not an input of step '{_lock.refusing()}': a step reads only the "
+                           "versions the run pinned. Add the config value that names it to inputs=[...] in "
+                           "pipeline.py.")
     if not found:
         ref, c = source(ref, client)
         found = _resolve_live(ref, c)
-    _lock.record(ref.repo, ref.version, found, ref.owner)
+    _lock.record(ref.repo, ref.version, found, ref.owner, _lock.name_of(ref.repo, found, ref.owner))
     return found
 
 
@@ -314,6 +340,10 @@ def ensure_repository(c: LakeFS, repo: str, labels: dict) -> bool:
     """
     if c.repository(repo):
         return False
+    if labels.get(LABEL_KIND) == "dataset" and not is_dataset_name(repo):   # kaos-lake refuses the label otherwise
+        raise DatasetError(f"{repo} does not exist, and it cannot be created as a dataset: a dataset is called "
+                           f"{DATASET_PREFIX}<name>, with 3 to 48 characters from a-z, 0-9 and '-'. Push to "
+                           f"{DATASET_PREFIX}{repo} instead, or to a repository that exists.")
     try:
         c.create_repository(repo, _storage_namespace(c, repo), MAIN)
     except LakeFSError as exc:

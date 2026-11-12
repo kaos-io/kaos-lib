@@ -26,7 +26,7 @@ def copy_template(name, tmp_path):
 def test_should_run_the_yolo_data_summary_step_in_its_own_environment(tmp_path, capsys):
     repo = copy_template("yolo-pipelines-template", tmp_path)
     assert cli.main(["dev", str(repo), "--step", "data-summary", "--step", "compose-and-validate"]) == 0
-    py = pyenv.venv_python(repo / "steps/data_summary/.venv")
+    py = pyenv.venv_python(pyenv.step_env(repo / "steps/data_summary"))
     assert subprocess.run([str(py), "-c", "import yaml"]).returncode == 0
     assert subprocess.run([str(py), "-c", "import kaos_lib"]).returncode != 0      # PyYAML only: no kaos-lib
     capsys.readouterr()
@@ -37,7 +37,7 @@ def test_should_run_the_yolo_data_summary_step_in_its_own_environment(tmp_path, 
 def test_should_set_up_the_hera_hello_world_step_with_kaos_lib(tmp_path):
     repo = copy_template("hera-pipeline-template", tmp_path)
     assert cli.main(["dev", str(repo), "--step", "hello-world", "--kaos-lib", RC20]) == 0
-    py = pyenv.venv_python(repo / "steps/hello_world/.venv")
+    py = pyenv.venv_python(pyenv.step_env(repo / "steps/hello_world"))
     assert subprocess.run([str(py), "-c", "import kaos_lib, yaml"]).returncode == 0
 
 

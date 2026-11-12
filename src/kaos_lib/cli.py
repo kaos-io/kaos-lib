@@ -1,4 +1,4 @@
-"""The ``kaosctl`` command line (``kubecore`` is a deprecated alias for one release).
+"""The ``kaosctl`` command line.
 
     kaosctl login
     kaosctl dataset create|list|versions|release|push|pull|validate
@@ -116,7 +116,7 @@ def cmd_login(args) -> int:
 
 def _repo(c: LakeFS, name: str) -> str:
     """An existing repository by its exact name, else the ``dataset-<name>`` shorthand."""
-    return name if c.repository(name) else datasets.dataset_repo(name)
+    return name if datasets.is_repo_name(name) and c.repository(name) else datasets.dataset_repo(name)
 
 
 def cmd_create(args) -> int:
@@ -538,7 +538,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add(sub, "run", cmd_run, "run a command with the dataset commits an earlier MLflow run read", url=False)
     sp.add_argument("--lock", required=True, metavar="MLFLOW_RUN_ID",
-                    help="the MLflow run whose data.lock.json to replay (exported to the command as $KAOS_LIB_LOCK)")
+                    help="the MLflow run whose ledger to replay (exported to the command as $KAOS_LIB_LOCK)")
     sp.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- command", help="the command to run, after --")
 
     ly = sub.add_parser("layout", help="dataset layouts: list, show, make your own, check a folder, publish")
@@ -582,20 +582,6 @@ def main(argv: Optional[list] = None) -> int:
         print(f"ERROR: cannot reach lakeFS ({exc.__class__.__name__}). Check --url / "
               ".kubecore/dataset-config.yaml and your network.", file=sys.stderr)
         return EXIT_USER_ERROR
-
-
-def kubecore_alias(argv: Optional[list] = None) -> int:
-    """The ``kubecore`` command: a deprecated alias of ``kaosctl``, kept for one release."""
-    print("NOTE: `kubecore` is now `kaosctl`; the `kubecore` command goes away in the next release.",
-          file=sys.stderr)
-    return main(argv)
-
-
-def kaos_cli_alias(argv: Optional[list] = None) -> int:
-    """The ``kaos-cli`` command: a hidden alias of ``kaosctl`` (not in the help or the docs), kept for one release."""
-    print("NOTE: `kaos-cli` is now `kaosctl`; the `kaos-cli` command goes away in the next release.",
-          file=sys.stderr)
-    return main(argv)
 
 
 if __name__ == "__main__":

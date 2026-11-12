@@ -1,21 +1,20 @@
-"""Shared fixtures: a fake lakeFS, a clean environment, and a sample yolo dataset on disk."""
+"""Shared fixtures: a fake lakeFS (or a real one, see ``real_lakefs``), a clean environment, and a sample yolo
+dataset on disk."""
 from __future__ import annotations
 
 import json
 
 import pytest
 
+import real_lakefs
 from fake_lakefs import FakeLakeFS
 
 ENV_VARS = ("LAKEFS_ENDPOINT", "LAKEFS_URL", "LAKEFS_ACCESS_KEY", "LAKEFS_SECRET_KEY", "LAKEFS_BEARER_TOKEN",
-            "KUBECORE_STAGED_DIR", "KUBECORE_CACHE_DIR", "KUBECORE_DATASET_CONFIG",
+            "KUBECORE_CACHE_DIR", "KUBECORE_DATASET_CONFIG",
             "KUBECORE_STORAGE_NAMESPACE_BASE", "KUBECORE_ML_OIDC_ISSUER", "KUBECORE_ML_OIDC_CLIENT_ID",
             "KUBECORE_ML_OIDC_PROJECT_ID", "ZITADEL_MACHINE_KEY_FILE", "ZITADEL_DOMAIN",
             "ZITADEL_MLFLOW_PROJECT_ID", "MLFLOW_TRACKING_URI", "MLFLOW_TRACKING_TOKEN", "MLFLOW_TRACKING_AUTH",
-            "MLFLOW_RUN_ID", "KAOS_LIB_LOCK", "KAOS_LIB_SUPPORT", "KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME",
-            "KUBECORE_APP", "KUBECORE_PROJECT", "KUBECORE_STEP", "STEP_NAME", "OUTPUTS_REPO", "CHECKPOINT_BUCKET",
-            "KUBECORE_DATASET_REF", "KUBECORE_DATASET_COMMIT", "DATASET", "DATASET_REPO", "DATASET_REF",
-            "DATASET_COMMIT")
+            "MLFLOW_RUN_ID", "KAOS_LIB_LOCK", "KAOS_LIB_SUPPORT", "KAOS_STEP_CONTEXT", "KAOS_STAGED_ROOT")
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +23,7 @@ def clean_env(tmp_path, monkeypatch):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("KUBECORE_ML_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("KUBECORE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
     monkeypatch.setenv("KAOS_LIB_RELEASES_BASE", "http://127.0.0.1:9")   # no test reaches the public bucket
     monkeypatch.chdir(tmp_path)
     from kaos_lib import config, lock, mlflow, peers
@@ -33,13 +33,54 @@ def clean_env(tmp_path, monkeypatch):
     monkeypatch.setattr(mlflow, "_source", mlflow.TokenSource())
 
 
+def pytest_generate_tests(metafunc):
+    """With ``$KAOS_LIB_TEST_LAKEFS=real`` (or ``both``), every test that uses ``fake`` also runs on a real server."""
+    backends = real_lakefs.modes()
+    if backends != ["fake"] and "fake" in metafunc.fixturenames:
+        metafunc.parametrize("lakefs_backend", backends, ids=[f"{b}-lakefs" for b in backends])
+
+
 @pytest.fixture
-def fake():
+def lakefs_backend():
+    return "fake"
+
+
+@pytest.fixture(scope="session")
+def lakefs_server():
+    """The container, started by the first test that needs it (skipped when docker is not available)."""
+    holder = {}
+
+    def server():
+        if "skip" in holder:                 # it could not be started: say so at once, do not try for every test
+            pytest.skip(holder["skip"])
+        if "server" not in holder:
+            try:
+                holder["server"] = real_lakefs.Server()
+            except pytest.skip.Exception as exc:
+                holder["skip"] = str(exc)
+                raise
+        return holder["server"]
+
+    yield server
+    if "server" in holder:
+        holder["server"].stop()
+
+
+@pytest.fixture
+def fake(lakefs_backend, lakefs_server):
+    if lakefs_backend == "real":
+        f = real_lakefs.RealLakeFS(lakefs_server())
+        f.add_repo("dataset-default", metadata={"kaos.kind": "dataset", "kaos.template": "yolo",
+                                                "kaos.default": "true"})
+        f.add_repo("outputs-myapp", metadata={"kaos.kind": "outputs", "kaos.app": "myapp"})
+        yield f
+        f.cleanup()
+        return
     f = FakeLakeFS()
     f.add_repo("dataset-default", metadata={"kaos.kind": "dataset", "kaos.template": "yolo",
                                             "kaos.default": "true"})
     f.add_repo("outputs-myapp", metadata={"kaos.kind": "outputs", "kaos.app": "myapp"})
-    return f
+    yield f
 
 
 @pytest.fixture

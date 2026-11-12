@@ -58,9 +58,9 @@ def test_resolve_and_materialize_record_every_read_including_shared(lakes):
     datasets.materialize(datasets.DatasetRef.parse("dataset-raw@latest"))
     datasets.materialize(datasets.DatasetRef.parse("a/dataset-x@v1"))
     assert reads() == [
-        {"repo": "dataset-default", "owner": None, "ref": "v1", "commit": v1},
-        {"repo": "dataset-raw", "owner": None, "ref": "latest", "commit": own.head("dataset-raw")},
-        {"repo": "dataset-x", "owner": "a", "ref": "v1", "commit": owner.head("dataset-x")},
+        {"name": "default", "repo": "dataset-default", "owner": None, "ref": "v1", "commit": v1},
+        {"name": "raw", "repo": "dataset-raw", "owner": None, "ref": "latest", "commit": own.head("dataset-raw")},
+        {"name": "x", "repo": "dataset-x", "owner": "a", "ref": "v1", "commit": owner.head("dataset-x")},
     ]
 
 
@@ -80,8 +80,8 @@ def test_own_project_owner_is_recorded_as_the_own_project(lakes):
 def test_record_adds_a_read_that_bypassed_kaos_lib():
     lock.record("dataset-default", "v2", "c0042", None)
     lock.record("dataset-x", "v1", "c0007", "a")
-    assert reads() == [{"repo": "dataset-default", "owner": None, "ref": "v2", "commit": "c0042"},
-                       {"repo": "dataset-x", "owner": "a", "ref": "v1", "commit": "c0007"}]
+    assert reads() == [{"name": "default", "repo": "dataset-default", "owner": None, "ref": "v2", "commit": "c0042"},
+                       {"name": "x", "repo": "dataset-x", "owner": "a", "ref": "v1", "commit": "c0007"}]
 
 
 # ------------------------------------------------------------------ write
@@ -90,42 +90,56 @@ def test_write_sets_tags_and_the_artifact():
     lock.record("dataset-raw", "latest", "c0100")
     lock.record("dataset-x", "v1", "c0007", "a")
     client = FakeMlflowClient()
-    lock.write("run-1", client)
+    lock.write_step("train", "run-1", client)
     assert client.tags["run-1"] == {
         "kaos_lib.data.dataset-default.commit": "c0042",
         "kaos_lib.data.dataset-raw.commit": "c0100",
         "kaos_lib.data.dataset-x.commit": "c0007",
         "kaos_lib.data.dataset-x.owner": "a",
     }
-    assert json.loads(client.artifacts["run-1"]["data.lock.json"]) == {"version": 1, "reads": [
-        {"repo": "dataset-default", "owner": None, "ref": "v2", "commit": "c0042"},
-        {"repo": "dataset-raw", "owner": None, "ref": "latest", "commit": "c0100"},
-        {"repo": "dataset-x", "owner": "a", "ref": "v1", "commit": "c0007"}]}
+    assert json.loads(client.artifacts["run-1"]["ledger/train.json"]) == {"version": 2, "writes": [], "reads": [
+        {"name": "default", "repo": "dataset-default", "owner": None, "ref": "v2", "commit": "c0042"},
+        {"name": "raw", "repo": "dataset-raw", "owner": None, "ref": "latest", "commit": "c0100"},
+        {"name": "x", "repo": "dataset-x", "owner": "a", "ref": "v1", "commit": "c0007"}]}
 
 
 def test_two_commits_of_one_repository_are_both_tagged():
     lock.record("dataset-default", "v1", "c0001")
     lock.record("dataset-default", "v2", "c0002")
     client = FakeMlflowClient()
-    lock.write("run-1", client)
+    lock.write_step("train", "run-1", client)
     assert client.tags["run-1"] == {"kaos_lib.data.dataset-default.commit": "c0001,c0002"}
 
 
-def test_write_merges_with_the_lock_already_on_the_run():
+def test_each_step_writes_its_own_file_and_load_reads_them_together():
     client = FakeMlflowClient()
-    lock.DataLock([lock.Read("dataset-default", "v1", "c0001")]).write("run-1", client)   # an earlier step
+    lock.DataLock([lock.Read("dataset-default", "v1", "c0001")]).write_step("prepare", "run-1", client)
     lock.record("dataset-raw", "main", "c0050")
-    merged = lock.write("run-1", client)
-    assert [r.repo for r in merged.reads] == ["dataset-default", "dataset-raw"]
-    assert len(json.loads(client.artifacts["run-1"]["data.lock.json"])["reads"]) == 2
-    assert set(client.tags["run-1"]) == {"kaos_lib.data.dataset-default.commit", "kaos_lib.data.dataset-raw.commit"}
+    lock.current().wrote(lock.Write("model", "model", "outputs-myapp", "c0900"))
+    lock.write_step("train", "run-1", client)
+    assert set(client.artifacts["run-1"]) == {"ledger/prepare.json", "ledger/train.json"}   # no shared file
+    assert len(json.loads(client.artifacts["run-1"]["ledger/prepare.json"])["reads"]) == 1
+    loaded = lock.load("run-1", client)
+    assert [r.repo for r in loaded.reads] == ["dataset-default", "dataset-raw"]
+    assert [w.as_dict() for w in loaded.writes] == [
+        {"name": "model", "type": "model", "repo": "outputs-myapp", "commit": "c0900"}]
+
+
+def test_load_reads_the_version_1_lock_of_a_run_made_before_the_ledger():
+    client = FakeMlflowClient()
+    client.artifacts["old"] = {"data.lock.json": json.dumps({"version": 1, "reads": [
+        {"repo": "dataset-default", "owner": None, "ref": "v2", "commit": "c0042"}]})}
+    loaded = lock.load("old", client)
+    assert loaded.pinned("dataset-default", "v2") == "c0042"
+    assert loaded.to_dict() == {"version": 2, "writes": [], "reads": [
+        {"name": "default", "repo": "dataset-default", "owner": None, "ref": "v2", "commit": "c0042"}]}
 
 
 def test_write_finds_the_run_from_mlflow_run_id(monkeypatch):
     monkeypatch.setenv("MLFLOW_RUN_ID", "env-run")
     client = FakeMlflowClient()
-    lock.write(client=client)
-    assert "data.lock.json" in client.artifacts["env-run"]
+    lock.write_step("train", client=client)
+    assert "ledger/train.json" in client.artifacts["env-run"]
 
 
 def test_write_finds_the_active_run(monkeypatch):
@@ -133,21 +147,21 @@ def test_write_finds_the_active_run(monkeypatch):
     module = types.SimpleNamespace(active_run=lambda: types.SimpleNamespace(info=types.SimpleNamespace(run_id="act")))
     monkeypatch.setitem(sys.modules, "mlflow", module)
     client = FakeMlflowClient()
-    lock.write(client=client)
+    lock.write_step("train", client=client)
     assert "act" in client.artifacts
 
 
 def test_write_without_a_run_says_how_to_name_one(monkeypatch):
     monkeypatch.setitem(sys.modules, "mlflow", None)
     with pytest.raises(LockError, match="no MLflow run.*run_id=.*MLFLOW_RUN_ID"):
-        lock.write(client=FakeMlflowClient())
+        lock.write_step("train", client=FakeMlflowClient())
 
 
 def test_mlflow_failure_is_one_clear_error():
     client = FakeMlflowClient()
     client.fail = ConnectionError("mlflow down")
-    with pytest.raises(LockError, match="cannot read the data lock of MLflow run run-1 \\(ConnectionError: mlflow down\\)"):
-        lock.write("run-1", client)
+    with pytest.raises(LockError, match="cannot write the ledger to MLflow run run-1 \\(ConnectionError: mlflow down\\)"):
+        lock.write_step("train", "run-1", client)
 
 
 # ------------------------------------------------------------------ load
@@ -155,14 +169,14 @@ def test_load_round_trip():
     lock.record("dataset-default", "v2", "c0042")
     lock.record("dataset-x", "v1", "c0007", "a")
     client = FakeMlflowClient()
-    lock.write("run-1", client)
+    lock.write_step("train", "run-1", client)
     loaded = lock.load("run-1", client)
     assert loaded.reads == lock.current().reads
     assert loaded.to_dict() == lock.current().to_dict()
 
 
 def test_load_of_a_run_without_a_lock():
-    with pytest.raises(LockError, match="MLflow run run-9 has no data.lock.json"):
+    with pytest.raises(LockError, match="MLflow run run-9 has no ledger/"):
         lock.load("run-9", FakeMlflowClient())
 
 
@@ -228,7 +242,10 @@ def test_kaos_lib_lock_env_is_honoured(lakes, monkeypatch):
 @pytest.mark.parametrize("raw,fragment", [
     ("{oops", r"\$KAOS_LIB_LOCK is not JSON"),
     ("[1, 2]", r"\$KAOS_LIB_LOCK must be a JSON object"),
-    ('{"version": 2, "reads": []}', r"has version 2; this kaos-lib reads version 1 .*upgrade"),
+    ('{"version": 3, "reads": []}', r"has version 3; this kaos-lib reads version 2 .*upgrade"),
+    ('{"version": 2, "reads": [{"repo": "dataset-x", "ref": "v1", "commit": "c"}]}', r"reads\[0\] needs a non-empty string name"),
+    ('{"version": 2, "reads": [], "writes": [{"name": "m", "type": "weights", "repo": "r", "commit": "c"}]}',
+     r"writes\[0\].type is 'weights'"),
     ('{"version": 1}', "has no reads list"),
     ('{"version": 1, "reads": ["x"]}', r"reads\[0\] is not an object"),
     ('{"version": 1, "reads": [{"repo": "dataset-x", "ref": "v1"}]}', r"reads\[0\] needs a non-empty string commit"),
@@ -253,7 +270,7 @@ def test_malformed_lock_is_reported_by_the_cli_in_one_line(lakes, monkeypatch, c
 def mlflow_with_lock(monkeypatch):
     client = FakeMlflowClient()
     lock.DataLock([lock.Read("dataset-raw", "latest", "c0001locked"),
-                   lock.Read("dataset-x", "v1", "c0002locked", "a")]).write("run-1", client)
+                   lock.Read("dataset-x", "v1", "c0002locked", "a")]).write_step("train", "run-1", client)
     from kaos_lib import mlflow as kmlflow
     monkeypatch.setattr(kmlflow, "mlflow", lambda *a, **k: client)
     return client
@@ -288,7 +305,7 @@ def test_run_lock_needs_a_command(mlflow_with_lock, capsys):
 
 def test_run_lock_of_a_run_without_a_lock(mlflow_with_lock, capsys):
     assert cli.main(["run", "--lock", "run-404", "--", "true"]) == cli.EXIT_USER_ERROR
-    assert "MLflow run run-404 has no data.lock.json" in capsys.readouterr().err
+    assert "MLflow run run-404 has no ledger/" in capsys.readouterr().err
 
 
 def test_run_lock_with_a_missing_program(mlflow_with_lock, capsys):
@@ -306,7 +323,7 @@ def test_real_mlflow_round_trip(tmp_path, monkeypatch):
     run = client.create_run(client.create_experiment("lock"))
     lock.record("dataset-default", "v2", "c0042")
     lock.record("dataset-x", "v1", "c0007", "a")
-    lock.write(run.info.run_id, client)
+    lock.write_step("train", run.info.run_id, client)
     tags = client.get_run(run.info.run_id).data.tags
     assert tags["kaos_lib.data.dataset-default.commit"] == "c0042"
     assert tags["kaos_lib.data.dataset-x.owner"] == "a"

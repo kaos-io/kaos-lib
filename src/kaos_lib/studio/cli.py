@@ -9,8 +9,8 @@ import argparse
 from . import build, dev, pipeline_engine, run
 from .constants import DEFAULT_SAMPLE_MB
 
-KAOS_LIB_HELP = ("the kaos-lib to install, as a pip requirement (default: the Dockerfile's own default, else this "
-                 "kaosctl's version)")
+KAOS_LIB_HELP = ("the kaos-lib to install, as a pip requirement or the path of a checkout, a wheel or an archive on "
+                 "this machine (default: the Dockerfile's own default, else this kaosctl's version)")
 CONTEXT_HELP = ("the platform's pipeline-context file: its kaosLib.spec is the kaos-lib the platform's build passes, "
                 "its engine block the pipeline engine the platform renders with")
 ENGINE_WHEEL_HELP = ("the pipeline engine release to use, as its wheel URL with the checksum (default: "
@@ -28,28 +28,36 @@ def add_commands(sub: argparse._SubParsersAction) -> None:
     sp.add_argument("path", nargs="?", default=".", help="your app folder (default: the current folder)")
     sp.add_argument("--step", action="append", default=[], metavar="NAME", help="set up only this step (repeat for more)")
     sp.add_argument("--all", action="store_true", help="also set up steps whose dependencies are several GB (torch, CUDA)")
-    sp.add_argument("--kaos-lib", metavar="REQUIREMENT", help=KAOS_LIB_HELP)
+    sp.add_argument("--kaos-lib", metavar="REQUIREMENT|PATH", help=KAOS_LIB_HELP)
     sp.add_argument("--context", metavar="FILE", help=CONTEXT_HELP)
+    sp.add_argument("--vscode", action="store_true", help="also write .vscode/settings.json in each step folder, "
+                    "pointing VS Code at the step's Python (not written otherwise)")
     sp.set_defaults(func=dev.run_dev)
 
     st = sub.add_parser("step", help="work with one step of your pipeline on this machine")
     ssub = st.add_subparsers(dest="step_command", required=True)
     sp = ssub.add_parser("run", help="run one step locally, as the platform runs it",
-                         description="Run one step in its own environment with the platform's contract (python -m "
-                                     "app.entry --params <composed params> --<output> <json>). The platform's /work "
-                                     "folder is mapped to .kaos/local/work/<step>. No cluster, no platform secret.")
+                         description="Run one step in its own environment the way the platform starts it: python -m "
+                                     "app.entry with no arguments and the step context, which kaos_lib.step reads. "
+                                     "Inputs are folders on this machine, outputs stay in .kaos/local, and the "
+                                     "step's result is kept for the next step. No cluster, no platform secret.")
     sp.add_argument("step", help="the step's name, as in pipeline.py")
     sp.add_argument("path", nargs="?", default=".", help="your app folder (default: the current folder)")
     sp.add_argument("--params-file", metavar="FILE", help="use this params.yaml instead of composing one from config/")
     sp.add_argument("--set", dest="override", action="append", default=[], metavar="KEY=VALUE",
                     help="a config override for the composition (Hydra syntax, repeat for more)")
-    sp.add_argument("--input", action="append", default=[], metavar="NAME=VALUE|@FILE",
-                    help="the value of an output of a step this one needs (default: the last local run, else {})")
-    sp.add_argument("--dataset", metavar="REPO@REF", help="download a small sample of this dataset first "
-                    "(needs `kaosctl login`); the step finds it in $KAOS_LOCAL_DATASET_DIR")
+    sp.add_argument("--input", action="append", default=[], metavar="NAME=FOLDER|REPO@REF",
+                    help="what the step gets for the input NAME (a name in its inputs=): a folder on this machine, "
+                         "or a small sample of a dataset version (needs `kaosctl login`). Repeat for more")
+    sp.add_argument("--upstream", action="append", default=[], metavar="STEP=JSON|@FILE",
+                    help="the result of a step this one needs (default: that step's last local run; without one "
+                         "the step is treated as not run)")
     sp.add_argument("--sample-mb", type=int, default=DEFAULT_SAMPLE_MB, metavar="MB",
                     help=f"the most the sample downloads (default {DEFAULT_SAMPLE_MB})")
-    sp.add_argument("--kaos-lib", metavar="REQUIREMENT", help=KAOS_LIB_HELP)
+    sp.add_argument("--python", metavar="INTERPRETER",
+                    help="run the step with this existing Python (it must have kaos-lib) instead of building an "
+                         "environment: for steps with heavy dependencies")
+    sp.add_argument("--kaos-lib", metavar="REQUIREMENT|PATH", help=KAOS_LIB_HELP)
     sp.add_argument("--context", metavar="FILE", help=CONTEXT_HELP)
     sp.add_argument("--engine-wheel", metavar="URL#sha256=HEX", help=ENGINE_WHEEL_HELP)
     sp.add_argument("--profile", choices=pipeline_engine.PROFILES, help=PROFILE_HELP)

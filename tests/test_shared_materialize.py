@@ -71,9 +71,9 @@ def test_cache_path_and_marker_carry_the_owner(lakes, step_env, tmp_path):
     data_yaml = datasets.materialize(SHARED)
     commit = owner.head("dataset-x")
     assert data_yaml.parent == tmp_path / "cache" / "a" / "dataset-x" / commit
-    marker = json.loads((data_yaml.parent / local.MARKER).read_text())
+    marker = json.loads(local.marker_file(data_yaml.parent).read_text())
     assert marker == {"repo": "dataset-x", "commit": commit, "prefix": None, "owner": "a",
-                      "include": ["data.yaml", "images/**", "labels/**"]}
+                      "include": ["data.yaml", "images/**", "labels/**"], **local.stamp(data_yaml.parent)}
 
 
 def test_own_and_shared_dataset_x_never_collide(lakes, step_env, tmp_path):
@@ -84,7 +84,7 @@ def test_own_and_shared_dataset_x_never_collide(lakes, step_env, tmp_path):
     assert theirs == tmp_path / "cache" / "a" / "dataset-x" / owner.head("dataset-x")
     assert (mine / "images/train/own.jpg").is_file() and not (mine / "images/train/shared.jpg").exists()
     assert (theirs / "images/train/shared.jpg").is_file() and not (theirs / "images/train/own.jpg").exists()
-    assert json.loads((mine / local.MARKER).read_text())["owner"] is None
+    assert json.loads(local.marker_file(mine).read_text())["owner"] is None
     n_own, n_owner = len(object_gets(own)), len(object_gets(owner))
     assert datasets.materialize(OWN_REF).parent == mine and datasets.materialize(SHARED).parent == theirs
     assert (len(object_gets(own)), len(object_gets(owner))) == (n_own, n_owner)   # both cached, nothing re-read
@@ -96,7 +96,7 @@ def test_a_shared_copy_in_an_explicit_dest_is_not_taken_for_the_own_one(lakes, s
     datasets.materialize(SHARED, dest)
     datasets.materialize(OWN_REF, dest)                              # same dest, same commit id, other owner
     assert (dest / "images/train/own.jpg").is_file() and not (dest / "images/train/shared.jpg").exists()
-    assert json.loads((dest / local.MARKER).read_text())["owner"] is None
+    assert json.loads(local.marker_file(dest).read_text())["owner"] is None
     assert object_gets(own)
 
 
@@ -133,7 +133,7 @@ def test_raw_shared_dataset_and_prefix(lakes, step_env, tmp_path):
     assert whole.parent == tmp_path / "cache" / "a" / "dataset-raw"
     sub = datasets.materialize(ref, prefix="sub")
     assert (sub / "b.txt").read_bytes() == b"B" and sub.parent == whole.parent
-    assert json.loads((sub / local.MARKER).read_text())["owner"] == "a"
+    assert json.loads(local.marker_file(sub).read_text())["owner"] == "a"
 
 
 def test_resolve_of_a_shared_ref_asks_the_owner(lakes, step_env):
@@ -201,11 +201,11 @@ def test_staged_copy_used_only_for_the_same_owner(lakes, step_env, tmp_path, mon
     _, owner = lakes
     commit = owner.head("dataset-x")
     staged = write_dataset(tmp_path / "lustre" / commit, images=("staged",))
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
-    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-x", "commit": commit}))   # b's own copy
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
+    local.staged_marker(staged).write_text(json.dumps({"repo": "dataset-x", "commit": commit, "full": True}))   # b's own copy
     data_yaml = datasets.materialize(SHARED)
     assert yaml.safe_load(data_yaml.read_text())["path"] != str(staged) and object_gets(owner)
-    (staged / ".kaos-ready").write_text(json.dumps({"repo": "dataset-x", "commit": commit, "owner": "a"}))
+    local.staged_marker(staged).write_text(json.dumps({"repo": "dataset-x", "commit": commit, "owner": "a", "full": True}))
     owner.calls.clear()
     data_yaml = datasets.materialize(SHARED, tmp_path / "out")
     assert yaml.safe_load(data_yaml.read_text())["path"] == str(staged) and not object_gets(owner)
@@ -226,7 +226,7 @@ def test_cli_pull_of_a_shared_ref(lakes, step_env, capsys, tmp_path):
     out = capsys.readouterr().out
     assert code == 0 and f"Ready: {dest}/data.yaml" in out
     assert (dest / "images/train/shared.jpg").read_bytes() == b"img-shared"
-    assert json.loads((dest / local.MARKER).read_text())["owner"] == "a"
+    assert json.loads(local.marker_file(dest).read_text())["owner"] == "a"
 
 
 def test_cli_pull_default_location_is_under_the_owner(lakes, step_env, capsys, tmp_path):

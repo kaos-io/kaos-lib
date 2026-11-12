@@ -154,6 +154,20 @@ STEP_FIX = ("This step's image must be rebuilt with a newer kaos-lib. If its Doc
             "kaos-lib itself, raise that pin and push.")
 
 
+OLD_APP = "This app was made before the current pipelines. Create it again from the template."
+
+
+def _breaking_fix(raw: str) -> str:
+    """What to do when the newest release changed the contract of a step (``breaking``), else ''."""
+    try:
+        policy = json.loads(raw)
+    except ValueError:
+        return ""
+    if not isinstance(policy, dict) or policy.get("breaking") is not True:
+        return ""
+    return OLD_APP
+
+
 def at_step_start(installed: str, environ=os.environ) -> Optional[dict]:
     """Pipeline steps (``$KAOS_LIB_SUPPORT`` set by the platform): log the verdict, tag MLflow, stop if unsupported."""
     raw = environ.get(ENV)
@@ -168,9 +182,9 @@ def at_step_start(installed: str, environ=os.environ) -> Optional[dict]:
     if verdict == BEHIND:
         line += ". Nothing to do: a platform update brings the newer version"
     elif verdict in (DEPRECATED, UNSUPPORTED):
-        line += ". " + STEP_FIX
+        line += ". " + (_breaking_fix(raw) or STEP_FIX)
     print(line, file=sys.stderr)
     _tag_mlflow(verdict)
     if verdict == UNSUPPORTED:
-        raise UnsupportedVersion(f"{result['message']}. {STEP_FIX}")
+        raise UnsupportedVersion(f"{result['message']}. {_breaking_fix(raw) or STEP_FIX}")
     return result

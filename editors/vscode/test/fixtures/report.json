@@ -52,7 +52,7 @@
         }
       },
       "message": "Step 'train' declares no time limit, so it cannot be offered as a guest on a node another job already holds on the HPC (Slurm) site.",
-      "fix": "Nothing to fix. Set hpc_time_limit, for example hpc_time_limit='4h', to let the step share a node.",
+      "fix": "Nothing to fix. Set walltime, for example walltime='4h', to let the step share a node.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
     },
     {
@@ -67,11 +67,11 @@
         },
         "end": {
           "line": 5,
-          "column": 68
+          "column": 74
         }
       },
-      "message": "step() has no argument 'walltime', so the render fails.",
-      "fix": "Use hpc_time_limit for the HPC (Slurm) time limit.",
+      "message": "step() no longer takes 'hpc_time_limit'. This app was made before the current pipelines. Create it again from the template.",
+      "fix": "Remove the argument or write it as the message says; step() raises on it when the pipeline is rendered.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
     },
     {

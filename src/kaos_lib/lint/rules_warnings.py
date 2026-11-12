@@ -15,16 +15,16 @@ from .registry import (DECLARED, NOT_VERIFIED, OFF, Hit, LintContext, gpu_steps,
 
 @rule("L-W01", "LongGpuStepNotResumable", WARNING,
       "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten "
-      "hpc_time_limit.")
+      "walltime.")
 def long_gpu_step_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     hpc = ctx.catalogue.hpc
     for step in gpu_steps(ctx):
-        limit = parse_minutes(step.value("hpc_time_limit", None))
+        limit = parse_minutes(step.value("walltime", None))
         if limit is None or limit <= LONG_GPU_STEP_MINUTES or ctx.resumable(step) not in (OFF, NOT_VERIFIED):
             continue
         if hpc is not None and limit > hpc.lane_max_minutes:
             continue   # L-E01 reports it as an error
-        yield Hit(ctx.file, ctx.span(step.node("hpc_time_limit")),
+        yield Hit(ctx.file, ctx.span(step.node("walltime")),
                   f"Step '{step.name}' runs up to {pretty_minutes(limit)} and is not resumable "
                   f"({'set not resumable' if ctx.resumable(step) == OFF else 'the platform recorded that its last continuation did not resume'}). "
                   f"An interruption (a lost machine, the time limit) loses all its work.")
@@ -42,22 +42,18 @@ def idle_timeout_off(ctx: LintContext) -> Iterable[Hit]:
                       f"until the time limit.")
 
 
-@rule("L-W03", "UnpinnedDataset", WARNING,
-      "Pin a version: use <dataset>@v1 (a released version) instead of @latest, so a run always reads the same "
-      "data.")
-def unpinned_dataset(ctx: LintContext) -> Iterable[Hit]:
+@rule("L-W03", "DatasetVersionInCode", WARNING,
+      "Declare the dataset in inputs=[...] in pipeline.py and read it with step.input(): the version is chosen on the "
+      "run form, never in step code.")
+def dataset_version_in_code(ctx: LintContext) -> Iterable[Hit]:
     seen = set()
-    if ctx.dataset is not None and "@latest" in ctx.dataset.value:
-        yield Hit(ctx.dataset.file, ctx.dataset.span,
-                  f"The dataset '{ctx.dataset.value}' follows the newest data: two runs of the same code can read "
-                  f"different data.")
     for step in ctx.pipeline.steps:
         source = ctx.step_source(step)
-        for file, span in (source.latest_refs if source else []):
+        for file, span in (source.version_refs if source else []):
             if (file, span) not in seen:
                 seen.add((file, span))
-                yield Hit(file, span, "A dataset reference uses @latest: a run reads whatever is newest at the "
-                          "time, so results cannot be reproduced.")
+                yield Hit(file, span, "This string names a dataset and a version. A step reads only the versions the "
+                          "run pinned, so a version written in code is either ignored or refused.")
 
 
 @rule("L-W04", "NoMlflowOrModelNotRegistered", WARNING,

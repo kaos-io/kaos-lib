@@ -4,6 +4,65 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 `release.json`. Packages: `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` (stable),
 `.../kaos-lib-rc/simple/` (prerelease).
 
+## 0.5.0 (unreleased)
+
+PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; every app is created again from the
+template.** Nothing in kaos-lib converts an old app.
+
+### Added
+- `kaos_lib.step`: `start()`, `input(name)`, `output(name)`, `upstream(step)`, `check(name)`, `result(**values)`. A step is
+  started with no arguments, reads everything from `step.start()` and hands one result on. A step that ends without
+  `step.result()` fails.
+- The ledger: the data lock at version 2, with named reads and with writes. Each step records what it read and wrote in
+  its result and, on its MLflow run, in its own `ledger/<step>.json`.
+- `step()` in `pipeline.py` takes `kind=` (required), `inputs=`, `produces=` and `walltime=`. `kaosctl lint` checks them
+  (`L-E07`), and refuses what an app from before the contract has (`outputs=`, `hpc_time_limit=`, `disk=`, a step
+  with no `kind=`, a `kubecore/` folder, `--params`, the `platform` config group: `L-E06`, `L-E08`, `L-E09`) with the
+  sentence the engine uses. Rule set 2.0.0.
+- `step.workdir()` (a scratch folder for tool caches and run folders, emptied at each attempt, never saved),
+  `step.input(name, writable=True)` (a private full copy of an input that the step may write into) and
+  `testing.running(upstream_writes=...)` (what an upstream step wrote, for tests).
+- `kaosctl step run --python INTERPRETER` runs a step with an existing Python and builds no environment. The
+  environments of `kaosctl dev` and `kaosctl step run` now live in the cache folder, never in the app's repository.
+- The wire form of the context and the result writes `$` inside strings as `\u0024` (Kubernetes expands `$(NAME)` in an
+  environment value).
+- `kaosctl step run` starts a step with the new contract: `--input NAME=FOLDER|REPO@REF` gives an input, `--upstream`
+  a needed step's result; outputs and results stay in `.kaos/local/`.
+- On HPC (Slurm) every input of a step is read from its own staged copy.
+- A step can produce a dataset (`produces=[dataset("name")]`, PRD novelcore/kaos#1911 F-11, F-12): `step.result()` makes
+  the folder one version of `dataset-<name>`. Only files that changed since the last version are uploaded; the version
+  is checked against what the step wrote before and after it is sealed; `latest` moves only when the run asks, and never
+  onto a dataset that another run changed in the meantime (the step then writes its version again on the new one).
+- Uploads are tried again after a failure that can pass (a dropped connection, a busy server).
+- `step.result()` saves in order: it checks everything it can, saves every output without moving any dataset's
+  `latest`, and only then moves `latest` of the datasets the run asked to move. A step that fails moves none. A model
+  or an artifact holds exactly the files of the attempt that made the result.
+- `kaos_lib.testing.running`: call a step's `main()` in your own tests with a prepared context and local folders.
+- `kaosctl dev --vscode` writes `.vscode/settings.json` (it is no longer written otherwise); `--kaos-lib` takes the
+  path of a checkout, a wheel or an archive on your machine.
+- A step that ends with exit code 0 without a result now ends with 1; the exit code a step chose is kept.
+- `kaosctl dataset push` to a new repository whose name no dataset can have is refused with the reason, before anything
+  is created.
+
+### Changed
+- `runtime.context()` takes the run, app, project, step, kind and experiment from what the platform hands the step.
+- Inside a pipeline step, `datasets.resolve` and `datasets.materialize` refuse a dataset the run did not pin.
+- `kaosctl lint` reads only the repository's own files (no virtualenv, `.kaos/`, caches or ignored folders) and its
+  `L-W03` now warns about a dataset version written in step code instead of the default version in config.
+- `kaosctl dataset versions BAD` and other invalid names answer "invalid dataset name" instead of an HTTP error.
+
+### Removed
+- `hpc_time_limit=` (use `walltime=`) and `outputs=` (use `step.result()`), with no alias.
+- The `kubecore` import shim, the `kubecore` and `kaos-cli` commands, `kaos_lib.errors.KubecoreError`.
+- `lock.write()` and writing `data.lock.json` (reading one, for a run made with 0.4, stays).
+- `runtime.context().dataset_ref`, `.dataset_commit`, `.workflow`, and reading `KUBECORE_RUN_ID`, `KUBECORE_APP`,
+  `KUBECORE_STEP`, `STEP_NAME`, `OUTPUTS_REPO`, `CHECKPOINT_BUCKET`, `KUBECORE_DATASET_*`, `DATASET*` and
+  `KUBECORE_STAGED_DIR`.
+- `kaosctl step run --dataset` (use `--input NAME=REPO@REF`).
+- A file next to every step folder that the platform keeps for itself: the marker of a downloaded or staged copy is the
+  file beside the folder (`<folder>.kubecore-dataset.json`, `<folder>.kaos-ready`), never a file in it, so a step sees
+  only the files of the dataset.
+
 ## 0.4.0 (unreleased)
 
 PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,
@@ -151,7 +210,7 @@ user-definable layouts.
   `dataset push` validates with the layout of the repository's label.
 - The schema, the built-in layouts and the test fixtures (`tests/layout_fixtures`) are shared byte for byte with
   kaos-lake, pinned by `SHA256SUMS`; both implementations pass the same fixtures.
-- Guide: [Make your own dataset layout](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/make-your-own-layout.html).
+- Guide: [Make your own dataset layout](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/reference.html#dataset-layouts).
 
 ### Changed
 - The command is `kaosctl` (it was `kaos-cli`, which keeps working as a hidden alias for one release, as does

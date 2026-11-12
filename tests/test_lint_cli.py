@@ -57,11 +57,11 @@ def test_text_json_and_markdown_forms(tmp_path, capsys):
 def test_status_form_is_one_line_with_the_counts_and_the_rule_set(tmp_path, capsys):
     root = write_repo(tmp_path / "r", CASES["L-E06"][0])
     code, out, _ = kaosctl(capsys, str(root), "--format", "status")
-    assert code == 2 and out == "1 error, 0 warnings, 0 infos; 2 rules skipped (rule set 1.3.0)\n"
+    assert code == 2 and out == "1 error, 0 warnings, 0 infos; 2 rules skipped (rule set 2.0.0)\n"
 
 
 def test_markdown_lists_skipped_rules_and_caps_long_lists(tmp_path, capsys):
-    many = "".join(f'    a{i} = step("a{i}", disk="x")\n' for i in range(60))
+    many = "".join(f'    a{i} = step("a{i}", kind="train", walltime="x")\n' for i in range(60))
     root = write_repo(tmp_path / "r", repo(many))
     _, md, _ = kaosctl(capsys, str(root), "--format", "markdown")
     assert "and 10 more" in md and "Rules that did not run" in md
@@ -125,7 +125,7 @@ urllib.request.urlopen("http://127.0.0.1:9/x")
 subprocess.run(["touch", os.environ.get("LINT_MARKER", "/tmp/never") + ".sub"])
 from kubecore.authoring import pipeline, step
 with pipeline("p") as p:
-    a = step("evil", gpu=True, reads=["dataset"])
+    a = step("evil", kind="train", gpu=True, reads=["dataset"])
 '''
 HOSTILE_STEP = ('import os\nopen(os.environ.get("LINT_MARKER", "/tmp/never") + ".step", "w").write("ran")\n'
                 'raise SystemExit("step code ran")\n')

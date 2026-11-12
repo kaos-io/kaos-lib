@@ -1,31 +1,25 @@
 # Python API
 
-Generated from the code's docstrings on every build. The guides show how the pieces fit:
-[Datasets](datasets.md), [Outputs](outputs.md), [MLflow](mlflow.md), [Run context](runtime.md) and
-[Data lock](data-lock.md), [Long runs](checkpoint.md) and [Progress](progress.md).
+Generated from the docstrings on every build. The guide shows how the calls fit together: [Reference](reference.md).
 
-::: kaos_lib.datasets
+::: kaos_lib.step
 
-::: kaos_lib.outputs
-
-::: kaos_lib.layouts
-
-::: kaos_lib.runtime
+::: kaos_lib.testing
 
 ::: kaos_lib.checkpoint
 
 ::: kaos_lib.progress
 
-::: kaos_lib.lock
-
 ::: kaos_lib.mlflow
 
-::: kaos_lib.lakefs
+::: kaos_lib.runtime
 
-::: kaos_lib.zitadel
+::: kaos_lib.datasets
 
-::: kaos_lib.peers
+::: kaos_lib.layouts
 
-::: kaos_lib.support
+::: kaos_lib.outputs
+
+::: kaos_lib.lock
 
 ::: kaos_lib.errors

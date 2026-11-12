@@ -6,6 +6,7 @@ import yaml
 
 from conftest import write_dataset
 from kaos_lib import datasets
+from kaos_lib.layouts import local
 from kaos_lib.errors import DatasetError
 
 REF = datasets.DatasetRef.parse("dataset-default@v1")
@@ -61,7 +62,7 @@ def test_materialize_new_commit_replaces_old_copy(populated, client, tmp_path):
     r["branches"]["main"]["commit"] = "c-two"
     datasets.materialize(datasets.DatasetRef.parse("dataset-default@latest"), dest, client=client)
     assert (dest / "images/train/z.jpg").is_file() and not (dest / "images/train/a.jpg").exists()
-    assert json.loads((dest / ".kubecore-dataset.json").read_text())["commit"] == "c-two"
+    assert json.loads(local.marker_file(dest).read_text())["commit"] == "c-two"
 
 
 def test_materialize_refuses_foreign_nonempty_dest(populated, client, tmp_path):
@@ -75,8 +76,8 @@ def test_materialize_refuses_foreign_nonempty_dest(populated, client, tmp_path):
 
 def test_materialize_uses_staged_copy_without_downloading(populated, client, tmp_path, monkeypatch):
     staged = write_dataset(tmp_path / "lustre" / "dataset-default" / "c-data")
-    (staged / ".kaos-ready").write_text("")
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    local.staged_marker(staged).write_text(json.dumps({"repo": "dataset-default", "commit": "c-data", "full": True}))
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
     data_yaml = datasets.materialize(REF, tmp_path / "out", client=client)
     assert yaml.safe_load(data_yaml.read_text())["path"] == str(staged)    # train reads the resident copy
     assert downloads(populated) == []
@@ -84,8 +85,9 @@ def test_materialize_uses_staged_copy_without_downloading(populated, client, tmp
 
 
 def test_staged_dir_for_another_commit_is_ignored(populated, client, tmp_path, monkeypatch):
-    staged = write_dataset(tmp_path / "lustre" / "other-commit")
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    staged = write_dataset(tmp_path / "lustre" / "dataset")
+    local.staged_marker(staged).write_text(json.dumps({"repo": "dataset-default", "commit": "other-commit", "full": True}))
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
     datasets.materialize(REF, tmp_path / "out", client=client)
     assert len(downloads(populated)) > 0
 

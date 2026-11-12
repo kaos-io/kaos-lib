@@ -1,0 +1,48 @@
+layout: 1                       # the spec version
+name: sounds                    # the id: datasets made with it are labelled kaos.template=sounds
+title: Sound clips
+description: One .wav per clip and its labels as JSON, split into train and val.
+version: "1"                    # your layout's own version, free form
+
+parameters:                     # asked by `dataset create` and by the New dataset page
+  - key: classes
+    label: Class names
+    type: list                  # list: one item per line; text: one line
+    required: true
+    form_key: classes           # where the value lives in form_file, so the dataset can be edited later
+form_file: classes.yaml
+
+skeleton:                       # what `create` writes; folders become <folder>/.keep
+  folders: [clips/train, clips/val, labels/train, labels/val]
+  files:
+    classes.yaml: |
+      classes:
+      {{#each classes}}
+        - {{@item|quote}}
+      {{/each}}
+    README.md: |
+      # {{name}}
+
+      {{#if description}}
+      {{description}}
+
+      {{/if}}
+      {{classes|count}} classes. Put clips in `clips/<split>/` and their labels in `labels/<split>/`.
+
+rules:                          # checked by kaosctl and by kaos-lake
+  required: [classes.yaml, "clips/train/*.wav", "clips/val/*.wav"]
+  allowed: [README.md, classes.yaml, "clips/**", "labels/**"]
+  extensions:
+    - {files: "clips/**", allowed: [.wav]}
+  pairs:
+    - {files: "clips/**", needs: "labels/{stem}.json"}    # clips/train/a.wav needs labels/train/a.json
+  manifests:
+    - file: classes.yaml
+      schema:
+        type: object
+        required: [classes]
+        properties:
+          classes: {type: array, minItems: 1, items: {type: string}}
+
+materialize:                    # what a pull downloads (default: the whole tree)
+  include: [classes.yaml, "clips/**", "labels/**"]

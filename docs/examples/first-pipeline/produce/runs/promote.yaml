@@ -1,0 +1,3 @@
+plan:
+  promote:
+    clean: true

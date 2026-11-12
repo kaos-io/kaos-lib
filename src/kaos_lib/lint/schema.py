@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from .constants import (DEFAULT_LIMIT_MINUTES, DISK_PATTERN, DOC_BASE, LONG_GPU_STEP_MINUTES, RULESET_VERSION,
+from .constants import (DEFAULT_LIMIT_MINUTES, DOC_BASE, LONG_GPU_STEP_MINUTES, RULESET_VERSION,
                         STEP_NAME_PATTERN, STEP_PARAMS, TIME_PATTERN)
 
 # The shape of this document. Bump when a field an editor reads changes meaning or goes away.
@@ -19,9 +19,6 @@ SCHEMA_VERSION = 1
 
 # Where the step API is imported from in a pipeline.py (the linter follows `from <module>.authoring import step`).
 AUTHORING_MODULES = ("kubecore.authoring",)
-
-# Argument names the library no longer takes and what to use instead: the editor offers a one-click rename.
-RENAMED_ARGUMENTS = {"walltime": "hpc_time_limit"}
 
 GUIDE_URL = DOC_BASE[: -len("lint/")] + "lint.html"
 
@@ -38,51 +35,62 @@ _PARAMS = {
             "underscores) and its image, so use lowercase letters, digits and hyphens, with no hyphen at the start "
             "or end, for example `model-evaluation`. Every step needs its own name.",
         pattern=STEP_NAME_PATTERN, values=[]),
+    "kind": dict(
+        type="str", required=True, rules=("L-E07",), snippet='"${1|ingest,transform,train,evaluate,publish,control|}"',
+        doc="What the step is. Required. The platform labels the step with it and offers only the compute "
+            "classes that fit the kind.",
+        values=[_value('"ingest"', "Brings data in from outside."),
+                _value('"transform"', "Turns data into other data: preprocess, filter, split, convert."),
+                _value('"train"', "Trains a model."),
+                _value('"evaluate"', "Measures a model or a dataset."),
+                _value('"publish"', "Registers or delivers a result."),
+                _value('"control"', "Decides or coordinates; does no data work itself.")]),
     "reads": dict(
         type="list[str]", rules=("L-E05",), snippet='["${1:train}"]',
         doc="The config sections the step reads (the files and folders of `config/`, for example `\"train\"`). A "
             "section that does not exist is refused when the pipeline is rendered.",
         values=[]),
+    "produces": dict(
+        type="list[model|artifact|dataset]", rules=("L-E07",), snippet='[${1|model,artifact,dataset|}("${2:name}")]',
+        doc="What the step writes: `model(\"name\")`, `artifact(\"name\")` or `dataset(\"name\")`. The step "
+            "writes each into the folder `step.output(\"name\")` gives it, and `step.result()` saves them.",
+        values=[_value('[model("model")]', "The step writes a model."),
+                _value('[artifact("report")]', "The step writes files that belong to this run."),
+                _value('[dataset("clean")]', "The step writes a version of the dataset `clean`.")]),
     "gpu": dict(
         type="bool", rules=("L-E06", "L-W01", "L-W02"), snippet="True",
-        doc="Run the step on a GPU. Only GPU steps can run on the HPC (Slurm) site, so `hpc_time_limit` and "
-            "`resumable` need `gpu=True`.",
+        doc="Run the step on a GPU: the platform gives it one. Without it the step runs on a CPU machine.",
         default="False",
         values=[_value("True", "The step gets one GPU."), _value("False", "A CPU step (the default).")]),
+    "inputs": dict(
+        type="list[str]", rules=("L-E07",), snippet='["${1:dataset}"]',
+        doc="The names of the config values that hold a dataset reference, for example `\"dataset\"` for "
+            "`dataset: dataset-my-data@latest`. The platform pins each to one exact version when the run starts, and "
+            "the step reads it with `step.input(\"dataset\")`. Step code never names a version.",
+        values=[]),
     "needs": dict(
         type="list[step]", rules=("L-E05",), snippet="[${1:previous_step}]",
         doc="The steps that must finish first. Give the step variables (`needs=[prepare]`), not their names, and "
             "define each step above the steps that need it.",
-        values=[]),
-    "outputs": dict(
-        type="list[str]", rules=(), snippet='["${1:metrics}"]',
-        doc="The names of the values this step passes on. Every step that lists this step in `needs` receives them "
-            "as inputs.",
         values=[]),
     "when": dict(
         type="str", rules=(), snippet='"${1:condition}"',
         doc="A condition: the step runs only when it is true. A step that needs a conditional step is still "
             "started when the conditional step is skipped.",
         values=[]),
-    "disk": dict(
-        type="str", rules=("L-E06",), snippet='"${1:20Gi}"',
-        doc="Scratch disk the step asks for, as a quantity: digits and an optional Ki, Mi, Gi, Ti, K, M, G or T, "
-            "for example `\"20Gi\"`. Set it for steps that need more than the platform's default.",
-        pattern=DISK_PATTERN,
-        values=[_value('"20Gi"', "20 gibibytes."), _value('"50Gi"', "50 gibibytes."), _value('"200Gi"', "200 gibibytes.")]),
-    "hpc_time_limit": dict(
+    "walltime": dict(
         type="str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-I02"), snippet='"${1:12h}"',
         doc="The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or "
-            f"`\"720\"` (minutes). Only for `gpu=True` steps. Without it the platform uses {DEFAULT_LIMIT_MINUTES // 60} "
+            f"`\"720\"` (minutes). For a step that runs on an HPC (Slurm) class. Without it the platform uses {DEFAULT_LIMIT_MINUTES // 60} "
             f"hours. A step with a limit above {LONG_GPU_STEP_MINUTES // 60} hours should be resumable.",
-        pattern=TIME_PATTERN, gpu_only=True,
+        pattern=TIME_PATTERN,
         values=[_value('"90m"', "90 minutes."), _value('"4h"', "4 hours."), _value('"12h"', "12 hours."),
                 _value('"24h"', "24 hours.")]),
     "resumable": dict(
-        type="bool|str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-W05"), snippet="True", gpu_only=True,
+        type="bool|str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-W05"), snippet="True",
         doc="Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save "
             "10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says "
-            "the step never continues. Only for `gpu=True` steps; save with `kaos_lib.checkpoint`.",
+            "the step never continues. Save with `kaos_lib.checkpoint`.",
         pattern=TIME_PATTERN,
         values=[_value("True", "Resumable: the step saves a checkpoint 10 minutes before its time limit."),
                 _value("False", "Not resumable: the step is never continued from a checkpoint."),
@@ -125,7 +133,7 @@ def _rules() -> list:
 
 
 def build_schema() -> dict:
-    """The schema as a dict: the `step()` arguments, the renamed ones, the rules, all versioned with the rule set."""
+    """The schema as a dict: the `step()` arguments, the rules, all versioned with the rule set."""
     missing = set(STEP_PARAMS) ^ set(_PARAMS)
     assert not missing, f"STEP_PARAMS and the schema differ: {sorted(missing)}"
     return {
@@ -133,8 +141,7 @@ def build_schema() -> dict:
         "ruleset_version": RULESET_VERSION,
         "guide": GUIDE_URL,
         "authoring_modules": list(AUTHORING_MODULES),
-        "step": {"function": "step", "parameters": [_parameter(i, n) for i, n in enumerate(STEP_PARAMS)],
-                 "renamed_arguments": dict(RENAMED_ARGUMENTS)},
+        "step": {"function": "step", "parameters": [_parameter(i, n) for i, n in enumerate(STEP_PARAMS)]},
         "pipeline": {"function": "pipeline",
                      "doc": "`with pipeline(\"name\") as p:` opens a pipeline; every `step(...)` call inside it adds "
                             "a step. The check reads these calls without running your code."},

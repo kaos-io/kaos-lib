@@ -7,7 +7,7 @@ SETTINGS_FILE = "settings.json"
 STEPS_DIR = "steps"
 COMPOSE_STEP = "compose-and-validate"
 
-DEFAULT_SAMPLE_MB = 50             # `kaosctl step run --dataset`: the most a local sample downloads
+DEFAULT_SAMPLE_MB = 50             # `kaosctl step run --input NAME=REPO@REF`: the most a local sample downloads
 OUTPUT_PRINT_CHARS = 2000          # one output is printed up to this many characters
 LOCAL_RUN_ID = "local"
 
@@ -33,8 +33,8 @@ ENV_ALLOW_PREFIXES = ("LC_",)
 
 # Environment variables only the platform sets for a running step. A step that reads one cannot work on a laptop.
 PLATFORM_ENV = ("MLFLOW_TRACKING_URI", "MLFLOW_TRACKING_TOKEN", "LAKEFS_ENDPOINT", "LAKEFS_ACCESS_KEY",
-                "LAKEFS_SECRET_KEY", "LAKEFS_BEARER_TOKEN", "CHECKPOINT_BUCKET", "OUTPUTS_REPO",
-                "KUBECORE_WORKFLOW_NAME", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "ZITADEL_MACHINE_KEY_FILE",
+                "LAKEFS_SECRET_KEY", "LAKEFS_BEARER_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+                "ZITADEL_MACHINE_KEY_FILE",
                 "KAOS_CHECKPOINT_DIR")
 
 WORK_PREFIX = "/work"              # the platform's per-step folder; a local run maps it into LOCAL_DIR

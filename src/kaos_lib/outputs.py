@@ -1,8 +1,9 @@
 """Run outputs: each ML app writes its results to its own ``outputs-<app>`` repository.
 
 One commit on ``main`` per step per run (a merge from the run's own branch), under
-``<kind>/<experiment>/<run>/`` (kind is ``checkpoints`` by default). Pipelines never write to a ``dataset-*`` repository.
-The repository is declared and created by the platform, never here.
+``<kind>/<experiment>/<run>/`` (kind is ``checkpoints`` by default). This is the writer for scripts outside a
+pipeline: a pipeline step saves what it declares in ``produces=`` with ``kaos_lib.step`` and never calls it. The
+repository is declared and created by the platform, never here.
 """
 from __future__ import annotations
 

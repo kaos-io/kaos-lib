@@ -28,7 +28,7 @@ def test_every_command_of_the_parser_has_its_help_in_the_reference():
     for command in _commands(cli.build_parser(), ["kaosctl"]):
         assert f"`{command}`" in page, command
     assert "kaosctl dataset create" in page and "--layout" in page
-    assert "`kaos-cli` is a hidden alias" in page
+    assert "kaos-cli" not in page and "kubecore" not in page.replace("kubecore/", "")
 
 
 def test_a_published_channel_shows_its_version_and_both_install_forms():

@@ -317,34 +317,49 @@ def _resume_params(existing: Dict[str, str], params) -> list:
     return kept
 
 
-# ------------------------------------------------------------------------------------------------ data lock on the run
+# --------------------------------------------------------------------------------------------- the ledger on the run
 
-_lock_written: Dict[str, int] = {}              # MLflow run id -> how many reads its lock held when last written
+_ledger_written: Dict[str, int] = {}            # MLflow run id -> how many entries its ledger held when last written
 
 
-def write_data_lock(run_id: Optional[str]) -> bool:
-    """Put the step's data lock on the MLflow run ``run_id`` (tags and ``data.lock.json``), once per change.
+def write_ledger(run_id: Optional[str]) -> bool:
+    """Put the step's ledger on the MLflow run ``run_id`` (tags and ``ledger/<step>.json``), once per change.
 
-    What the step read is the platform's to record, not the step's: a model must always say which data it was
-    trained on. Returns whether something was written. Never raises: a tracking problem must not fail a step that
-    is ending.
+    What the step read and wrote is the platform's to record, not the step's: a model must always say which data
+    it was trained on. Returns whether something was written. Never raises: a tracking problem must not fail a
+    step that is ending.
     """
     try:
-        from . import lock
-        reads = len(lock.current().reads)
-        if not run_id or not reads or _lock_written.get(run_id) == reads:
+        from . import lock, runtime
+        ledger = lock.current()
+        size = len(ledger.reads) + len(ledger.writes)
+        if not run_id or not size or _ledger_written.get(run_id) == size:
             return False
-        lock.current().write(run_id)
-        _lock_written[run_id] = reads
+        ledger.write_step(runtime.context().step or "local", run_id)
+        _ledger_written[run_id] = size
         return True
     except Exception as exc:
-        print("kaos-lib: the data lock was not written to MLflow run %s: %s" % (run_id, exc), file=sys.stderr,
+        print("kaos-lib: the ledger was not written to MLflow run %s: %s" % (run_id, exc), file=sys.stderr,
               flush=True)
         return False
 
 
+_ended_runs: list = []                          # MLflow run ids this process ended, in order
+
+
+def mlflow_run_id() -> Optional[str]:
+    """The MLflow run of this step: the active one, else the last one it ended; None when it never used MLflow."""
+    return _mlflow_run_id() or (_ended_runs[-1] if _ended_runs else None)
+
+
+def rewrite_ledgers() -> None:
+    """Write the ledger again to every MLflow run of this process (``step.result`` adds the writes after a run ended)."""
+    for run_id in list(_ledger_written):
+        write_ledger(run_id)
+
+
 def _patch_mlflow_fluent(module) -> None:
-    """Write the data lock when a run ends (``mlflow.end_run()``, leaving ``with mlflow.start_run()``, and the
+    """Write the ledger when a run ends (``mlflow.end_run()``, leaving ``with mlflow.start_run()``, and the
     frameworks' own MLflow integrations all end a run through this function)."""
     original = module.end_run
 
@@ -352,7 +367,9 @@ def _patch_mlflow_fluent(module) -> None:
     def end_run(*args, **kwargs):
         try:
             active = module.active_run()
-            write_data_lock(active.info.run_id if active is not None else None)
+            if active is not None:
+                _ended_runs.append(active.info.run_id)
+            write_ledger(active.info.run_id if active is not None else None)
         except Exception as exc:                # the run must end whatever happens here
             _warn("MLflow (data lock)", exc)
         return original(*args, **kwargs)

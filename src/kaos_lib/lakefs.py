@@ -17,9 +17,9 @@ from urllib3.util.retry import Retry
 
 from . import credentials
 from .config import resolve_endpoint
-from .errors import AuthError, LakeFSError, NotFoundError
+from .errors import AuthError, LakeFSError, NotFoundError, PermissionDenied
 
-USER_AGENT = "kaos-lib/0.4"
+USER_AGENT = "kaos-lib/0.5"
 
 
 def _q(value: str) -> str:
@@ -107,10 +107,10 @@ class LakeFS:
         if self.owner and status in (301, 302, 303, 307, 308, 401, 403):
             return AuthError(f"not shared with your project: project {self.owner}'s lakeFS refused it ({what}). "
                              f"Ask {self.owner} to share the dataset with your project.")
+        if status == 403 or (status == 401 and "insufficient permissions" in detail):   # kaos-lake answers 401 here
+            return PermissionDenied(f"you are not allowed to do this ({what}): {detail}")
         if status in (301, 302, 303, 307, 308, 401):
             return AuthError(f"lakeFS rejected the credential ({what}). Run `kaosctl login` again.")
-        if status == 403:
-            return AuthError(f"you are not allowed to do this ({what}): {detail}")
         if status == 404:
             return NotFoundError(f"not found ({what}): {detail}", status)
         return LakeFSError(f"{what} failed: HTTP {status} {detail}", status)
@@ -166,15 +166,19 @@ class LakeFS:
                    what=f"delete branch {name}")
 
     def merge(self, repo: str, source: str, destination: str, message: str, metadata: Optional[dict] = None,
-              tolerate_empty: bool = False) -> str:
+              tolerate_empty: bool = False, expected_head: Optional[str] = None) -> str:
         """Merge ``source`` into ``destination`` (mergeIntoBranch); returns the merge commit id.
 
         With ``tolerate_empty`` a merge with nothing to merge is a success returning the destination head.
+        With ``expected_head`` (a full commit id) the merge happens only while ``destination`` is still at that
+        commit; when it moved, kaos-lake answers 412 and this raises ``LakeFSError`` with ``status == 412``.
         """
+        body = {"message": message, "metadata": _strs(metadata)}
+        if expected_head:
+            body["expected_head"] = expected_head
         try:
             resp = self._call("POST", f"/repositories/{_q(repo)}/refs/{_q(source)}/merge/{_q(destination)}",
-                              json={"message": message, "metadata": _strs(metadata)},
-                              what=f"merge {source} into {destination}")
+                              json=body, what=f"merge {source} into {destination}")
         except LakeFSError as exc:
             if tolerate_empty and _is_no_changes(exc):
                 return self.branch_commit(repo, destination)
@@ -212,10 +216,14 @@ class LakeFS:
         return self._call("GET", f"/repositories/{_q(repo)}/tags/{_q(tag)}",
                           what=f"tag {tag} of {repo}").json()["commit_id"]
 
+    def commit_info(self, repo: str, commit: str) -> dict:
+        """The commit as lakeFS describes it (``id``, ``parents``, ``message``, ``metadata``); NotFoundError if none."""
+        return self._call("GET", f"/repositories/{_q(repo)}/commits/{_q(commit)}",
+                          what=f"commit {commit} of {repo}").json()
+
     def commit_id(self, repo: str, commit: str) -> str:
         """``commit`` itself when it exists in ``repo`` (NotFoundError otherwise)."""
-        return self._call("GET", f"/repositories/{_q(repo)}/commits/{_q(commit)}",
-                          what=f"commit {commit} of {repo}").json()["id"]
+        return self.commit_info(repo, commit)["id"]
 
     def create_tag(self, repo: str, tag: str, ref: str) -> None:
         self._call("POST", f"/repositories/{_q(repo)}/tags", json={"id": tag, "ref": ref},

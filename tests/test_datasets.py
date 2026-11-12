@@ -194,3 +194,8 @@ def test_published_storage_prefix_wins_over_env(fake, client, monkeypatch):
     monkeypatch.setenv("KUBECORE_STORAGE_NAMESPACE_BASE", "gs://other/lake")
     datasets.create_dataset("cats", "yolo", "", client, {"classes": ["a"]})
     assert re.fullmatch(r"gs://bucket/lakefs/dataset-cats-[0-9a-f]{8}", fake.repos["dataset-cats"]["ns"])
+
+
+@pytest.mark.parametrize("name", ["BAD", "x", "has_underscore", "-starts-with-a-hyphen"])
+def test_a_name_no_repository_can_have_is_not_a_repository(name):
+    assert not datasets.is_repo_name(name)

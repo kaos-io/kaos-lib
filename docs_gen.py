@@ -50,8 +50,7 @@ def cli_reference(parser: argparse.ArgumentParser) -> str:
     """Markdown with one section per command: its `--help` text, exactly as the command prints it."""
     out = ["# CLI reference", "",
            "Generated from the `kaosctl` parser on every build of this site, so it always matches the release "
-           "it documents. `kaos-cli` is a hidden alias of `kaosctl` for one release (it prints a notice) and "
-           "`kubecore` a deprecated one.", ""]
+           "it documents.", ""]
     for path, p in _walk(parser, ["kaosctl"]):
         p.prog = " ".join(path)
         level = "#" * min(2 + len(path) - 1, 4)

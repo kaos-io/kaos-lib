@@ -8,7 +8,7 @@ import subprocess
 import pytest
 
 from kaos_lib import cli
-from kaos_lib.studio import proc, suggest
+from kaos_lib.studio import proc, pyenv, suggest
 from studio_helpers import template_repo
 
 INSTALLERS = {"apt", "apt-get", "dpkg", "dnf", "yum", "rpm", "zypper", "pacman", "apk", "snap", "flatpak", "brew",
@@ -94,6 +94,6 @@ def test_should_install_python_packages_only_into_the_steps_own_environment(tmp_
     installs = [c for c in recorder.started if "install" in c and "pip" in c]
     assert installs
     for cmd in installs:
-        assert str(repo / "steps/data_summary/.venv") in " ".join(cmd), cmd     # always aimed at the step's venv
+        assert str(pyenv.step_env(repo / "steps/data_summary")) in " ".join(cmd), cmd   # always aimed at the step's venv
     assert not (recorder.programs() & INSTALLERS)
     assert all(p in ("uv", "git") or p.startswith("python") for p in recorder.programs())   # uv, or Python itself

@@ -1,8 +1,11 @@
 """raw layout: any repository, whole tree or a prefix; label-driven layout choice; empty datasets."""
+import json
+
 import pytest
 
 from conftest import write_dataset
 from kaos_lib import cli, datasets
+from kaos_lib.layouts import local
 from kaos_lib.errors import DatasetError, EmptyDataset
 from kaos_lib import layouts
 
@@ -63,8 +66,8 @@ def test_raw_uses_staged_dir_whole_and_prefix(repo, fake, client, tmp_path, monk
     staged = tmp_path / "lustre" / fake.head("my-repo")
     (staged / "sub").mkdir(parents=True)
     (staged / "sub" / "b.txt").write_text("B")
-    (staged / ".kaos-ready").write_text("")
-    monkeypatch.setenv("KUBECORE_STAGED_DIR", str(staged))
+    local.staged_marker(staged).write_text(json.dumps({"repo": "my-repo", "commit": staged.name, "full": True}))
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(staged.parent))
     assert datasets.materialize(repo, client=client) == staged
     assert datasets.materialize(repo, client=client, prefix="sub") == staged / "sub/"
     assert gets(fake) == []                                               # nothing downloaded
@@ -100,15 +103,26 @@ def test_raw_skeleton_is_a_readme_validates_nothing_publishes_as_is(fake, client
     junk.mkdir()
     (junk / "anything.bin").write_bytes(b"\x00")
     assert raw.validate(junk).ok
-    result = raw.publish(junk, "my-repo", "first", client=client)
-    assert result.created and fake.repos["my-repo"]["metadata"] == {"kaos.kind": "dataset", "kaos.template": "raw"}
-    assert "anything.bin" in fake.tree("my-repo", result.branch)
+    result = raw.publish(junk, "dataset-junk", "first", client=client)
+    assert result.created and fake.repos["dataset-junk"]["metadata"] == {"kaos.kind": "dataset", "kaos.template": "raw"}
+    assert "anything.bin" in fake.tree("dataset-junk", result.branch)
+
+
+def test_a_first_push_to_a_name_no_dataset_can_have_is_refused_before_anything_is_created(fake, client, tmp_path):
+    junk = tmp_path / "junk"
+    junk.mkdir()
+    (junk / "anything.bin").write_bytes(b"\x00")
+    with pytest.raises(DatasetError, match="my-new-repo does not exist, and it cannot be created as a dataset: a "
+                                           "dataset is called dataset-<name>.* Push to dataset-my-new-repo instead"):
+        layouts.load("raw").publish(junk, "my-new-repo", "first", client=client)
+    assert "my-new-repo" not in fake.repos
 
 
 def test_pulled_copy_pushes_back_without_its_marker(repo, fake, client, tmp_path):
-    """A folder made by pull carries the cache marker; pushing it unchanged has nothing to publish."""
+    """A folder made by pull holds only the dataset's files (its marker is beside it): pushing it back unchanged has
+    nothing to publish."""
     out = datasets.materialize(repo, tmp_path / "copy", client=client)
-    assert (out / ".kubecore-dataset.json").is_file()
+    assert local.marker_file(out).is_file() and not list(out.glob(".kubecore*"))
     with pytest.raises(DatasetError, match="nothing to publish"):
         datasets.publish_tree(out, "my-repo", "unchanged", client=client)
     (out / "new.txt").write_bytes(b"N")
