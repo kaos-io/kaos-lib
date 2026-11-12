@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "2.3.0",
+  "ruleset_version": "2.3.1",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"

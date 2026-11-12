@@ -132,18 +132,22 @@ not `latest` moves.
 
 ### When two runs ask at once {#when-two-runs-write-at-once}
 
-A dataset has one `latest`. When two runs of the same pipeline both ask to move it, the first to finish moves it. The
-second finds that `latest` has moved while it was running, moves nothing and fails, and says which dataset moved. Its
-versions are kept. Start the run again: it then starts from the new `latest`. Only one pipeline writes a dataset, so this
-needs two runs of the same pipeline at the same time.
+A dataset has one `latest`. When two runs of the same pipeline overlap and both ask to move it, the first to finish moves
+it. **The second is refused whole, at the end.** It finds that `latest` has moved while it was running, and it fails with
+a message that says which datasets it promoted (there can be some, when it was overtaken between two of them), which one
+was moved by the other run, and which were not tried. A dataset the other run moved is not moved by this one. Every
+version this run made stays kept, and you can read it by its exact version. Start a new run to promote the datasets it
+names: the new run starts from the new `latest`. Only one pipeline writes a dataset, so this needs two runs of the same
+pipeline at the same time.
 
 ### If the end of the run is cut short {#if-the-end-of-the-run-is-cut-short}
 
 Moving two or more `latest` names is two or more actions, and one of them can fail after another succeeded (the data
 store is not reachable, or another run moved a dataset in the instant between the check and the move). Then the datasets
-that were already moved stay moved, and the others do not. The run fails and the log names both lists. Nothing is lost:
-every version the run made is kept. The platform tries the last task again by itself when its machine is lost, and a
-dataset that already points to this run's version is recognised and left alone. In every other case, start the run
-again: it starts from the `latest` of each dataset as it is then.
+that were already moved stay moved, and the others do not. The run fails and the message names both lists, and says
+whether trying again can help. Nothing is lost: every version the run made is kept. After an outage the platform tries the
+last task again by itself, and a dataset that this run already moved is recognised (even when another run has moved it
+again since) and left alone. When another run moved a dataset, trying again cannot finish it: start a new run to promote
+the datasets the message names.
 
 Next: [Datasets, versions and hashes](datasets-versions-hashes.md).

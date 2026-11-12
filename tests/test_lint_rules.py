@@ -229,3 +229,40 @@ def test_when_on_a_value_of_a_needed_step(tmp_path, when, expect):
         assert not [m for m in out if "when" in m], out
     else:
         assert any(expect in m for m in out), out
+
+
+# --- a value is compared exactly; a line break in when=; one name for one thing across needed steps ----------------
+
+def when_body(condition):
+    return ('    e = step("evaluate", kind="evaluate")\n'
+            '    p = step("publish", kind="publish", needs=[e], when="' + condition + '")\n')
+
+
+@pytest.mark.parametrize("written, said", [
+    ("1e400", "too large"), (".5", "looks like a number"), ("+1", "looks like a number"), ("01", "looks like a number"),
+    ("5.", "looks like a number"), ("True", "write true in lowercase"), ("NULL", "write null in lowercase"),
+    ("9007199254740993", "an integer above 9007199254740992"),
+])
+def test_a_text_compared_with_a_steps_value_that_cannot_be_matched_reliably_is_refused(tmp_path, written, said):
+    out = messages(tmp_path, when_body(f"evaluate.rows == '{written}'"), {"evaluate": "", "publish": ""}, rule="L-E06")
+    assert any("cannot be matched reliably" in m and said in m for m in out), out
+
+
+@pytest.mark.parametrize("written", ["1000000", "1e6", "1.0", "0.5", "-3", "1e-5", "true", "false", "abc", "9007199254740992"])
+def test_a_text_that_can_be_matched_is_accepted(tmp_path, written):
+    out = messages(tmp_path, when_body(f"evaluate.rows != '{written}'"), {"evaluate": "", "publish": ""}, rule="L-E06")
+    assert not [m for m in out if "when" in m], out
+
+
+def test_a_line_break_in_when_is_refused(tmp_path):
+    body = '    p = step("publish", kind="publish", when="experiment-name == a\\nand experiment-name == b")\n'
+    out = messages(tmp_path, body, {"publish": ""}, rule="L-E06")
+    assert any("holds a control character" in m for m in out), out
+
+
+def test_a_step_that_writes_a_name_a_needed_step_writes_is_refused(tmp_path):
+    body = ('    a = step("first", kind="transform", produces=[artifact("report")])\n'
+            '    b = step("second", kind="transform", needs=[a], produces=[artifact("report")])\n')
+    out = messages(tmp_path, body, {"first": "", "second": ""}, rule="L-E07")
+    assert any("report is both something the step it needs, 'a', produces and one of its own outputs (produces=)" in m
+               for m in out), out

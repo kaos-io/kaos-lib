@@ -10,6 +10,13 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; ev
 template.** Nothing in kaos-lib converts an old app.
 
 ### Added
+- A value in `when=` is compared exactly: a string as text, a number or a boolean by its JSON text (`evaluate.rows !=
+  1000000` is false for 1000000; `1e6`, `1000000.0` and `1000000` all match it). A text that could never match is refused
+  by `kaosctl lint` and the render (`.5`, `+1`, `True`, an integer above 9007199254740992, a line break). `when=` text with a
+  control character is refused. `L-E07` also refuses a step that writes a name a step it needs writes.
+- The final task of a run says the truth in every outcome (what it promoted, what another run moved, what it did not try, and
+  whether trying again helps), and no pod starts for it when no `promote-<name>` is `true`. A run that overlaps another
+  promoting run on the same dataset is refused whole at the end; its versions stay readable by their exact version.
 - Conditions and skipping. `when=` can test a value an earlier step handed on: `when="evaluate.passed == true"`
   (`<step>.<value>`, the step must be in `needs=`; a missing value stops the run with a message that names the step and the
   value). `kaos_lib.step.skip("reason")` ends a step as skipped: exit code 0, a skipped result with the reason, nothing

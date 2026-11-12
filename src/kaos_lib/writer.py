@@ -1,6 +1,6 @@
 """Save what a step wrote: one version of a dataset, or the files of a model or an artifact.
 
-``step.result()`` saves every output it declared in two phases, and the same code does all three kinds:
+``step.result()`` saves every output it declared in two phases:
 
 1. **Seal** (``seal``), for every output, moving no ``main``. Start a run branch from the head of ``main`` (the
    last version), upload what is new or changed and delete what is gone below the output's path (so a retry
@@ -9,18 +9,18 @@
    version and cost nothing. A dataset's file that differs from ``main`` but is exactly what the newest version
    any run sealed in it holds is copied inside the repository from that version, not uploaded. Content that an
    earlier attempt of the same step already sealed is reused.
-2. **Promote** (``promote``), only when everything is sealed. A model or an artifact is merged into ``main``. A
-   dataset is merged only when the run asks, and on the condition that ``main`` is still where the seal started
-   (``expected_head``); when it moved, another run promoted first, so seal again on the new head and retry.
+2. **Promote** (``promote``), only when everything is sealed, and only a model or an artifact: it is merged into
+   ``main`` of the outputs repository under its run-unique path.
 
-Nothing is written to ``main`` directly. A step that dies half-way leaves uncommitted uploads on its branch and
-no version. A failed step moves no dataset's ``latest``, with one exception that cannot be closed: promoting two
-datasets is two merges in two repositories, and the second can fail after the first has moved.
+A dataset is never promoted by its step. The step only seals it, and the platform's final task of the run moves
+``latest`` of every dataset the run form asked for, all or none, once every step has ended well (the engine's
+``kubecore/promote.py``: it checks that each ``main`` is still where the seal started and merges each sealed version on
+that condition, with the metadata ``kaos.promoted=<sealed commit>``).
 
-Order of promotion, in phase 2: the models and artifacts are merged into ``main`` of the outputs repository first,
-then the datasets. When a later promotion fails, a model or an artifact that is already merged stays on ``main``
-under its run-unique path ``<name>/<experiment>/<run>/`` while the step fails. Nothing refers to it, because the
-step publishes no result. A retry of the step replaces that folder with exactly what the retry wrote.
+Nothing is written to ``main`` directly. A step that dies half-way leaves uncommitted uploads on its branch and no
+version. A failed step moves no dataset's ``latest``. When a later output of the step fails after a model or an artifact
+was merged, that one stays on ``main`` under ``<name>/<experiment>/<run>/`` while the step fails. Nothing refers to it,
+because the step publishes no result. A retry of the step replaces that folder with exactly what the retry wrote.
 """
 from __future__ import annotations
 
@@ -38,7 +38,6 @@ from .lakefs import LakeFS
 from .transfer import apply_plan, local_manifest, plan_mirror, upload
 
 MAIN = "main"
-PROMOTE_ATTEMPTS = 3
 KEPT = "k-"               # every dataset version a run sealed is tagged with this start
 KEPT_TIMED = "k-2"        # ... followed by the UTC time it was sealed (years 2000-2999), so the newest is the last name
 KEPT_NAME = re.compile(r"k-(\d{8}T\d{6}Z)-.+-([0-9a-f]{12})")
@@ -46,7 +45,6 @@ LOOK_BACK_DAYS = (1, 7, 35, 365)   # how far back, in turn, the newest kept vers
 MIN_REUSE_BYTES = 1 << 20          # below this many bytes to upload, looking for a version to copy from costs more
 PROMOTED = "kaos.promoted"   # on the merge that moves `latest`: the full id of the sealed version it promoted, so
 #                              the data store knows that version was promoted and never expires it
-HEAD_MOVED = 412          # kaos-lake: the merge's expected head is not the branch's head any more
 
 
 def _name(text: str) -> str:
@@ -90,11 +88,6 @@ class Sealed:
     tag: Optional[str] = None
     open: bool = False                             # whether the run branch exists
     files: dict = field(default_factory=dict)      # repository path -> (size, md5) of the folder
-
-    @property
-    def guarded(self) -> bool:
-        """Whether the merge must name the head it expects: a dataset has one writer and one latest."""
-        return self.tag_prefix is not None
 
 
 def say(line: str) -> None:
@@ -262,31 +255,15 @@ def seal(client: LakeFS, repo: str, folder: pathlib.Path, *, name: str, prefix: 
 
 
 def promote(s: Sealed) -> str:
-    """Merge the sealed commit into ``main``; returns the commit that is now the version (the merge commit).
-
-    A dataset's merge names the head it expects. When ``main`` moved (HTTP 412) the output is sealed again on the
-    new head, at most ``PROMOTE_ATTEMPTS`` times.
-    """
-    for attempt in range(1, PROMOTE_ATTEMPTS + 1):
-        if s.commit == s.head:                        # the folder is what main already holds
-            discard(s)
-            return s.head
-        try:
-            merged = s.client.merge(s.repo, s.commit, MAIN, s.message, {**(s.meta or {}), PROMOTED: s.commit},
-                                    tolerate_empty=True,
-                                    expected_head=s.head if s.guarded else None)
-        except LakeFSError as exc:
-            if exc.status != HEAD_MOVED:
-                raise
-            if attempt == PROMOTE_ATTEMPTS:
-                raise StepError(f"output '{s.name}': {s.repo} changed {PROMOTE_ATTEMPTS} times while this step was "
-                                f"promoting it. Another run is writing the same dataset. The sealed version "
-                                f"{s.commit[:12]} is kept as {s.tag}.") from None
-            discard(s)
-            s.__dict__.update(seal(s.client, s.repo, s.folder, name=s.name, prefix=s.prefix, branch=s.branch,
-                                   tag_prefix=s.tag_prefix, message=s.message, meta=s.meta).__dict__)
-            continue
-        _check(s, merged, "It is now the latest version: tell the platform team.")
+    """Merge the sealed commit of a model or an artifact into ``main``; returns the commit that is now the version (the
+    merge commit). A dataset is not promoted here: the platform's final task moves its ``latest`` for the whole run."""
+    if s.tag_prefix is not None:
+        raise StepError(f"output '{s.name}' is a dataset: a step only seals it. The platform moves its latest when the "
+                        f"whole run has ended well.")
+    if s.commit == s.head:                            # the folder is what main already holds
         discard(s)
-        return merged
-    raise AssertionError("unreachable")
+        return s.head
+    merged = s.client.merge(s.repo, s.commit, MAIN, s.message, {**(s.meta or {}), PROMOTED: s.commit}, tolerate_empty=True)
+    _check(s, merged, "It is now saved: tell the platform team.")
+    discard(s)
+    return merged

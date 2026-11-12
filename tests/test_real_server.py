@@ -79,11 +79,19 @@ def tree(client, repo, ref):
     return sorted(o["path"] for o in client.list_objects(repo, ref))
 
 
+def promote_dataset(s):
+    """What the platform's final task does for one dataset: merge the sealed version, guarded by the head it started on."""
+    if s.commit == s.head:
+        return s.head
+    return s.client.merge(s.repo, s.commit, "main", s.message, {**(s.meta or {}), writer.PROMOTED: s.commit},
+                          tolerate_empty=True, expected_head=s.head)
+
+
 def write(client, repo, root, run, promote=True):
     s = writer.seal(client, repo, root, name="out", branch=writer.run_branch(run, "prepare", "out"),
                     tag_prefix=writer.keep_prefix(run, "prepare"), message=f"out: {run}", meta={"kaos.run": run})
     try:
-        return writer.promote(s) if promote else s.commit
+        return promote_dataset(s) if promote else s.commit
     finally:
         writer.discard(s)
 
@@ -131,30 +139,8 @@ def test_the_server_refuses_a_merge_without_an_expected_head_and_one_onto_a_move
     client.merge("dataset-written-3", "run-a", "main", "a", expected_head=head)
     with pytest.raises(LakeFSError) as err:
         client.merge("dataset-written-3", "run-b", "main", "b", expected_head=head)       # the mix the fake would allow
-    assert err.value.status == writer.HEAD_MOVED
+    assert err.value.status == 412        # kaos-lake: the expected head is not main's head
     assert tree(client, "dataset-written-3", "main") == ["only-run-a.bin"]
-
-
-def test_two_promoting_runs_the_second_restages_and_main_is_never_a_mix(lake, tmp_path):
-    client, other = lake.wait_for_dataset("writer", "dataset-written-4"), lake.app_client("writer")
-    a = folder(tmp_path, {"only-a.bin": b"a", "shared.bin": b"from a"}, "a")
-    b = folder(tmp_path, {"only-b.bin": b"b", "shared.bin": b"from b"}, "b")
-    real_merge, seen = client.merge, []
-
-    def merge(*args, **kw):
-        if not seen:
-            seen.append("a")
-            write(other, "dataset-written-4", a, "run-a")                                 # run A promotes first
-        try:
-            return real_merge(*args, **kw)
-        except LakeFSError as exc:
-            seen.append(exc.status)
-            raise
-
-    client.merge = merge
-    version = write(client, "dataset-written-4", b, "run-b")
-    assert seen == ["a", 412] and version == client.branch_commit("dataset-written-4", "main")
-    assert tree(client, "dataset-written-4", "main") == ["only-b.bin", "shared.bin"]
 
 
 def test_a_refusal_and_a_rejected_credential_are_told_apart(lake):
@@ -205,7 +191,7 @@ def test_a_second_live_attempt_cannot_swap_content_under_the_first(lake, tmp_pat
     writer.seal(other, "dataset-written-7", folder(tmp_path, {"b.bin": b"b"}, "b"), name="out",
                 branch=writer.run_branch("run-1", "prepare", "out"), tag_prefix=writer.keep_prefix("run-1", "prepare"),
                 message="out", meta={"kaos.run": "run-1"})
-    writer.promote(s)
+    promote_dataset(s)
     assert tree(client, "dataset-written-7", "main") == ["a.bin"]
 
 

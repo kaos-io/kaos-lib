@@ -258,6 +258,10 @@ def _when_argument(ctx, step) -> Iterable[Hit]:
         yield Hit(ctx.file, node, f"{label}: when= is written with plain names, not with {{{{...}}}}. "
                   f"{when_text.ALLOWED}", f"Write the name: {when_text.EXAMPLE}.")
         return
+    if when_text.has_control_character(text):
+        yield Hit(ctx.file, node, f"{label}: when={text!r} holds a control character (a line break, a tab). Write the "
+                  f"condition on one line.", "Write the condition on one line.")
+        return
     named = when_text.fields(text)
     if named is None:
         yield Hit(ctx.file, node, f"{label}: when={text!r} is not a condition the platform can read. "
@@ -274,6 +278,12 @@ def _when_argument(ctx, step) -> Iterable[Hit]:
                           f"name step.result() could have been given (letters, digits and _).",
                           f"Write {head}.<value> with the keyword you gave step.result(<value>=...).")
                 return
+            for compared, _, value in when_text.comparisons(text):
+                problem = when_text.value_problem(value) if compared == field else ""
+                if problem:
+                    yield Hit(ctx.file, node, f"{label}: when= compares {head}.{key} with {value!r}, which cannot be "
+                              f"matched reliably: {problem}.", "Write the text the way the message says.")
+                    return
             continue
         if dot and head in declared:
             yield Hit(ctx.file, node, f"{label}: when= reads a value of step {head!r}, which this step does not need.",
@@ -333,6 +343,7 @@ def step_declaration(ctx: LintContext) -> Iterable[Hit]:
             inputs = yield from _inputs(ctx, step)
             produced = yield from _produces(ctx, step)
             yield from _input_is_output(ctx, step, inputs, produced)
+            yield from _output_of_needed_step(ctx, step, produced, made)
             yield from _control_handles_no_data(ctx, step, inputs, produced)
             yield from _kind_contract(ctx, step)
             yield from _same_name_twice(ctx, step, inputs, made)
@@ -382,6 +393,19 @@ def _input_is_output(ctx, step, inputs, produced) -> Iterable[Hit]:
                   f"config/) or the produced name.")
 
 
+def _output_of_needed_step(ctx, step, produced, made) -> Iterable[Hit]:
+    """A step reads what a needed step wrote by name, and writes its own outputs by name: one name is one thing."""
+    needs = step.node("needs")
+    own = {n for _, n in produced}
+    for el in needs.elts if isinstance(needs, (ast.List, ast.Tuple)) else ():
+        for _, name in made.get(getattr(el, "id", None), ()):
+            if name in own:
+                yield Hit(ctx.file, ctx.span(step.node("produces")), f"{_step_label(step)}: {name} is both something "
+                          f"the step it needs, {el.id!r}, produces and one of its own outputs (produces=): the step "
+                          f"reads and writes by name, so the two must differ.", "Rename the produced name of one of "
+                          "the two steps.")
+
+
 def _kind(ctx, step, any_kind) -> Iterable[Hit]:
     kinds = ", ".join(STEP_KINDS)
     if "kind" not in step.args:
@@ -397,8 +421,8 @@ def _kind(ctx, step, any_kind) -> Iterable[Hit]:
 
 def _control_handles_no_data(ctx, step, inputs, produced) -> Iterable[Hit]:
     if step.value("kind") == "control" and (inputs or produced):
-        yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)} is a control step: it steers the run "
-                  "and handles no data, so it takes no inputs= and no produces=.",
+        yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)}: a control step steers the run and "
+                  "handles no data, so it takes no inputs= and no produces=.",
                   "Give the step the kind of the work it does: " + ", ".join(k for k in STEP_KINDS if k != "control"))
 
 

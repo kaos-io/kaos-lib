@@ -167,8 +167,8 @@ def test_lint_does_not_read_a_virtualenv_kaos_dev_made_nor_what_git_ignores(tmp_
 # ------------------------------------------------------------ what the engine refuses, the linter refuses too
 ENGINE = [
     ('    a = step("a", "train")\n', "L-E06", "step() takes only the name by position"),
-    ('    a = step("a", kind="control", inputs=["dataset"])\n', "L-E07", "is a control step: it steers the run"),
-    ('    a = step("a", kind="control", produces=[artifact("r")])\n', "L-E07", "is a control step"),
+    ('    a = step("a", kind="control", inputs=["dataset"])\n', "L-E07", "a control step steers the run"),
+    ('    a = step("a", kind="control", produces=[artifact("r")])\n', "L-E07", "a control step steers the run"),
     ('    a = step("main", kind="evaluate")\n', "L-E07", "The step name 'main' is the platform's"),
     ('    a = step("compose-and-validate", kind="evaluate")\n', "L-E07", "is the platform's"),
     ('    a = step("x-hpc", kind="evaluate")\n', "L-E07", "The step name 'x-hpc' is the platform's"),

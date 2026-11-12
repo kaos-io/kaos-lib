@@ -70,7 +70,15 @@ One comparison is a name, then `==` or `!=`, then a text. There are two kinds of
 
 A value of the run form is text. A `true`, `yes` or `on` written in `config/` reaches the form as `true`, so
 `when="publish-enabled == true"` works with any of them. Join comparisons with `and` and `or`. `and` is taken first. There are no parentheses, and no `<` or `>`. A text with
-spaces is quoted. Values are compared as text: `true`, `0.9` and `3` are the words as they are written in the result.
+spaces is quoted.
+
+**What is compared, exactly.** A value that is a string is compared with your text as text. A value that is a number or
+`true` or `false` is compared by its JSON text: the way JSON writes it, without an exponent for the sizes people use.
+So `evaluate.rows != 1000000` is false when `rows` is 1000000, and `1e6`, `1000000` and `1000000.0` all match the value
+1000000. `1.0` matches the value 1, and `1e-5` matches 0.00001. A text that could never match is refused when the
+pipeline is built, with what to write instead: a number written another way than JSON writes it (`.5`, `+1`, `01`, `5.`),
+`True` or `NULL` that is not in lowercase, an integer above 9007199254740992 (a result holds a number as a double), and a
+text with a line break or a tab. A value that is `null` counts as missing.
 
 If you need a number comparison, compare in the step. Let `evaluate` hand on `passed=score >= 0.9`, and test
 `evaluate.passed`.
@@ -118,6 +126,7 @@ skipped. Give `upstream_skipped={"publish": "the reason"}` to `testing.running`,
 | `when= reads a value of step 'evaluate', which this step does not need` | `evaluate` is not in `needs=` | add it to `needs=` |
 | `when='score > 0.5' is not a condition the platform can read` | only `==` and `!=` exist | compare in the step and test a `passed` value |
 | `step 'evaluate' gave no value 'passed' ...` | `evaluate` was skipped, did not run, or never set the value | set the value in every case, or test a form field |
+| `when= compares evaluate.rows with '.5', which cannot be matched reliably: ...` | the text looks like a number but is not written the way JSON writes numbers | write `0.5` (the message says what to write) |
 | `step.skip() needs the reason, as text` | the reason is empty | write why: `step.skip("nothing to publish")` |
 
 Next: [Several pipelines](several-pipelines.md).

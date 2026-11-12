@@ -71,11 +71,23 @@ def sealed(client, root, run="run-1", repo=REPO, prefix="", dataset=True):
                        message=f"clean: {run}", meta={"kaos.run": run, "kaos.step": "prepare"})
 
 
+def promote_dataset(s):
+    """What the platform's final task does for one dataset (the engine's kubecore/promote.py): merge the sealed version
+    on the condition that main is still where the seal started."""
+    if s.commit == s.head:
+        writer.discard(s)
+        return s.head
+    merged = s.client.merge(s.repo, s.commit, writer.MAIN, s.message, {**(s.meta or {}), writer.PROMOTED: s.commit},
+                            tolerate_empty=True, expected_head=s.head)
+    writer.discard(s)
+    return merged
+
+
 def save(client, root, promote=False, **kw):
-    """What ``step.result()`` does for one output: seal, then promote when asked."""
+    """What a run does for one output: seal, then promote when asked (a dataset by the final task's merge)."""
     s = sealed(client, root, **kw)
     try:
-        return writer.promote(s) if promote else s.commit
+        return (promote_dataset(s) if s.tag_prefix else writer.promote(s)) if promote else s.commit
     finally:
         writer.discard(s)
 
@@ -159,47 +171,12 @@ def test_a_sealed_commit_is_not_reused_once_main_has_moved(lake, client, tmp_pat
     assert lake.tree(REPO, again) == {"x": b"x"} and len(tags(lake)) == 3
 
 
-def test_two_promoting_runs_the_second_is_refused_restages_and_main_is_never_a_mix(lake, client, tmp_path):
-    if hasattr(lake, "server") and not lake.server.is_kaos_lake:
-        pytest.skip("needs kaos-lake: upstream lakeFS ignores expected_head")
-    a = folder(tmp_path, {"only-a.bin": b"a", "shared.bin": b"from a"}, "a")
-    b = folder(tmp_path, {"only-b.bin": b"b", "shared.bin": b"from b"}, "b")
-    real, seen = client.merge, []
-
-    def merge(*args, **kw):
-        if not seen:                                  # B is about to merge: A gets in first
-            seen.append("a")
-            save(lake.client(), a, promote=True, run="run-a")
-        try:
-            return real(*args, **kw)
-        except LakeFSError as exc:
-            seen.append(exc.status)
-            raise
-
-    client.merge = merge
-    version = save(client, b, promote=True, run="run-b")
-    assert seen == ["a", 412] and version == lake.head(REPO)
-    assert lake.tree(REPO, "main") == {"only-b.bin": b"b", "shared.bin": b"from b"}
-
-
-def test_a_dataset_that_keeps_moving_fails_after_three_tries_naming_the_tag_of_the_commit_it_kept(lake, client, tmp_path):
-    client.merge = lambda *a, **k: (_ for _ in ()).throw(LakeFSError("main moved", 412))
-    s = sealed(client, folder(tmp_path, ONE))
-    with pytest.raises(StepError) as err:
-        writer.promote(s)
-    assert (f"dataset-clean changed 3 times while this step was promoting it. Another run is writing the same "
-            f"dataset. The sealed version {s.commit[:12]} is kept as {s.tag}.") in str(err.value)
-    assert tags(lake)[s.tag] == s.commit and lake.tree(REPO, "main") == {}
-    writer.discard(s)
-    assert set(lake.repos[REPO]["branches"]) == {"main"}
-
-
-def test_a_merge_names_the_head_it_expects_and_merges_the_sealed_commit_not_the_branch_name(lake, client, tmp_path):
+def test_the_final_tasks_merge_names_the_head_it_expects_and_merges_the_sealed_commit_not_the_branch_name(lake, client, tmp_path):
     first, calls = lake.head(REPO), []
     real = client.merge
     client.merge = lambda *a, **k: calls.append((a[1], k.get("expected_head"))) or real(*a, **k)
     s = sealed(client, folder(tmp_path, ONE))
-    writer.promote(s)
+    promote_dataset(s)
     assert calls == [(s.commit, first)]
 
 
@@ -209,7 +186,7 @@ def test_a_second_live_attempt_cannot_swap_content_under_the_first(lake, client,
     a, b = folder(tmp_path, {"a.bin": b"a"}, "a"), folder(tmp_path, {"b.bin": b"b"}, "b")
     s = sealed(client, a)
     sealed(lake.client(), b)                          # B: restages run-run-1-prepare-clean, seals, pauses
-    version = writer.promote(s)
+    version = promote_dataset(s)
     assert lake.tree(REPO, "main") == {"a.bin": b"a"} and lake.tree(REPO, version) == {"a.bin": b"a"}
 
 
@@ -648,30 +625,6 @@ def test_the_upload_after_a_failed_copy_is_tried_again_like_any_upload(small_fil
     assert lake.tree(REPO, b) == {"x": b"x"} and lake.upload_answers == []
 
 
-def test_a_promotion_refused_on_a_moved_head_seals_again_and_copies_from_the_last_version(
-        small_files_count, lake, client, tmp_path, clock):
-    if hasattr(lake, "server") and not lake.server.is_kaos_lake:
-        pytest.skip("needs kaos-lake: upstream lakeFS ignores expected_head")
-    save(client, folder(tmp_path, ONE), run="run-a")
-    real, seen = client.merge, []
-
-    def merge(*args, **kw):
-        if not seen:                                  # run-b is about to merge: run-c gets in first
-            seen.append("c")
-            clock.now = START - dt.timedelta(hours=1)          # sealed earlier than run-b's version: the newest is run-b's
-            save(lake.client(), folder(tmp_path, {"other": b"o"}, "c"), promote=True, run="run-c")
-            clock.now = START
-            lake.calls.clear()
-            lake.writes.clear()
-        return real(*args, **kw)
-
-    client.merge = merge
-    b = save(client, folder(tmp_path, ONE, "second"), run="run-b", promote=True)
-    assert uploads(lake) == [] and len(copies(lake)) == 3          # the second seal copied them again
-    assert lake.tree(REPO, b) == {**ONE}
-    assert lake.head(REPO) == b
-
-
 def test_a_dataset_sealed_below_a_prefix_copies_the_files_below_it(small_files_count, lake, client, tmp_path):
     save(client, folder(tmp_path, {"p/other.bin": b"o"}, "zero"), run="run-0", promote=True)       # not below q/
     files = {"q/a.bin": b"a", "q/d/b.bin": b"b"}
@@ -777,3 +730,11 @@ def test_a_tag_of_this_run_and_step_is_reused_only_when_it_is_exact_and_names_th
     lake.repos[REPO]["tags"].pop(a.tag)
     lake.repos[REPO]["tags"][f"k-{writer._stamp(START)}-{prefix[2:]}-{'0' * 12}"] = a.commit
     assert _seal_as(client, folder(tmp_path, {"f": b"1"}, "o3"), "r1", "p").commit != a.commit
+
+
+def test_a_step_cannot_promote_a_dataset(lake, client, tmp_path):
+    s = sealed(client, folder(tmp_path, ONE))
+    with pytest.raises(StepError, match="a step only seals it"):
+        writer.promote(s)
+    assert lake.tree(REPO, "main") == {}
+    writer.discard(s)
