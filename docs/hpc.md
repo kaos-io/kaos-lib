@@ -13,15 +13,14 @@ A step does not name a queue or a quality of service. The platform chooses them.
 
 ## Set the longest run
 
-Slurm stops a job at its time limit. `walltime=` on the step sets the limit as text: `"90m"`, `"12h"` or `"720"`
-(minutes). A step that sets none gets the default in [the limits](must-and-can.md#the-limits).
+Slurm stops a job at its time limit. The limit is the one every step has, wherever it runs: the field `<step>-walltime`
+of the run form, whose default is `walltime=` on the step: `"90m"`, `"12h"` or `"720"` (minutes). A step that sets none
+gets `4h` ([the limits](must-and-can.md#the-limits)). [Long jobs](long-jobs.md#the-time-limit) says what happens when
+the limit is reached.
 
 ```python title="pipeline.py" hl_lines="24"
 --8<-- "examples/first-pipeline/hpc/pipeline.py"
 ```
-
-`walltime=` is read when the step runs on a Slurm class, and only then. A step of kind `ingest`, `publish` or `control`
-never runs there, and `walltime=` on one is refused.
 
 ## What differs on HPC (Slurm)
 

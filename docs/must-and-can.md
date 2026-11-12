@@ -8,7 +8,7 @@ pipeline, or by the library when the step runs.
 
 | rule | what happens if you break it |
 |---|---|
-| Give every step a `kind=`: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control` ([the six kinds](first-step.md#the-six-kinds)) | the pipeline is refused: `has no kind=, which every step declares` |
+| Give every step a `kind=` and keep to the contract of that kind ([Step kinds](step-kinds.md)) | the pipeline is refused: `has no kind=, which every step declares`, or the sentence of the kind ([the sentences](when-something-goes-wrong.md#refused-when-the-pipeline-is-built)) |
 | Call `step.start()` first and `step.result()` last, once | `call step.start() first.`; a step without `step.result()` fails with `ended without step.result()` |
 | Name steps, inputs and outputs with lowercase letters, digits and hyphens, none starting with `kaos-` ([names that are kept](#the-limits)) | the pipeline is refused |
 | Read only what you declared: `inputs=` for datasets, `needs=` for earlier steps | `'x' is not an input of step 'y'. Its inputs are: ...` |
@@ -19,10 +19,8 @@ pipeline, or by the library when the step runs.
 | Define a step above the steps that need it | the pipeline is refused (`L-E05`) |
 | Name in `reads=` only sections that exist in `config/`, and in `inputs=` only top-level text values of `config/` that hold a dataset reference | the pipeline is refused (`L-E05`, `L-E07`) |
 | Let one step produce a dataset. A dataset has one writer | the pipeline is refused (`L-E07`) |
-| Give a `control` step no `inputs=` and no `produces=`: it steers the run and handles no data | the pipeline is refused (`L-E07`) |
 | Hand on only text, numbers, booleans, lists and objects with `step.result(...)`, under names that do not start with `kaos-` | `result value 'x' is a ...` |
 | Keep a dataset output free of files under `.kaos/` | `output 'x' holds a file in .kaos/` |
-| Keep `walltime=` off `ingest`, `publish` and `control` steps | the pipeline is refused |
 | Leave out `outputs=`, `hpc_time_limit=` and `disk=`. Use `produces=` with `step.result()`, `walltime=`, and a bigger class | the pipeline is refused (`L-E06`) |
 
 ## You can
@@ -43,7 +41,7 @@ pipeline, or by the library when the step runs.
 | Edit files of an input | `step.input("x", writable=True)`, a private copy that costs the dataset's size in disk and time | [Reference](reference.md#step-api-kaos_libstep) |
 | Use a scratch folder that is never saved | `step.workdir()` | [Cheat sheet](cheat-sheet.md) |
 | Ask for a GPU | `gpu=True` | [Bigger machines](bigger-machines.md) |
-| Limit a run on HPC (Slurm) | `walltime="12h"` | [HPC (Slurm)](hpc.md) |
+| Set the longest a step may run, anywhere | `walltime="12h"`, which is also the default of the field `<step>-walltime` on the run form | [Long jobs](long-jobs.md#the-time-limit) |
 | Continue after an interruption | `checkpoint.load/save`, `resumable=`, `checkpoint_every=` | [Long jobs](long-jobs.md) |
 | End a GPU step that sits idle sooner or later | `idle_timeout=` | [Reference](reference.md#pipelinepy) |
 | Move `latest` of a dataset you make | the field `promote-<name>` of the run form | [Move `latest`](flow-datasets.md#move-latest) |
@@ -79,9 +77,9 @@ Every number of the guide is in this table.
 | what a step receives (settings and results of needed steps) | 96 KiB |
 | the advanced config of a run | 16 KiB |
 | a dataset version in a reference | 255 characters |
-| the limit of an HPC (Slurm) step that sets no `walltime=` | 4 hours. `walltime=` sets it, and it is read on a Slurm class only |
+| the time limit of a step that sets no `walltime=` | 4 hours, on the platform's own machines and on HPC (Slurm). `walltime=` sets the default, and the field `<step>-walltime` of the run form sets the limit of a run. Waiting for a machine does not count |
 | the longest run on HPC (Slurm) | set by the site; `kaosctl lint` assumes 2 days when it has no project facts |
-| continuations of a resumable step on HPC (Slurm) | 5 |
+| continuations of a resumable step, on the platform's own machines and on HPC (Slurm) | 5; the time limit applies to each run of the step |
 | a step without a checkpoint whose machine was lost | runs again from the start at most twice |
 | a GPU step with no GPU use and no new log line | ends as idle after 20 minutes (`idle_timeout=` changes it, `0` turns it off) |
 

@@ -167,3 +167,11 @@ def test_should_show_the_result_a_step_hands_on_with_what_it_read_and_wrote(tmp_
     assert [r["name"] for r in shown["reads"]] == ["reference", "clean"]  # the inputs first, then what else it opened
     assert [(w["name"], w["type"]) for w in shown["writes"]] == [("report", "artifact")]
     assert all(len(x["commit"]) == 64 for x in shown["reads"] + shown["writes"])
+
+
+def test_should_deliver_the_model_with_a_publish_step_that_produces_nothing(tmp_path):
+    assert ex.flow_publish(tmp_path)["values"] == {"delivered": "my-model"}
+
+
+def test_should_let_a_control_step_stop_a_run_with_wrong_settings_and_hand_on_its_values(tmp_path):
+    assert ex.flow_control(tmp_path)["values"] == {}

@@ -10,6 +10,13 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; ev
 template.** Nothing in kaos-lib converts an old app.
 
 ### Added
+- Step kinds are a contract, checked by `L-E07` and by the platform: an ingest step produces a dataset, a transform step
+  produces something, a train step produces a model, an evaluate step produces artifacts only, a publish step and a
+  control step produce nothing (page "Step kinds"). `L-W06` warns about a training step with a time limit
+  that is not resumable. The removed keywords (`outputs=`, `hpc_time_limit=`, `disk=`) say what to write instead. Rule
+  set 2.2.0.
+- `kaos_lib.checkpoint` uses the run form's `<step>-checkpoint-every` as the interval of `tick()` when the step sets none.
+- A dataset is promoted by the run-form field `promote-<name>`; `plan.promote` of the advanced config is gone.
 - `kaos_lib.step`: `start()`, `input(name)`, `output(name)`, `upstream(step)`, `check(name)`, `result(**values)`. A step is
   started with no arguments, reads everything from `step.start()` and hands one result on. A step that ends without
   `step.result()` fails.

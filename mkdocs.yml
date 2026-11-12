@@ -108,6 +108,7 @@ nav:
   - How it works:
       - Principles: principles.md
       - What you must and what you can: must-and-can.md
+      - Step kinds: step-kinds.md
       - Datasets, versions and hashes: datasets-versions-hashes.md
       - Glossary: glossary.md
   - How to:
