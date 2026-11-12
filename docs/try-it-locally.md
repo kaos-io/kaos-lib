@@ -90,7 +90,7 @@ skipped L-I03 Schedules: pipelines cannot declare a schedule yet, so there is no
 off:
 
 ```text
-pipeline.py:19:15: error L-E07 StepDeclaration: Step 'prepare' has no kind=, which every step declares: one of ingest, transform, train, evaluate, publish, control. ...
+pipeline.py:19:15: error L-E07 StepDeclaration: Step 'prepare' has no kind=, which every step declares: one of ingest, transform, train, evaluate, publish, control.
 ```
 
 The exit code is 0 without errors and 2 with one. The platform runs the same check on every pull request. A check that

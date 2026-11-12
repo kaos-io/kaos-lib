@@ -274,13 +274,14 @@ def _every_arguments(ctx, step) -> Iterable[Hit]:
       "Give every step a kind, name its dataset inputs in inputs=[...] and what it writes in produces=[...].")
 def step_declaration(ctx: LintContext) -> Iterable[Hit]:
     writers = {}                                    # dataset name -> the step that produces it
+    any_kind = any("kind" in step.args for block in ctx.pipeline.blocks for step in block.steps)
     for block in ctx.pipeline.blocks:
         made = {}                                   # step variable -> what it produces, as (type, name)
         for step in block.steps:
             if step.opaque:
                 continue
             yield from _step_name(ctx, step)
-            yield from _kind(ctx, step)
+            yield from _kind(ctx, step, any_kind)
             inputs = yield from _inputs(ctx, step)
             produced = yield from _produces(ctx, step)
             yield from _control_handles_no_data(ctx, step, inputs, produced)
@@ -308,11 +309,12 @@ def _step_name(ctx, step) -> Iterable[Hit]:
                   f"'<step>{RESERVED_STEP_SUFFIX}'.", "Rename the step and its steps/<folder>.")
 
 
-def _kind(ctx, step) -> Iterable[Hit]:
+def _kind(ctx, step, any_kind) -> Iterable[Hit]:
     kinds = ", ".join(STEP_KINDS)
     if "kind" not in step.args:
+        # An app from before the contract has no kind on any step; a new app that forgot one is not "old".
         yield Hit(ctx.file, ctx.span(step.call), f"{_step_label(step)} has no kind=, which every step declares: one "
-                  f"of {kinds}. {OLD_APP_NOTICE}")
+                  f"of {kinds}." + ("" if any_kind else f" {OLD_APP_NOTICE}"))
         return
     kind = step.value("kind")
     if kind is not UNKNOWN and kind not in STEP_KINDS:

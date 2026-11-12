@@ -17,6 +17,20 @@ def messages(tmp_path, body, steps=None, rule="L-E07", config=None):
 
 
 # ------------------------------------------------------------------------------------------------------ L-E07
+def test_a_step_without_kind_among_steps_with_one_is_not_told_the_app_is_old(tmp_path):
+    body = ('    a = step("a", kind="transform")\n    b = step("b", needs=[a])\n'
+            '    c = step("c", kind="train", needs=[b])\n')
+    got = messages(tmp_path, body)
+    assert len(got) == 1 and "Step 'b' has no kind=, which every step declares: one of " in got[0]
+    assert got[0].strip().startswith("Step 'b'") and OLD_APP_NOTICE not in got[0] and "made before" not in got[0]
+
+
+def test_when_no_step_has_a_kind_the_app_is_told_it_is_old(tmp_path):
+    body = '    a = step("a")\n    b = step("b", needs=[a])\n    c = step("c", needs=[b])\n'
+    got = messages(tmp_path, body)
+    assert len(got) == 3 and all(OLD_APP_NOTICE in m for m in got)
+
+
 @pytest.mark.parametrize("body,expect", [
     ('    a = step("a")\n', "Step 'a' has no kind=, which every step declares: one of ingest, transform, train, "
                             "evaluate, publish, control. " + OLD_APP_NOTICE),
