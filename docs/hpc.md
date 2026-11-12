@@ -46,4 +46,6 @@ resumable, or shorten the limit in the field `<step>-walltime` of the run form (
 A step that waits or is refused has a reason in its status:
 [Why an HPC (Slurm) step waits or is refused](when-something-goes-wrong.md#why-an-hpc-slurm-step-waits-or-is-refused) lists them.
 
+What a failed step leaves on the site, and what is removed for you: [Clean up](clean-up.md).
+
 Next: [Try it locally](try-it-locally.md).
