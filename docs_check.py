@@ -44,20 +44,16 @@ REPOS = {
         "generated": ("docs/generated/cli.md",),             # written by the build (docs_gen.py), not committed
         # Not client pages: the changelog records history, removed names included; docs/design/ is for the platform team.
         "not_client": ("CHANGELOG.md", "docs/design/"),
-        "wave": (),
     },
     "HERA": {
         "repo": "novelcore/hera-pipeline-template", "trunk": "dev",
         "sites": ("https://novelcore.github.io/hera-pipeline-template/", BUCKET + "template-docs/hera-pipeline-template/"),
         "generated": (), "not_client": (),
-        # Rewritten or deleted with the new step contract (PRD kaos#1911 G4); remove an entry when its page is done.
-        "wave": ("DEVELOPER.md", "docs/write-a-step.md"),
     },
     "YOLO": {
         "repo": "novelcore/yolo-pipelines-template", "trunk": "dev",
         "sites": ("https://novelcore.github.io/yolo-pipelines-template/", BUCKET + "template-docs/yolo-pipelines-template/"),
         "generated": (), "not_client": (),
-        "wave": ("DEVELOPER.md", "ADD-A-STEP.md"),          # as above
     },
 }
 
@@ -140,9 +136,10 @@ def visible(line: str) -> str:
 def check_text(root: pathlib.Path, key: str) -> tuple:
     spec = REPOS[key]
     words, removed = [], []
-    for path in [*pages(root), root / "mkdocs.yml"]:
+    code = sorted(p for p in (root / "docs" / "examples").rglob("*") if p.suffix in (".py", ".yaml"))   # shown on pages
+    for path in [*pages(root), root / "mkdocs.yml", *code]:
         rel = path.relative_to(root).as_posix()
-        if listed(rel, spec["not_client"]) or listed(rel, spec["wave"]):
+        if listed(rel, spec["not_client"]):
             continue
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             seen = visible(line)

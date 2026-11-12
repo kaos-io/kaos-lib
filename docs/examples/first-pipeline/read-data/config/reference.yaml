@@ -1,0 +1,3 @@
+# A second dataset for the step `hello-world`: dataset-<name>, or dataset-<name>@<version>.
+# pipeline.py names this setting in inputs=["reference"]. The run form offers your project's datasets for it.
+reference: "dataset-default"

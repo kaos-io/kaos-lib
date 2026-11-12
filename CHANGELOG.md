@@ -210,7 +210,7 @@ user-definable layouts.
   `dataset push` validates with the layout of the repository's label.
 - The schema, the built-in layouts and the test fixtures (`tests/layout_fixtures`) are shared byte for byte with
   kaos-lake, pinned by `SHA256SUMS`; both implementations pass the same fixtures.
-- Guide: [Make your own dataset layout](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/make-your-own-layout.html).
+- Guide: [Make your own dataset layout](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/reference.html#dataset-layouts).
 
 ### Changed
 - The command is `kaosctl` (it was `kaos-cli`, which keeps working as a hidden alias for one release, as does

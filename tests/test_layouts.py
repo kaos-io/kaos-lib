@@ -348,9 +348,7 @@ def test_cli_layout_publish_refuses_builtin_names_and_invalid_specs(capsys, use_
 
 def test_the_guide_layout_is_valid_and_works(tmp_path):
     import pathlib
-    import re
-    guide = (pathlib.Path(__file__).parents[1] / "docs" / "make-your-own-layout.md").read_text()
-    text = re.search(r"```yaml\n(.*?)```", guide, re.S).group(1)
+    text = (pathlib.Path(__file__).parents[1] / "docs" / "examples" / "layout" / "layout.yaml").read_text()
     lay = layouts.Layout(spec.parse(text, "the guide"))
     files = lay.skeleton("dataset-birds", "Garden", {"classes": ["robin", "wren"]})
     assert files["classes.yaml"] == b'classes:\n  - "robin"\n  - "wren"\n' and b"2 classes" in files["README.md"]

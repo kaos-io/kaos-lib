@@ -1,0 +1,3 @@
+# The dataset `clean` of the app `myapp` is the dataset `dataset-myapp-clean`: dataset-<app>-<name>.
+# `@latest` is the newest version; the run form offers the versions to choose from.
+clean: "dataset-myapp-clean@latest"
