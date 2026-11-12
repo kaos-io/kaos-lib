@@ -1,7 +1,8 @@
 # Run one step on your machine: `kaosctl step run`
 
 `kaosctl step run <step>` starts one step the way the platform starts it, in the step's own environment
-([`kaosctl dev`](dev.md) makes it, and `step run` makes it for you if it is missing). No cluster, no login and no Docker are
+([`kaosctl dev`](dev.md) makes it, and `step run` makes it for you if it is missing), or in a Python you name with
+`--python`. No cluster, no login and no Docker are
 needed, and no platform secret is ever used.
 
 ```bash
@@ -63,6 +64,7 @@ Done: prepare exited 0. Next: kaosctl step run <the step that needs prepare>, or
 | `--input NAME=FOLDER` or `NAME=REPO@REF` | what the step gets for the input `NAME`: a local folder, or a small sample of a dataset version (needs `kaosctl login`) |
 | `--sample-mb MB` | the most a sample downloads |
 | `--upstream STEP=JSON` or `STEP=@FILE` | the result of a step this one needs |
+| `--python INTERPRETER` | run the step with this existing Python instead of an environment of its own, for steps with heavy dependencies. It must have kaos-lib; nothing is installed into it and no environment is built |
 | `--kaos-lib REQUIREMENT` or `PATH`, `--context FILE` | as in [`kaosctl dev`](dev.md), for the environment it may have to make |
 
 The exit code is the step's own; `1` when the step could not be started (for example an unknown step name, or an

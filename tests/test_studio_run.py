@@ -3,13 +3,14 @@ it (no arguments, the step context), its inputs are folders on this machine, its
 `.kaos/local`, no platform secret is in its environment or files (AC-35), and it runs offline (AC-32). The step's
 environment is the Python running the tests."""
 import json
+import sys
 import os
 import re
 
 import pytest
 
 from kaos_lib import cli
-from kaos_lib.studio import envallow, pipeline_engine, proc, run, sample, steps
+from kaos_lib.studio import envallow, pipeline_engine, proc, pyenv, run, sample, steps
 from fake_lakefs import FakeLakeFS
 from studio_helpers import fake_venv, template_repo
 
@@ -222,9 +223,8 @@ def test_should_name_the_known_steps_for_an_unknown_one(repo, capsys):
 
 
 def test_should_set_up_the_environment_first_when_the_step_has_none(tmp_path, monkeypatch, capsys, repo):
-    for venv in (repo / "steps").glob("data_summary/.venv"):
-        import shutil
-        shutil.rmtree(venv)
+    import shutil
+    shutil.rmtree(pyenv.step_env(repo / "steps/data_summary"), ignore_errors=True)
     calls = []
 
     def setup(step, flag, ctx, uv, echo=print):
@@ -285,3 +285,39 @@ def test_should_refuse_to_sample_a_dataset_with_no_files(tmp_path):
     fake.add_repo("dataset-empty")
     with pytest.raises(KaosLibError, match="holds no files"):
         sample.pull_sample("dataset-empty@latest", tmp_path / "d", 1, client=fake.client())
+
+
+def _app_files(root):
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*") if ".kaos" not in p.parts and "__pycache__" not in p.parts)
+
+
+def test_should_run_the_step_with_the_given_python_and_build_no_environment(repo, tmp_path, monkeypatch, capsys):
+    import shutil
+    for s in steps.discover(repo):
+        shutil.rmtree(pyenv.step_env(s.path), ignore_errors=True)      # no environment exists for any step
+    before = _app_files(repo)
+    monkeypatch.setattr(run, "setup_step", lambda *a, **k: pytest.fail("an environment was built"))
+    assert cli.main(["step", "run", "data-summary", str(repo), "--python", sys.executable]) == 0
+    assert _app_files(repo) == before and not list(repo.rglob(".venv"))
+    assert not pyenv.step_env(repo / "steps/data_summary").exists()
+
+
+def test_should_refuse_a_python_that_is_missing_or_has_no_kaos_lib(repo, tmp_path, capsys):
+    assert cli.main(["step", "run", "data-summary", str(repo), "--python", str(tmp_path / "nope")]) == 1
+    assert "no such interpreter" in capsys.readouterr().err
+    bare = tmp_path / "bare-python"
+    bare.write_text('#!/bin/sh\nexit 1\n')
+    bare.chmod(0o755)
+    assert cli.main(["step", "run", "data-summary", str(repo), "--python", str(bare)]) == 1
+    assert "cannot import kaos_lib" in capsys.readouterr().err
+
+
+def test_the_environment_is_keyed_by_the_real_step_folder_so_a_link_puts_nothing_in_the_repository(repo, tmp_path):
+    link = tmp_path / "linked-app"
+    link.symlink_to(repo)
+    real, via = repo / "steps/data_summary", link / "steps/data_summary"
+    assert pyenv.step_env(via) == pyenv.step_env(real)
+    assert repo not in pyenv.step_env(real).parents and tmp_path / "xdg" in pyenv.step_env(real).parents
+    assert pyenv.step_env(repo / "steps/dataset_loading") != pyenv.step_env(real)
+    assert cli.main(["step", "run", "data-summary", str(link)]) == 0
+    assert not list(repo.rglob(".venv"))

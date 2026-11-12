@@ -23,7 +23,7 @@ from .. import datasets, lock, testing
 from ..errors import KaosLibError
 from ..lint.constants import STEP_KINDS
 from . import envallow, pipeline_engine, pyenv, proc, sample, steps
-from .constants import LOCAL_DIR, LOCAL_RUN_ID, OUTPUT_PRINT_CHARS, VENV_DIR
+from .constants import LOCAL_DIR, LOCAL_RUN_ID, OUTPUT_PRINT_CHARS
 from .dev import setup_step
 
 RESULT_NAME = "kaos-result.json"
@@ -43,8 +43,17 @@ def local_dir(root: pathlib.Path) -> pathlib.Path:
 
 
 def ensure_environment(step: steps.StepInfo, args) -> pathlib.Path:
-    """The step's Python, setting its environment up first (as `kaosctl dev` would) when it is not there."""
-    py = pyenv.venv_python(step.path / VENV_DIR)
+    """The step's Python: `--python` as given (nothing is built), else the step's environment in the cache folder,
+    set up first (as `kaosctl dev` would) when it is not there."""
+    if args.python:
+        py = pathlib.Path(args.python)
+        if not py.is_file():
+            raise KaosLibError(f"--python {args.python}: no such interpreter.")
+        if not proc.run([str(py), "-c", "import kaos_lib"]).ok:
+            raise KaosLibError(f"--python {args.python} cannot import kaos_lib: install kaos-lib into that "
+                               "environment. Nothing was changed there.")
+        return py
+    py = pyenv.venv_python(pyenv.step_env(step.path))
     if not py.is_file():
         print(f"{step.name} has no environment yet: setting it up (kaosctl dev --step {step.name}) ...")
         outcome = setup_step(step, args.kaos_lib, args.context, pyenv.find_uv())

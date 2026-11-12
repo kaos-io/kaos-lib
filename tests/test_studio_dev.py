@@ -23,7 +23,7 @@ def venv_stub(monkeypatch):
 
 
 def requirements_of(repo, step):
-    return (repo / "steps" / step / ".venv" / "kaos-requirements.txt").read_text().splitlines()
+    return (pyenv.step_env(repo / "steps" / step) / "kaos-requirements.txt").read_text().splitlines()
 
 
 # --- reading, statically ----------------------------------------------------------------------------------------
@@ -128,7 +128,7 @@ def test_should_set_up_a_venv_per_step_with_the_requirements_and_kaos_lib_where_
     assert "PyYAML" in summary and summary[-1] == "kaos-lib[zitadel]==0.4.0rc20"
     lib = requirements_of(repo, "dataset_loading")
     assert lib[-1] == "kaos-lib[zitadel]==0.4.0rc20" and lib[0].startswith("--extra-index-url") and "kaos-lib-rc" in lib[0]
-    assert not (repo / "steps/model_training/.venv").exists()                         # torch: skipped by default
+    assert not pyenv.step_env(repo / "steps/model_training").exists()                         # torch: skipped by default
     out = capsys.readouterr().out
     assert "model-training: skipped, its dependencies are large (torch" in out and "kaosctl dev --step model-training" in out
 
@@ -147,8 +147,8 @@ def test_should_not_write_the_interpreter_hint_unless_asked(repo, venv_stub):
 def test_should_write_the_interpreter_hint_into_each_step_folder_on_request(repo, venv_stub):
     cli.main(["dev", str(repo), "--step", "data-summary", "--vscode"])
     settings = json.loads((repo / "steps/data_summary/.vscode/settings.json").read_text())
-    assert settings == {"python.defaultInterpreterPath": vscode.interpreter_value()}
-    assert settings["python.defaultInterpreterPath"].startswith("${workspaceFolder}/.venv/")
+    assert settings == {"python.defaultInterpreterPath": vscode.interpreter_value(repo / "steps/data_summary")}
+    assert settings["python.defaultInterpreterPath"] == str(pyenv.venv_python(pyenv.step_env(repo / "steps/data_summary")))
 
 
 def test_should_merge_into_an_existing_settings_file_and_leave_a_commented_one_alone(repo, venv_stub, capsys):
@@ -180,7 +180,7 @@ def test_should_install_again_when_the_dependencies_change(repo, venv_stub):
 
 def test_should_ignore_the_environment_in_git_without_editing_any_repository_file(repo, venv_stub):
     cli.main(["dev", str(repo), "--step", "data-summary"])
-    assert (repo / "steps/data_summary/.venv/.gitignore").read_text() == "*\n"
+    assert (pyenv.step_env(repo / "steps/data_summary") / ".gitignore").read_text() == "*\n"
     assert not (repo / ".gitignore").exists()
 
 
@@ -226,8 +226,8 @@ def test_should_build_a_real_environment_offline_for_a_step_with_no_dependencies
     code = cli.main(["dev", str(repo), "--step", "data-summary"])
     if code != 0:
         pytest.skip("this machine cannot create a virtual environment here: " + capsys.readouterr().out[-300:])
-    py = pyenv.venv_python(repo / "steps/data_summary/.venv")
-    assert py.is_file() and (repo / "steps/data_summary/.venv/.kaos-env.json").is_file()
+    py = pyenv.venv_python(pyenv.step_env(repo / "steps/data_summary"))
+    assert py.is_file() and (pyenv.step_env(repo / "steps/data_summary") / ".kaos-env.json").is_file()
 
 
 def test_should_install_a_kaos_lib_from_a_path_on_this_machine(tmp_path):

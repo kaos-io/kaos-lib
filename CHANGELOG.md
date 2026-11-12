@@ -19,6 +19,13 @@ template.** Nothing in kaos-lib converts an old app.
   (`L-E07`), and refuses what an app from before the contract has (`outputs=`, `hpc_time_limit=`, `disk=`, a step
   with no `kind=`, a `kubecore/` folder, `--params`, the `platform` config group: `L-E06`, `L-E08`, `L-E09`) with the
   sentence the engine uses. Rule set 2.0.0.
+- `step.workdir()` (a scratch folder for tool caches and run folders, emptied at each attempt, never saved),
+  `step.input(name, writable=True)` (a private full copy of an input that the step may write into) and
+  `testing.running(upstream_writes=...)` (what an upstream step wrote, for tests).
+- `kaosctl step run --python INTERPRETER` runs a step with an existing Python and builds no environment. The
+  environments of `kaosctl dev` and `kaosctl step run` now live in the cache folder, never in the app's repository.
+- The wire form of the context and the result writes `$` inside strings as `\u0024` (Kubernetes expands `$(NAME)` in an
+  environment value).
 - `kaosctl step run` starts a step with the new contract: `--input NAME=FOLDER|REPO@REF` gives an input, `--upstream`
   a needed step's result; outputs and results stay in `.kaos/local/`.
 - On HPC (Slurm) every input of a step is read from its own staged copy.
