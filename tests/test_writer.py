@@ -474,3 +474,43 @@ def test_a_tag_of_this_run_and_step_is_reused_only_when_it_is_exact_and_names_th
     lake.repos[REPO]["tags"].pop(a.tag)
     lake.repos[REPO]["tags"][f"{prefix}-{'0' * 12}"] = a.commit
     assert _seal_as(client, folder(tmp_path, {"f": b"1"}, "o3"), "r1", "p").commit != a.commit
+
+
+def test_a_model_merged_before_a_failing_dataset_promotion_stays_on_main_under_its_run_folder_until_a_retry(
+        started, lake, monkeypatch):
+    """Order of promotion, as documented: models and artifacts reach `main` first, then datasets. When a dataset's
+    merge fails the model stays under `<name>/<experiment>/<run>/`, no result names it, and a retry replaces that
+    folder with exactly what the retry wrote."""
+    first, real = lake.head("dataset-hera-demo-embeddings"), lake.client
+
+    def edit(c):
+        c["produces"] = [{"name": "embeddings", "type": "dataset", "repo": "dataset-hera-demo-embeddings",
+                          "promote": True},
+                         {"name": "model", "type": "model", "repo": "outputs-hera-demo"}]
+        return c
+
+    def failing():
+        c = real()
+        merge = c.merge
+        c.merge = lambda repo, *a, **k: (_ for _ in ()).throw(LakeFSError("down", 500)) \
+            if repo == "dataset-hera-demo-embeddings" else merge(repo, *a, **k)
+        return c
+
+    folder = "model/baseline/hera-demo-x7k2p/"
+    monkeypatch.setattr(step, "_connect", failing)
+    started(edit=edit, attempt=1)
+    (step.output("embeddings") / "e.npy").write_bytes(b"emb")
+    (step.output("model") / "first.bin").write_bytes(b"1")
+    (step.output("model") / "gone-after-retry.bin").write_bytes(b"1")
+    with pytest.raises(LakeFSError):
+        step.result()
+    assert lake.head("dataset-hera-demo-embeddings") == first and not result_file().exists()      # the dataset did not move
+    assert sorted(lake.tree("outputs-hera-demo", "main")) == [folder + "first.bin", folder + "gone-after-retry.bin"]
+    step.stop()
+    lock.reset()
+    monkeypatch.setattr(step, "_connect", lambda: real())
+    started(edit=edit, attempt=2)
+    (step.output("embeddings") / "e.npy").write_bytes(b"emb")
+    (step.output("model") / "retry.bin").write_bytes(b"2")
+    step.result()
+    assert sorted(lake.tree("outputs-hera-demo", "main")) == [folder + "retry.bin"]

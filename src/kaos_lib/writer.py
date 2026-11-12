@@ -14,6 +14,11 @@
 Nothing is written to ``main`` directly. A step that dies half-way leaves uncommitted uploads on its branch and
 no version. A failed step moves no dataset's ``latest``, with one exception that cannot be closed: promoting two
 datasets is two merges in two repositories, and the second can fail after the first has moved.
+
+Order of promotion, in phase 2: the models and artifacts are merged into ``main`` of the outputs repository first,
+then the datasets. When a later promotion fails, a model or an artifact that is already merged stays on ``main``
+under its run-unique path ``<name>/<experiment>/<run>/`` while the step fails. Nothing refers to it, because the
+step publishes no result. A retry of the step replaces that folder with exactly what the retry wrote.
 """
 from __future__ import annotations
 

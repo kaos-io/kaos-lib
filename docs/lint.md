@@ -33,7 +33,7 @@ rewrites `pipeline.py` for the step contract of kaos-lib 0.5 and then checks as 
 to `walltime=`, removes `outputs=`, gives every step without a `kind=` a placeholder, and removes the `platform`
 line from the defaults of `config/config.yaml`. The placeholder lists the
 six kinds and is not one of them, so the check keeps failing until you choose: `--fix` never chooses a kind for you.
-Nothing else in the file is touched. [Move to kaos-lib 0.5](migrate-to-0.5.md) has the rest of the change.
+Nothing else in the file is touched. If a change would leave a file that is not valid Python, `--fix` writes nothing to that file, says so and exits non-zero: make that change by hand. [Move to kaos-lib 0.5](migrate-to-0.5.md) has the rest of the change.
 
 ## The same check on your pull request
 

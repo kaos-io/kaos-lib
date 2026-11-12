@@ -53,7 +53,7 @@ with pipeline("ml-pipeline") as p:
 | `idle_timeout=` | how long a step may show no GPU use and no new log line before it is ended: `"40m"`, `"1h"`, `40`, or `0` for never. |
 
 Names are read by name, so within one step an input and something a needed step produces cannot share a name,
-and two needed steps cannot produce the same name.
+and two needed steps cannot produce the same name. A step's own output cannot share a name with one of its inputs either.
 
 [Check your pipeline](lint.md) (`kaosctl lint`) reads `pipeline.py` and tells you about mistakes before you push.
 
