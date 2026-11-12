@@ -48,6 +48,14 @@ def test_wire_escapes_what_the_platform_would_read_or_rewrite():
     assert json.loads(lock.wire({"k{}": "a&b <c> {{x}}"})) == {"k{}": "a&b <c> {{x}}"}
 
 
+def test_wire_escapes_the_dollar_sign_that_kubernetes_would_expand():
+    text = "$ $$ $(HOME)"
+    got = lock.wire({"v": text})
+    assert got == '{"v":"\\u0024 \\u0024\\u0024 \\u0024(HOME)"}' and "$" not in got
+    assert json.loads(got) == {"v": text}
+    assert lock.cost(got) == len(got) + got.count('"') + got.count("\\")
+
+
 def test_wire_refuses_what_json_cannot_hold():
     for bad in (float("nan"), {1: "x"}, object(), {"a": {2, 3}}):
         with pytest.raises((TypeError, ValueError)):

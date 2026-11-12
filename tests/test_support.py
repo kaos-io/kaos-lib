@@ -131,7 +131,7 @@ def test_packaged_release_json_is_valid_and_matches_this_version():
     # >=0.5, breaking) in one commit of its own, merged when the platform cuts over (PRD kaos#1911).
     assert meta["version"] == "0.4.0" and kaos_lib.__version__ == "0.5.0"
     assert meta["supported"] == ">=0.2" and meta["deprecated"] == [] and meta["breaking"] is False
-    assert meta["migration"].endswith("/docs/migrate-to-0.5.html")      # a live page: only the policy is still 0.4's
+    assert meta["migration"] == ""                                      # no app is moved: it is created again
     assert support.check(kaos_lib.__version__, meta)["verdict"] == "current"
 
 

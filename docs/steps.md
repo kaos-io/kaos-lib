@@ -5,8 +5,6 @@ inputs, collects its result and decides where it runs. This page is the whole co
 platform. [The step API](step.md) describes every call, [Step examples](step-examples.md) shows complete steps,
 and [How steps use datasets](steps-and-datasets.md) explains how a run reads and writes its data.
 
-Coming from kaos-lib 0.4? [Move to kaos-lib 0.5](migrate-to-0.5.md) lists every change.
-
 ## What your app holds
 
 | you write | what it is |
@@ -46,7 +44,6 @@ with pipeline("ml-pipeline") as p:
 | `produces=[...]` | what the step writes: `model("name")`, `artifact("name")` or `dataset("name")`. The step writes each into the folder `step.output("name")` gives it. |
 | `gpu=True` | the step gets one GPU. |
 | `when="..."` | a condition on a run-form value. When it is false the step is skipped. See [a conditional step](step-examples.md#5-a-conditional-step). |
-| `disk="20Gi"` | more scratch disk than the default, as a size: digits and an optional unit (`Ki`, `Mi`, `Gi`, `Ti`, `K`, `M`, `G`, `T`). Use it for big datasets or big temporary files. |
 | `walltime="12h"` | the longest this step may run when it runs on an HPC (Slurm) class: minutes or hours, such as `"90m"`, `"12h"` or `"720"`. |
 | `resumable=` | GPU steps only. `True`, or a lead time such as `"20m"`: how long before the time limit the step is told to save. `False` turns continuing off. See [Long runs](checkpoint.md). |
 | `checkpoint_every=` | how often the platform copies the step's checkpoint folder: `"20m"`, `"1h"`, `20` (minutes), or `False` for never. |

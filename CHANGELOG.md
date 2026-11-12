@@ -6,8 +6,8 @@ All notable changes to kaos-lib. Versions follow PEP 440; each release's support
 
 ## 0.5.0 (unreleased)
 
-PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: every app changes once.** The guide is
-`docs/migrate-to-0.5.md`; `kaosctl lint --fix` makes the mechanical part of the change.
+PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; every app is created again from the
+template.** Nothing in kaos-lib converts an old app.
 
 ### Added
 - `kaos_lib.step`: `start()`, `input(name)`, `output(name)`, `upstream(step)`, `check(name)`, `result(**values)`. A step is
@@ -16,8 +16,9 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: every app changes o
 - The ledger: the data lock at version 2, with named reads and with writes. Each step records what it read and wrote in
   its result and, on its MLflow run, in its own `ledger/<step>.json`.
 - `step()` in `pipeline.py` takes `kind=` (required), `inputs=`, `produces=` and `walltime=`. `kaosctl lint` checks them
-  (`L-E07`), finds steps still written for 0.4 (`L-E08`) and the removed `platform` config group (`L-E09`), and `kaosctl lint --fix` renames `hpc_time_limit=`, removes
-  `outputs=` and adds a `kind=` placeholder that you replace. Rule set 2.0.0.
+  (`L-E07`), and refuses what an app from before the contract has (`outputs=`, `hpc_time_limit=`, `disk=`, a step
+  with no `kind=`, a `kubecore/` folder, `--params`, the `platform` config group: `L-E06`, `L-E08`, `L-E09`) with the
+  sentence the engine uses. Rule set 2.0.0.
 - `kaosctl step run` starts a step with the new contract: `--input NAME=FOLDER|REPO@REF` gives an input, `--upstream`
   a needed step's result; outputs and results stay in `.kaos/local/`.
 - On HPC (Slurm) every input of a step is read from its own staged copy.

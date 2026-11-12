@@ -94,7 +94,7 @@ test("should_link_the_rule_pages_in_hover_docs", () => {
   assert.ok(h && /\[L-E01\]\(https:\/\/.*L-E01\.html\)/.test(h.markdown));
 });
 
-test("should_explain_a_renamed_argument_on_hover", () => {
+test("should_explain_an_argument_on_hover", () => {
   const line = 'step("a", gpu=True, walltime="12h")';
   const h = hoverFor(schema, "", line, line.indexOf("walltime") + 1);
   assert.ok(h && h.markdown.includes("walltime"));

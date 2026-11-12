@@ -97,7 +97,6 @@ nav:
       - Step examples: step-examples.md
       - How steps use datasets: steps-and-datasets.md
       - Results: results.md
-      - Move to kaos-lib 0.5: migrate-to-0.5.md
   - Guides:
       - Datasets: datasets.md
       - Outputs: outputs.md

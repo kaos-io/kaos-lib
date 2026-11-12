@@ -18,7 +18,7 @@ It loads the record of that MLflow run, prints the pinned reads and runs the com
 Inside the command every `datasets.resolve` and `datasets.materialize` of a recorded dataset returns the recorded
 commit, whatever the dataset's newest version is by now. A dataset the record does not hold is read as usual.
 
-It works for runs made with kaos-lib 0.4 too: their record is the single artifact `data.lock.json`, which is
+It works for runs made with an earlier kaos-lib too: their record is the single artifact `data.lock.json`, which is
 still read and never written.
 
 ## In Python

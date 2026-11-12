@@ -5,8 +5,7 @@ Helps you write and check the `pipeline.py` of a KAOS ML pipeline:
 - **Suggestions and docs** while you type a `step(...)` call: argument names, allowed values and a short explanation
   of each. Hover an argument to read about it.
 - **Checks as you save.** The same check the pull request runs (`kaosctl lint`) shows its findings as squiggles in
-  the file, each with a fix hint and a link to its page. One-click fixes for the simple ones, for example
-  `walltime=` becomes `hpc_time_limit=`.
+  the file, each with a fix hint and a link to its page.
 - **A step graph.** A read-only picture of your steps and what each one needs. Click a step to jump to its line.
 - **Sign-in** with the same browser sign-in as `kaosctl login`.
 
@@ -56,7 +55,6 @@ An editor never updates an extension installed from a file by itself, so one of 
 | Suggestions | In `pipeline.py`, type inside `step(` and press `Ctrl+Space`. After `resumable=` it lists the allowed values. |
 | Hover docs | Hold the mouse over an argument name or its value. |
 | Findings | Type or save. Open the Problems view (`Ctrl+Shift+M`) to see all of them. |
-| Quick fix | Put the cursor on a squiggle and press `Ctrl+.`. |
 | Check now | `Ctrl+Shift+P`, then **KAOS: Check pipeline**. The full JSON report is written to the **KAOS** output panel. |
 | Step graph | `Ctrl+Shift+P`, then **KAOS: Show step graph**. It refreshes when you save. |
 | Sign in | `Ctrl+Shift+P`, then **KAOS: Sign in**. Your browser opens; finish there. **KAOS: Show sign-in status** tells you whether a session exists. |

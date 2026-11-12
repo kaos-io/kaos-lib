@@ -91,8 +91,8 @@ The platform copies the folder every 10 minutes by default, and when the machine
 lengthens the interval, so copying stays near 10 % of the run time. It keeps the two newest copies and deletes them
 all when the step succeeds. `checkpoint_every=`, `idle_timeout=` and the HPC time limit are set on the step in
 `pipeline.py` ([What you declare](steps.md#what-you-declare)); a CPU step is copied only when it sets
-`checkpoint_every=`. The folder is on the step's own disk, so a checkpoint of several GB needs room: raise `disk=`
-on the step (for example `disk="30Gi"`).
+`checkpoint_every=`. The folder is on the step's own disk, so a checkpoint of several GB needs room: pick a compute
+class with more disk for the step.
 
 ## What you see in the step's log
 
@@ -135,7 +135,7 @@ You never name a queue or a QoS: the time limit and the lane a step runs in are 
 | `NoProgress` | the step restarted without loading, or saved the same state: check that you load what you saved |
 | saving is slow or the checkpoint is large | save less (weights only), or save less often |
 | the step ends as failed after its machine was reclaimed | it ran out of its two repeats: run it again, or pick an on-demand class for this step |
-| copies fail with a disk message | raise `disk=` on the step |
+| copies fail with a disk message | pick a compute class with more disk for the step |
 | the step was ended as idle but was working | raise `idle_timeout=` on the step (`idle_timeout=0` turns the rule off) |
 | a GPU step on the platform's own machines fails with `KaosIdle: ended by the idle watchdog ...` | the platform saw GPU use below 5 % and no new log line for the idle time and stopped the step, so the GPU stops costing money. It is not repeated: raise `idle_timeout=` if the step was working, and run it again |
 | a CPU step is not copied | set `checkpoint_every=` on it (a short CPU step is simply repeated) |

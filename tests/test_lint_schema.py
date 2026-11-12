@@ -6,9 +6,9 @@ import re
 
 from kaos_lib import cli
 from kaos_lib.lint import ALL_RULES, RULESET_VERSION
-from kaos_lib.lint.constants import DISK_PATTERN, STEP_PARAMS, TIME_PATTERN
+from kaos_lib.lint.constants import REMOVED_STEP_PARAMS, STEP_PARAMS, TIME_PATTERN
 from kaos_lib.lint.graph import build_graph
-from kaos_lib.lint.schema import RENAMED_ARGUMENTS, SCHEMA_VERSION, build_schema, schema_json
+from kaos_lib.lint.schema import SCHEMA_VERSION, build_schema, schema_json
 from lint_corpus import repo, write_repo
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -36,7 +36,6 @@ def test_schema_is_versioned_with_the_rule_set():
 
 def test_schema_patterns_are_the_ones_the_rules_use():
     by_name = {p["name"]: p for p in build_schema()["step"]["parameters"]}
-    assert by_name["disk"]["pattern"] == DISK_PATTERN
     assert by_name["walltime"]["pattern"] == TIME_PATTERN
 
 
@@ -53,15 +52,14 @@ def test_schema_lists_every_rule_with_its_link():
     assert all(r["doc"].endswith(f"{r['id']}.html") and r["fix"] for r in rules.values())
 
 
-def test_renamed_arguments_point_at_real_arguments():
-    assert RENAMED_ARGUMENTS == {"hpc_time_limit": "walltime"}
-    assert set(RENAMED_ARGUMENTS.values()) <= set(STEP_PARAMS)
-    assert not set(RENAMED_ARGUMENTS) & set(STEP_PARAMS)
+def test_the_schema_has_no_removed_argument():
+    assert not set(REMOVED_STEP_PARAMS) & set(STEP_PARAMS)
+    assert "renamed_arguments" not in build_schema()["step"]
 
 
 def test_allowed_values_match_what_the_library_accepts():
     by_name = {p["name"]: p for p in build_schema()["step"]["parameters"]}
-    for name in ("walltime", "disk", "resumable"):
+    for name in ("walltime", "resumable"):
         pattern = re.compile(by_name[name]["pattern"])
         for v in by_name[name]["values"]:
             text = v["insert"]

@@ -9,18 +9,18 @@ import ast
 import re
 from typing import Iterable
 
-from .constants import (COMPUTE_CLASS_KEYS, DISK_PATTERN, IDENTITY_NAMES, KIND_PLACEHOLDER, MAX_NEEDS, MAX_READABLE, MIGRATION_URL, NAME_MAX,
-                        OLD_ENTRY_ARGUMENT, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
+from .constants import (COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, NAME_MAX,
+                        OLD_APP_NOTICE, OLD_ENTRY_ARGUMENT, PIPELINE_FILE, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
                         TIME_PATTERN)
-from .model import ERROR
+from .model import ERROR, Span
 from .pipeline_reader import UNKNOWN, literal
 from .project_reader import platform_group
 from .registry import (DECLARED, NOT_VERIFIED, OFF, REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, STATIC,
                        VERIFIED, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes,
                        rule, runs_needed)
 
-_STEP_NAME, _DISK, _TIME = re.compile(STEP_NAME_PATTERN), re.compile(DISK_PATTERN), re.compile(TIME_PATTERN)
+_STEP_NAME, _TIME = re.compile(STEP_NAME_PATTERN), re.compile(TIME_PATTERN)
 _EVERY = re.compile(r"^([0-9]+)([mh]?)$")
 _DEPENDS_TOKEN = re.compile(r"([A-Za-z0-9_][A-Za-z0-9_-]*)(?:\.(?:Succeeded|Failed|Skipped|Omitted|Errored|Daemoned))?")
 
@@ -210,24 +210,24 @@ def _reaches(graph, start, target) -> bool:
 
 
 @rule("L-E06", "RefusedArgument", ERROR,
-      "Fix the argument as the message says; step() raises on it when the pipeline is rendered.")
+      "Remove the argument or write it as the message says; step() raises on it when the pipeline is rendered.")
 def refused_argument(ctx: LintContext) -> Iterable[Hit]:
     for step in ctx.pipeline.steps:
         yield from _unknown_arguments(ctx, step)
         if step.opaque:
             continue
-        yield from _disk(ctx, step)
         yield from _time_arguments(ctx, step)
         yield from _every_arguments(ctx, step)
 
 
 def _unknown_arguments(ctx, step) -> Iterable[Hit]:
     for kw in step.unknown_keywords:
-        fix = REMOVED_STEP_PARAMS.get(kw.arg) or \
-            f"Remove it or check the name: step() accepts {', '.join(STEP_PARAMS[:-1])} and {STEP_PARAMS[-1]}."
         if kw.arg in REMOVED_STEP_PARAMS:
-            fix += f" `kaosctl lint --fix` does it. Guide: {MIGRATION_URL}"
-        yield Hit(ctx.file, ctx.span(kw), f"step() has no argument '{kw.arg}', so the render fails.", fix)
+            yield Hit(ctx.file, ctx.span(kw), f"step() no longer takes '{kw.arg}'. {OLD_APP_NOTICE}")
+        else:
+            yield Hit(ctx.file, ctx.span(kw), f"step() has no argument '{kw.arg}', so the render fails.",
+                      f"Remove it or check the name: step() accepts {', '.join(STEP_PARAMS[:-1])} and "
+                      f"{STEP_PARAMS[-1]}.")
     seen = set()
     for kw in step.call.keywords:
         if kw.arg in seen:
@@ -239,13 +239,6 @@ def _unknown_arguments(ctx, step) -> Iterable[Hit]:
                   "keyword, so this render fails.", "Write it as a keyword, for example kind='train'.")
     if not step.opaque and "name" not in step.args:
         yield Hit(ctx.file, ctx.span(step.call), "step() is called without a name.", "Give the step a name.")
-
-
-def _disk(ctx, step) -> Iterable[Hit]:
-    v = step.value("disk", None)
-    if v is not UNKNOWN and v is not None and not (isinstance(v, str) and _DISK.match(v)):
-        yield Hit(ctx.file, ctx.span(step.node("disk")), f"{_step_label(step)}: disk={v!r} is not a quantity. Use a "
-                  f"string like '20Gi': digits and an optional Ki, Mi, Gi, Ti, K, M, G or T.")
 
 
 def _time_arguments(ctx, step) -> Iterable[Hit]:
@@ -318,15 +311,13 @@ def _step_name(ctx, step) -> Iterable[Hit]:
 def _kind(ctx, step) -> Iterable[Hit]:
     kinds = ", ".join(STEP_KINDS)
     if "kind" not in step.args:
-        yield Hit(ctx.file, ctx.span(step.call), f"{_step_label(step)} has no kind. Every step says what it is: "
-                  f"one of {kinds}.", f'Add kind="...", for example kind="train". Guide: {MIGRATION_URL}')
+        yield Hit(ctx.file, ctx.span(step.call), f"{_step_label(step)} has no kind=, which every step declares: one "
+                  f"of {kinds}. {OLD_APP_NOTICE}")
         return
     kind = step.value("kind")
     if kind is not UNKNOWN and kind not in STEP_KINDS:
-        chosen = "is still the placeholder `kaosctl lint --fix` wrote" if kind == KIND_PLACEHOLDER else \
-            f"is {kind!r}, which is not a kind"
-        yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)}: kind {chosen}. A step is one of "
-                  f"{kinds}.", "Choose the kind that says what the step does.")
+        yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)}: kind is {kind!r}, which is not a "
+                  f"kind. A step is one of {kinds}.", "Choose the kind that says what the step does.")
 
 
 def _control_handles_no_data(ctx, step, inputs, produced) -> Iterable[Hit]:
@@ -439,32 +430,29 @@ def _same_name_twice(ctx, step, inputs, made) -> Iterable[Hit]:
                   "Split the step, or join datasets it reads.")
 
 
-@rule("L-E08", "StepNotMoved", ERROR,
-      "Move the step to kaos_lib.step: step.start() gives the config and the run, step.input() the datasets, "
-      "step.result() hands values on. Guide: " + MIGRATION_URL)
-def step_not_moved(ctx: LintContext) -> Iterable[Hit]:
+@rule("L-E08", "OldStepCode", ERROR, "Create the app again from the template.")
+def old_step_code(ctx: LintContext) -> Iterable[Hit]:
+    if (ctx.root / ENGINE_FOLDER).is_dir() and not (ctx.root / ENGINE_FOLDER).is_symlink():
+        yield Hit(PIPELINE_FILE, Span(1, 1, 1, 1), f"The app has a {ENGINE_FOLDER}/ folder of its own, and an app "
+                  f"carries no copy of the engine. {OLD_APP_NOTICE}")
     for step in ctx.pipeline.steps:
         source = ctx.step_source(step)
         if source is None or not source.found:
             continue
         for file, span, what in source.old_contract:
-            yield Hit(file, span, f"{_step_label(step)} still {what}. Since kaos-lib 0.5 a step is started with "
-                      f"no arguments and gets everything from step.start(), so this step would fail when it runs.")
+            yield Hit(file, span, f"{_step_label(step)} {what}, which a step no longer does. {OLD_APP_NOTICE}")
         if not source.old_contract and source.has_entry and not source.starts_step:
             yield Hit(ctx.file, ctx.span(step.call), f"{_step_label(step)} never calls step.start() "
                       f"(from kaos_lib import step), so it cannot read its config or its inputs and hands "
                       f"nothing on.")
 
 
-@rule("L-E09", "PlatformConfigGroup", ERROR,
-      "Remove the `- platform: ...` line from the defaults of config/config.yaml (`kaosctl lint --fix` does it) and "
-      "delete the folder config/platform/ if your app has one. Guide: " + MIGRATION_URL)
+@rule("L-E09", "PlatformConfigGroup", ERROR, "Create the app again from the template.")
 def platform_config_group(ctx: LintContext) -> Iterable[Hit]:
     for file, span, what in platform_group(ctx.root):
         if what == "line":
-            yield Hit(file, span, "config/config.yaml still names the `platform` config group. The platform no "
-                      "longer has it: a step gets its data access and its tracking sign-in from the platform, never "
-                      "from the config, so the render is refused.")
+            yield Hit(file, span, f"config/config.yaml names the `platform` config group, which the platform no "
+                      f"longer adds. {OLD_APP_NOTICE}")
         else:
-            yield Hit(file, span, "The app still has the folder config/platform/. The platform no longer reads "
-                      "it, and the render is refused while it is there.", "Delete the folder config/platform/.")
+            yield Hit(file, span, f"The app has a config/platform/ folder, which the platform no longer reads. "
+                      f"{OLD_APP_NOTICE}")

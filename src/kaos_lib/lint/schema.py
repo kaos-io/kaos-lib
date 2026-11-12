@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from .constants import (DEFAULT_LIMIT_MINUTES, DISK_PATTERN, DOC_BASE, LONG_GPU_STEP_MINUTES, RULESET_VERSION,
+from .constants import (DEFAULT_LIMIT_MINUTES, DOC_BASE, LONG_GPU_STEP_MINUTES, RULESET_VERSION,
                         STEP_NAME_PATTERN, STEP_PARAMS, TIME_PATTERN)
 
 # The shape of this document. Bump when a field an editor reads changes meaning or goes away.
@@ -19,9 +19,6 @@ SCHEMA_VERSION = 1
 
 # Where the step API is imported from in a pipeline.py (the linter follows `from <module>.authoring import step`).
 AUTHORING_MODULES = ("kubecore.authoring",)
-
-# Argument names the library no longer takes and what to use instead: the editor offers a one-click rename.
-RENAMED_ARGUMENTS = {"hpc_time_limit": "walltime"}
 
 GUIDE_URL = DOC_BASE[: -len("lint/")] + "lint.html"
 
@@ -81,12 +78,6 @@ _PARAMS = {
         doc="A condition: the step runs only when it is true. A step that needs a conditional step is still "
             "started when the conditional step is skipped.",
         values=[]),
-    "disk": dict(
-        type="str", rules=("L-E06",), snippet='"${1:20Gi}"',
-        doc="Scratch disk the step asks for, as a quantity: digits and an optional Ki, Mi, Gi, Ti, K, M, G or T, "
-            "for example `\"20Gi\"`. Set it for steps that need more than the platform's default.",
-        pattern=DISK_PATTERN,
-        values=[_value('"20Gi"', "20 gibibytes."), _value('"50Gi"', "50 gibibytes."), _value('"200Gi"', "200 gibibytes.")]),
     "walltime": dict(
         type="str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-I02"), snippet='"${1:12h}"',
         doc="The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or "
@@ -142,7 +133,7 @@ def _rules() -> list:
 
 
 def build_schema() -> dict:
-    """The schema as a dict: the `step()` arguments, the renamed ones, the rules, all versioned with the rule set."""
+    """The schema as a dict: the `step()` arguments, the rules, all versioned with the rule set."""
     missing = set(STEP_PARAMS) ^ set(_PARAMS)
     assert not missing, f"STEP_PARAMS and the schema differ: {sorted(missing)}"
     return {
@@ -150,8 +141,7 @@ def build_schema() -> dict:
         "ruleset_version": RULESET_VERSION,
         "guide": GUIDE_URL,
         "authoring_modules": list(AUTHORING_MODULES),
-        "step": {"function": "step", "parameters": [_parameter(i, n) for i, n in enumerate(STEP_PARAMS)],
-                 "renamed_arguments": dict(RENAMED_ARGUMENTS)},
+        "step": {"function": "step", "parameters": [_parameter(i, n) for i, n in enumerate(STEP_PARAMS)]},
         "pipeline": {"function": "pipeline",
                      "doc": "`with pipeline(\"name\") as p:` opens a pipeline; every `step(...)` call inside it adds "
                             "a step. The check reads these calls without running your code."},

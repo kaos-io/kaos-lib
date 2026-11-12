@@ -42,8 +42,7 @@ with outputs.run("myapp", "exp1", "run-7") as r:                            # yo
     r.finish({"dataset_ref": "dataset-cats@v1"})
 ```
 
-The command is `kaosctl`. Coming from kaos-lib 0.4? See
-[Move to kaos-lib 0.5](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html).
+The command is `kaosctl`.
 
 ## Check your pipeline
 

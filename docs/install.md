@@ -21,8 +21,8 @@ python3 -m venv .venv && . .venv/bin/activate
 | prerelease | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib-rc/simple/` | `X.Y.ZrcN` | published first, with every change |
 | stable | `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` | `X.Y.Z` | published after a prerelease has been tested |
 
-Use the prerelease channel until a stable release exists. Each release has its own number (`0.4.0rc10`, later
-`0.4.0`), so pin it with `==`. The exact current version of each channel is listed at the top of this page.
+Use the prerelease channel until a stable release exists. Each release has its own number (`0.5.0rc10`, later
+`0.5.0`), so pin it with `==`. The exact current version of each channel is listed at the top of this page.
 
 ## Extras
 
