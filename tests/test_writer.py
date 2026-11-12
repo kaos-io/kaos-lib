@@ -442,3 +442,35 @@ def test_an_app_that_may_not_write_says_so_and_a_rejected_credential_says_that(s
                                         r"The app cannot fix this: report it to the platform team with the run's "
                                         r"name \(hera-demo-x7k2p\)"):
         step.result()
+
+
+# ---------------------------------------------------------------------- an earlier attempt is this run's and this step's
+def _seal_as(client, root, run, step_name):
+    return writer.seal(client, REPO, root, name="clean", branch=writer.run_branch(run, step_name, "clean"),
+                       tag_prefix=writer.keep_prefix(run, step_name), message=f"m {run} {step_name}",
+                       meta={"kaos.run": run, "kaos.step": step_name})
+
+
+def test_reuse_commit_of_other_run_or_step(lake, client, tmp_path):
+    a = _seal_as(client, folder(tmp_path, {"f": b"1"}), "r1-x", "y")
+    writer.discard(a)
+    b = _seal_as(client, folder(tmp_path, {"f": b"1"}, "o2"), "r1", "x-y")
+    assert b.commit != a.commit
+
+
+def test_reuse_commit_of_other_step_same_run(lake, client, tmp_path):
+    a = _seal_as(client, folder(tmp_path, {"f": b"1"}), "r1", "prepare-2")
+    writer.discard(a)
+    b = _seal_as(client, folder(tmp_path, {"f": b"1"}, "o2"), "r1", "prepare")
+    assert b.commit != a.commit
+
+
+def test_a_tag_of_this_run_and_step_is_reused_only_when_it_is_exact_and_names_this_run_and_step(lake, client, tmp_path):
+    a = _seal_as(client, folder(tmp_path, {"f": b"1"}), "r1", "p")
+    writer.discard(a)
+    assert _seal_as(client, folder(tmp_path, {"f": b"1"}, "o2"), "r1", "p").commit == a.commit      # the real reuse
+    prefix = writer.keep_prefix("r1", "p")
+    # a tag with another suffix than the commit's own first 12 characters is not a candidate
+    lake.repos[REPO]["tags"].pop(a.tag)
+    lake.repos[REPO]["tags"][f"{prefix}-{'0' * 12}"] = a.commit
+    assert _seal_as(client, folder(tmp_path, {"f": b"1"}, "o3"), "r1", "p").commit != a.commit

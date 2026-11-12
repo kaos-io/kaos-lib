@@ -175,7 +175,8 @@ class FakeLakeFS(BaseAdapter):
         if kind == "branches":
             return self._branches(m, repo, r, rest[1:], body, req, q)
         if kind == "commits":
-            return (200, {"id": rest[1], "parents": r.get("parents", {}).get(rest[1], [])}) \
+            meta = next((m for _, cid, _, m in r.get("commit_log", []) if cid == rest[1]), {})
+            return (200, {"id": rest[1], "parents": r.get("parents", {}).get(rest[1], []), "metadata": meta}) \
                 if rest[1] in r["commits"] else (404, {})
         if kind == "tags":
             if len(rest) == 1 and m == "GET":
