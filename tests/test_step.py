@@ -431,6 +431,40 @@ def test_a_model_is_saved_under_its_name_and_recorded(monkeypatch, lake):
         "model/baseline/hera-demo-x7k2p/best.pt", "model/baseline/hera-demo-x7k2p/plots/loss.png"}
 
 
+def test_a_model_commit_carries_the_mlflow_run_of_the_step_and_a_dataset_does_not(monkeypatch, lake):
+    from kaos_lib import frameworks
+    monkeypatch.setattr(frameworks, "_mlflow_run_id", lambda: "ml-run-7")
+    begin(monkeypatch, lake.context("context-one-upstream"), lake.client())
+    step.input("labels")
+    fill("model")
+    step.result()
+    commit = lake.head("outputs-hera-demo")
+    assert lake.commit_meta("outputs-hera-demo", commit)[1]["mlflow_run_id"] == "ml-run-7"
+
+
+def test_a_run_that_ended_before_result_is_still_the_runs_mlflow_run(monkeypatch, lake):
+    from kaos_lib import frameworks
+    monkeypatch.setattr(frameworks, "_mlflow_run_id", lambda: None)          # no active run any more
+    monkeypatch.setattr(frameworks, "_ended_runs", ["ml-run-1", "ml-run-2"])
+    begin(monkeypatch, lake.context("context-one-upstream"), lake.client())
+    step.input("labels")
+    fill("model")
+    step.result()
+    commit = lake.head("outputs-hera-demo")
+    assert lake.commit_meta("outputs-hera-demo", commit)[1]["mlflow_run_id"] == "ml-run-2"
+
+
+def test_a_step_that_never_used_mlflow_writes_no_mlflow_run_id(monkeypatch, lake):
+    from kaos_lib import frameworks
+    monkeypatch.setattr(frameworks, "_ended_runs", [])
+    begin(monkeypatch, lake.context("context-one-upstream"), lake.client())
+    step.input("labels")
+    fill("model")
+    step.result()
+    commit = lake.head("outputs-hera-demo")
+    assert "mlflow_run_id" not in lake.commit_meta("outputs-hera-demo", commit)[1]
+
+
 @pytest.mark.parametrize("value,kind", [(object(), "object"), ({1, 2}, "set"), (float("nan"), "float"),
                                          (b"bytes", "bytes")])
 def test_a_value_json_cannot_hold_is_refused_before_anything_is_saved(monkeypatch, lake, value, kind):

@@ -344,6 +344,14 @@ def write_ledger(run_id: Optional[str]) -> bool:
         return False
 
 
+_ended_runs: list = []                          # MLflow run ids this process ended, in order
+
+
+def mlflow_run_id() -> Optional[str]:
+    """The MLflow run of this step: the active one, else the last one it ended; None when it never used MLflow."""
+    return _mlflow_run_id() or (_ended_runs[-1] if _ended_runs else None)
+
+
 def rewrite_ledgers() -> None:
     """Write the ledger again to every MLflow run of this process (``step.result`` adds the writes after a run ended)."""
     for run_id in list(_ledger_written):
@@ -359,6 +367,8 @@ def _patch_mlflow_fluent(module) -> None:
     def end_run(*args, **kwargs):
         try:
             active = module.active_run()
+            if active is not None:
+                _ended_runs.append(active.info.run_id)
             write_ledger(active.info.run_id if active is not None else None)
         except Exception as exc:                # the run must end whatever happens here
             _warn("MLflow (data lock)", exc)

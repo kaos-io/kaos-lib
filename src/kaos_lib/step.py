@@ -462,6 +462,10 @@ def _seal(run: _Running, produce: Produce) -> writer.Sealed:
             **{f"kaos.read.{r.name}": r.commit for r in lock.current().reads}}
     if not dataset:       # what the model panel and the outputs repository have always had on a commit
         meta.update(app=step.app, experiment=step.experiment, run=step.run, kind=produce.name)
+        frameworks = sys.modules.get("kaos_lib.frameworks")      # only a step that used MLflow has a run
+        mlflow_run = frameworks.mlflow_run_id() if frameworks is not None else None
+        if mlflow_run:                                            # the model panel links the commit to it
+            meta["mlflow_run_id"] = mlflow_run
     return writer.seal(
         run.client, produce.repo, run.outputs[produce.name], name=produce.name,
         prefix="" if dataset else run_prefix(step.experiment, step.run, produce.name),
