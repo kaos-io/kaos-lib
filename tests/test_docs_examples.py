@@ -103,4 +103,6 @@ def test_should_include_only_files_that_exist():
     for page in DOCS.glob("*.md"):
         for target in re.findall(r'--8<--\s+"([^"]+)"', page.read_text(encoding="utf-8")):
             name = target.split(":")[0]
+            if name.startswith("generated/"):  # written by docs_gen.py at build time, not kept in git
+                continue
             assert (DOCS / name).is_file() or (REPO / name).is_file(), f"{page.name} includes {target}"
