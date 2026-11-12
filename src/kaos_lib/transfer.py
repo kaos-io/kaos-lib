@@ -13,7 +13,7 @@ from typing import Callable, Iterable, Optional
 
 import requests
 
-from .errors import LakeFSError, NotFoundError
+from .errors import LakeFSError
 from .lakefs import LakeFS
 
 UPLOAD_ATTEMPTS = 4                               # one upload is tried this often
@@ -54,13 +54,28 @@ def local_files(root: pathlib.Path, prefix: str = "") -> dict:
     return out
 
 
-def plan_mirror(client: LakeFS, repo: str, ref: str, root: pathlib.Path) -> MirrorPlan:
-    """Diff ``root`` against ``ref``'s whole tree (checksum compare)."""
-    remote = {o["path"]: o.get("checksum", "") for o in client.list_objects(repo, ref)}
+def local_manifest(root: pathlib.Path, prefix: str = "") -> dict:
+    """repo path -> ``(local Path, size, md5)`` for every regular file under ``root``: each file is read once."""
+    return {path: (p, p.stat().st_size, _md5(p)) for path, p in local_files(root, prefix).items()}
+
+
+def fingerprint(root: pathlib.Path) -> str:
+    """One hash of a folder's files (path and content): the stand-in for a commit id in a local run."""
+    listing = "".join(f"{path} {md5}\n" for path, (_, _, md5) in local_manifest(root).items())
+    return hashlib.sha256(listing.encode()).hexdigest()
+
+
+def plan_mirror(client: LakeFS, repo: str, ref: str, root: pathlib.Path, prefix: str = "",
+                manifest: Optional[dict] = None) -> MirrorPlan:
+    """Diff ``root`` (placed under ``prefix``) against what ``ref`` holds under ``prefix`` (checksum compare).
+
+    ``manifest`` is ``local_manifest(root, prefix)`` when the caller has it already.
+    """
+    local = local_manifest(root, prefix) if manifest is None else manifest
+    remote = {o["path"]: o.get("checksum", "") for o in client.list_objects(repo, ref, prefix)}
     plan = MirrorPlan()
-    local = local_files(root)
-    for path, p in local.items():
-        if remote.get(path) == _md5(p):
+    for path, (p, _, md5) in local.items():
+        if remote.get(path) == md5:
             plan.unchanged += 1
         else:
             plan.add.append((p, path))
@@ -78,15 +93,16 @@ def _parallel(client: LakeFS, items: Iterable, fn) -> None:
 def upload(client: LakeFS, repo: str, branch: str, path: str, local: pathlib.Path) -> None:
     """Upload one file, again after a failure that can pass (the connection, a busy or restarting server).
 
-    An upload replaces the object at its path, so repeating it is safe. A refusal (not allowed, not found, a bad
-    request) is raised at once; so is the last of ``UPLOAD_ATTEMPTS`` failures.
+    An upload replaces the object at its path, so repeating it is safe. The session retries what it can (a
+    refused connection, a busy server on a read); a ``POST`` that was cut off or answered 5xx is only tried again
+    here. A refusal (not allowed, not found, a bad request) is raised at once; so is the last of
+    ``UPLOAD_ATTEMPTS`` failures.
     """
     for attempt in range(UPLOAD_ATTEMPTS):
         try:
             return client.upload_object(repo, branch, path, local)
         except (LakeFSError, requests.RequestException) as exc:
-            passing = not isinstance(exc, LakeFSError) or exc.status in RETRY_STATUSES
-            if not passing or isinstance(exc, NotFoundError) or attempt == UPLOAD_ATTEMPTS - 1:
+            if (isinstance(exc, LakeFSError) and exc.status not in RETRY_STATUSES) or attempt == UPLOAD_ATTEMPTS - 1:
                 raise
             time.sleep(RETRY_PAUSE_S * 2 ** attempt)
 

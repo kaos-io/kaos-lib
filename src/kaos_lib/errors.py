@@ -14,6 +14,10 @@ class AuthError(KaosLibError):
     """No usable credential, or lakeFS rejected the one we carry."""
 
 
+class PermissionDenied(AuthError):
+    """The credential is fine but this is not allowed to it (a policy refusal, a protected branch)."""
+
+
 class LakeFSError(KaosLibError):
     """A lakeFS API call failed. ``status`` is the HTTP status."""
 

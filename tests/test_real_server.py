@@ -5,7 +5,7 @@ Run with ``KAOS_LIB_TEST_LAKEFS=real`` (or ``both``); skipped otherwise, and whe
 import pytest
 
 import real_lakefs
-from kaos_lib import dataset_writer
+from kaos_lib import writer
 from kaos_lib.errors import AuthError, LakeFSError, StepError
 
 REPO = "outputs-myapp"
@@ -77,8 +77,12 @@ def tree(client, repo, ref):
 
 
 def write(client, repo, root, run, promote=True):
-    return dataset_writer.write_version(client, repo, root, name="out", run=run, step="prepare", app="writer",
-                                        promote=promote, echo=lambda *a, **k: None)
+    s = writer.seal(client, repo, root, name="out", branch=writer.run_branch(run, "prepare", "out"),
+                    tag_prefix=writer.keep_prefix(run, "prepare"), message=f"out: {run}", meta={"kaos.run": run})
+    try:
+        return writer.promote(s) if promote else s.commit
+    finally:
+        writer.discard(s)
 
 
 def test_an_app_seals_and_promotes_the_dataset_it_declares_and_a_second_run_uploads_one_file(lake, tmp_path):
@@ -91,8 +95,8 @@ def test_an_app_seals_and_promotes_the_dataset_it_declares_and_a_second_run_uplo
     second = write(client, "dataset-written-1", folder(tmp_path, {**files, "a/2.bin": b"two, changed"}, "second"), "run-2")
     assert sent == ["a/2.bin"] and second == client.branch_commit("dataset-written-1", "main") != first
     assert write(client, "dataset-written-1", folder(tmp_path, {**files, "a/2.bin": b"two, changed"}, "same"), "run-3") == second
-    assert not client.branch_exists("dataset-written-1", "run-run-2-prepare")
-    assert client.tag_commit("dataset-written-1", "k-run-2-prepare")
+    assert not client.branch_exists("dataset-written-1", "run-run-2-prepare-out")
+    assert [t for t in client.tags("dataset-written-1") if t["id"].startswith("k-run-2-prepare-")]
 
 
 def test_a_run_that_does_not_promote_leaves_latest_where_it_was(lake, tmp_path):
@@ -100,7 +104,7 @@ def test_a_run_that_does_not_promote_leaves_latest_where_it_was(lake, tmp_path):
     head = client.branch_commit("dataset-written-2", "main")
     sealed = write(client, "dataset-written-2", folder(tmp_path, {"x.bin": b"x"}), "run-1", promote=False)
     assert client.branch_commit("dataset-written-2", "main") == head != sealed
-    assert tree(client, "dataset-written-2", sealed) == ["x.bin"] and client.tag_commit("dataset-written-2", "k-run-1-prepare") == sealed
+    assert tree(client, "dataset-written-2", sealed) == ["x.bin"] and client.tag_commit("dataset-written-2", f"k-run-1-prepare-{sealed[:12]}") == sealed
 
 
 def test_the_server_refuses_a_merge_without_an_expected_head_and_one_onto_a_moved_head(lake, tmp_path):
@@ -117,7 +121,7 @@ def test_the_server_refuses_a_merge_without_an_expected_head_and_one_onto_a_move
     client.merge("dataset-written-3", "run-a", "main", "a", expected_head=head)
     with pytest.raises(LakeFSError) as err:
         client.merge("dataset-written-3", "run-b", "main", "b", expected_head=head)       # the mix the fake would allow
-    assert err.value.status == dataset_writer.HEAD_MOVED
+    assert err.value.status == writer.HEAD_MOVED
     assert tree(client, "dataset-written-3", "main") == ["only-run-a.bin"]
 
 

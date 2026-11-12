@@ -33,7 +33,8 @@ class FakeLakeFS(BaseAdapter):
         self.calls: list = []        # (method, path-without-query)
         self.auth: list = []         # the Authorization header of every request (None when absent)
         self.kaos: dict = {}         # "/kaos/v1/..." -> (status, JSON body or raw bytes); others: 404 HTML
-        self.deny = None             # an HTTP status every /api/v1 call answers (a token this server refuses)
+        self.deny = None             # an HTTP status every /api/v1 call answers: 401 is a credential this server does
+                                     # not know, 403 and "refused" (kaos-lake's 401 for a policy) are rights
         self.writes: list = []       # (kind, repo, branch, path) for object uploads/deletes
         self.upload_answers: list = []   # statuses the next uploads answer instead of storing the object
         self.storage_prefix = "gs://bucket/lakefs"   # None: kaos-lake publishes no prefix
@@ -115,7 +116,8 @@ class FakeLakeFS(BaseAdapter):
                 raise PermissionError
             status, body = self._route(request, path, q)
         except PermissionError:
-            status, body = self.deny, {"message": "insufficient permissions"}
+            status = 401 if self.deny == "refused" else self.deny
+            body = {"message": "error authenticating request" if self.deny == 401 else "insufficient permissions"}
         except KeyError:
             status, body = 404, {"message": "not found"}
         resp = requests.Response()
@@ -173,7 +175,8 @@ class FakeLakeFS(BaseAdapter):
         if kind == "branches":
             return self._branches(m, repo, r, rest[1:], body, req, q)
         if kind == "commits":
-            return (200, {"id": rest[1]}) if rest[1] in r["commits"] else (404, {})
+            return (200, {"id": rest[1], "parents": r.get("parents", {}).get(rest[1], [])}) \
+                if rest[1] in r["commits"] else (404, {})
         if kind == "tags":
             if len(rest) == 1 and m == "GET":
                 return 200, {"results": [{"id": t, "commit_id": c} for t, c in sorted(r["tags"].items())],
@@ -224,18 +227,23 @@ class FakeLakeFS(BaseAdapter):
                 return 400, {"message": "commit: no changes"}
             cid, _ = self._new_commit(repo, view)
             r["commits"][cid] = view
+            r.setdefault("parents", {})[cid] = [b["commit"]]
             b.update(commit=cid, staged={})
             r.setdefault("commit_log", []).append((rest[0], cid, body["message"], body.get("metadata", {})))
             return 201, {"id": cid}
         return 404, {}
 
     def _merge(self, r, source, dest, body):
-        """Three-way merge of a branch into dest: dest's tree plus the branch's changes since its base."""
-        src, dst = r["branches"][source], r["branches"][dest]
+        """Three-way merge of a branch or a commit into dest: dest's tree plus the source's changes since its base."""
+        dst = r["branches"][dest]
         want = body.get("expected_head")                             # kaos-lake: merge only onto this head
         if want and want != dst["commit"]:
             return 412, {"message": f"expected head {want} but {dest} is at {dst['commit']}"}
-        base, head = r["commits"][src["base"]], r["commits"][src["commit"]]
+        if source in r["branches"]:
+            src_commit, base_id = r["branches"][source]["commit"], r["branches"][source]["base"]
+        else:                                                        # a commit id: its base is its parent
+            src_commit, base_id = source, r.get("parents", {})[source][0]
+        base, head = r["commits"][base_id], r["commits"][src_commit]
         tree = dict(r["commits"][dst["commit"]])
         for path in set(base) | set(head):
             if head.get(path) == base.get(path):
@@ -248,6 +256,7 @@ class FakeLakeFS(BaseAdapter):
             return 400, {"message": "merge: no changes"}
         repo = next(n for n, x in self.repos.items() if x is r)
         cid, _ = self._new_commit(repo, tree)
+        r.setdefault("parents", {})[cid] = [dst["commit"], src_commit]
         dst["commit"] = cid
         r.setdefault("commit_log", []).append((dest, cid, body["message"], body.get("metadata", {})))
         return 200, {"reference": cid}

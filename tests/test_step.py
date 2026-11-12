@@ -373,7 +373,8 @@ def fill(name, files=None):
 def test_the_result_file_is_the_fixture_byte_for_byte(monkeypatch, context, commit, calls, want):
     monkeypatch.setattr(step, "_dataset", lambda run, datasets, name, read: lock.record(
         read.repo, read.ref, read.commit, read.owner, read.name) and pathlib.Path("."))
-    monkeypatch.setattr(step, "_save", lambda run, produce, folder: commit)
+    monkeypatch.setattr(step, "_save", lambda run: [lock.Write(p.name, p.type, p.repo, commit)
+                                                    for p in run.step.produces])
     begin(monkeypatch, wire(context))
     calls()
     step.result(**fixture(want)["values"])

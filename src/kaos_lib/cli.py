@@ -538,7 +538,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add(sub, "run", cmd_run, "run a command with the dataset commits an earlier MLflow run read", url=False)
     sp.add_argument("--lock", required=True, metavar="MLFLOW_RUN_ID",
-                    help="the MLflow run whose data.lock.json to replay (exported to the command as $KAOS_LIB_LOCK)")
+                    help="the MLflow run whose ledger to replay (exported to the command as $KAOS_LIB_LOCK)")
     sp.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- command", help="the command to run, after --")
 
     ly = sub.add_parser("layout", help="dataset layouts: list, show, make your own, check a folder, publish")

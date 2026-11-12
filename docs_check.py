@@ -81,6 +81,7 @@ REMOVED = (
     # settings folder (.kubecore/) and the dataset cache (.cache/kubecore/).
     (r"[\w.~<>/-]*kubecore/", VENDORED, r"(?:^|/)src/kubecore/$|(?:^|/)\.kubecore/$|\.cache/kubecore/$"),
     (r"\bkubecore`?\s+(?:folder|directory)\b", VENDORED, None),
+    (r"\bKUBECORE_STAGED_DIR\b", "the staged-copy variable is KAOS_STAGED_ROOT: one folder for each input under it", None),
 )
 
 SKIP_DIRS = {"node_modules", "site", "venv", "build", "dist", "out", "__pycache__", "generated"}

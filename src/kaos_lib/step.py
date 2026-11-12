@@ -25,12 +25,15 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import sys
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
-from . import lock, runtime
-from .errors import AuthError, LockError, NotFoundError, StepError
+from . import lock, runtime, writer
+from .errors import AuthError, LockError, NotFoundError, PermissionDenied, StepError
+from .layouts import local
 
 ENV = runtime.STEP_CONTEXT_ENV
 VERSION = 1                         # of the context and of the result
@@ -40,16 +43,17 @@ KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 WORK = "/work"                      # the step's working folder
 RESULT_FILE = "/work/output/kaos-result.json"
 RESERVED_PREFIX = "kaos-"
+RESERVED_FOLDER = ".kaos"                   # the folder at the root of a dataset that the platform keeps for itself
 NAME_MAX = 40
 NAME = re.compile(r"^(?=.{1,%d}$)[a-z0-9]([a-z0-9-]*[a-z0-9])?$" % NAME_MAX)   # step, input and produces names
-LOCAL_OUTPUTS_ENV = "KAOS_LOCAL_OUTPUTS"    # set by `kaosctl step run`: outputs stay on this machine, in this folder
-LOCAL_WORK_ENV = "KAOS_LOCAL_WORK"          # set by `kaosctl step run`: the folder that stands for /work there
+LOCAL_WORK_ENV = "KAOS_LOCAL_WORK"          # set by `kaosctl step run`: the folder that stands for /work there; outputs
+                                            # then stay on this machine, under $KAOS_STAGED_ROOT
 
 
 def _work(path: str) -> pathlib.Path:
     """``path`` (under the working folder), or its place on this machine in a local run."""
-    local = os.environ.get(LOCAL_WORK_ENV)
-    return pathlib.Path(local + path[len(WORK):]) if local and path.startswith(WORK) else pathlib.Path(path)
+    here = os.environ.get(LOCAL_WORK_ENV)
+    return pathlib.Path(here + path[len(WORK):]) if here and path.startswith(WORK) else pathlib.Path(path)
 
 
 @dataclass(frozen=True)
@@ -177,7 +181,8 @@ class _Running:
         self.checks: dict = {}       # produce name -> (layout, min_files)
         self.done = False
         self.pid = os.getpid()
-        self.exit_code = None        # what sys.exit was called with
+        self.undo = None             # sys.exit and sys.excepthook as they were
+        self.quit = None             # the last sys.exit of the main thread
         self.raised = False          # an exception reached the top
         self._client = None
 
@@ -238,6 +243,9 @@ def start(environ=None) -> Step:
 def stop() -> None:
     """Forget the running step (tests; a long-lived process between steps)."""
     global _running
+    if _running is not None and _running.undo:
+        sys.exit, sys.excepthook = _running.undo
+        atexit.unregister(_at_exit)
     _running = None
     lock.strict(None)
     lock.DataLock.replay(None)
@@ -291,7 +299,6 @@ def input(name: str, optional: bool = False) -> Optional[pathlib.Path]:  # noqa:
 
 def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Path:
     from . import layouts
-    from .layouts import local
     staged = local.staged_dir(read.commit, repo=read.repo, owner=read.owner)
     layout = local.staged_info(staged).get("layout") if staged else None
     if layout:     # the copy says which layout it is: nothing to ask lakeFS
@@ -307,7 +314,6 @@ def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Pat
 
 def _artifact(run: _Running, name: str, write: lock.Write) -> pathlib.Path:
     """A model or an artifact of this run: ``<name>/<experiment>/<run>/`` of its repository, at the written commit."""
-    from .layouts import local
     from .outputs import run_prefix
     step = run.step
     staged = local.staged_dir(write.commit, repo=write.repo)
@@ -347,13 +353,14 @@ def _produce(run: _Running, name: str) -> Produce:
 
 
 def output(name: str) -> pathlib.Path:
-    """A local folder for the output ``name`` (declared in ``produces=``). What it holds when ``result()`` is
-    called is saved; nothing is saved before."""
+    """The folder for the output ``name`` (declared in ``produces=``), empty the first time it is asked for in
+    this attempt. What it holds when ``result()`` is called is saved; nothing is saved before."""
     run = _need()
     _produce(run, name)
     if name not in run.outputs:
         folder = _work(WORK) / "kaos" / "outputs" / name
-        folder.mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(folder, ignore_errors=True)       # an earlier attempt's files are never part of this one
+        folder.mkdir(parents=True)
         run.outputs[name] = folder
     return run.outputs[name]
 
@@ -366,21 +373,21 @@ def check(name: str, layout: Optional[str] = None, min_files: int = 1) -> None:
     run.checks[name] = (layout, min_files)
 
 
-def _files(folder: pathlib.Path) -> int:
-    from .transfer import local_files
-    return len(local_files(folder))
-
-
 def _problems(run: _Running, produce: Produce) -> list:
+    """What is wrong with an output before anything is saved: not written, empty, a reserved path, a failed check."""
+    from .transfer import local_files
     folder = run.outputs.get(produce.name)
     if folder is None:
         return [f"output '{produce.name}' was not written: step '{run.step.step}' declares it in produces= and "
                 f"never called step.output('{produce.name}')."]
-    count = _files(folder)
-    if count == 0:
+    paths = list(local_files(folder))
+    if not paths:
         return [f"output '{produce.name}' is empty: the step wrote no files into {folder}."]
+    if produce.type == "dataset" and any(p == RESERVED_FOLDER or p.startswith(RESERVED_FOLDER + "/") for p in paths):
+        return [f"output '{produce.name}' holds a file in {RESERVED_FOLDER}/, which the platform keeps for itself "
+                f"in every dataset. Write it elsewhere."]
     layout, min_files = run.checks.get(produce.name, (None, 1))
-    found = [f"it holds {count} files; at least {min_files} are needed"] if count < min_files else []
+    found = [f"it holds {len(paths)} files; at least {min_files} are needed"] if len(paths) < min_files else []
     if layout:
         from . import layouts
         found += layouts.load(layout, run.client).validate(folder).errors
@@ -388,44 +395,62 @@ def _problems(run: _Running, produce: Produce) -> list:
         if found else []
 
 
-def _save(run: _Running, produce: Produce, folder: pathlib.Path) -> str:
-    """Save one output; returns the commit that holds it."""
-    step = run.step
-    if os.environ.get(LOCAL_OUTPUTS_ENV):
-        return _keep_locally(produce, folder, pathlib.Path(os.environ[LOCAL_OUTPUTS_ENV]))
-    reads = {f"read.{r.name}": r.commit for r in lock.current().reads}
-    try:
-        if produce.type == "dataset":
-            from .dataset_writer import write_version
-            return write_version(run.client, produce.repo, folder, name=produce.name, run=step.run, step=step.step,
-                                 app=step.app, promote=produce.promote,
-                                 metadata={f"kaos.{k}": v for k, v in reads.items()})
-        from .outputs import RunWriter
-        writer = RunWriter(step.app, step.experiment, step.run, produce.name, run.client)
-        writer.repo = produce.repo
-        with writer:
-            writer.save(folder)
-            return writer.finish({"step": step.step, **reads})
-    except AuthError as exc:
-        _fail(f"this app may not write {produce.repo}: only what the step declares in produces=[...] in "
-              f"pipeline.py can be written. ({exc})")
-
-
 def _keep_locally(produce: Produce, folder: pathlib.Path, root: pathlib.Path) -> str:
     """A local run (``kaosctl step run``) uploads nothing: the output is kept in ``root/<name>``, marked as a whole
     copy so that the next local step finds it as its input. The commit is a hash of the content."""
-    import hashlib
-    import shutil
-    from .layouts import local
-    from .transfer import _md5, local_files
-    listing = "".join(f"{path} {_md5(p)}\n" for path, p in local_files(folder).items())
-    commit = hashlib.sha256(listing.encode()).hexdigest()
+    from .transfer import fingerprint
+    commit = fingerprint(folder)
     target = root / produce.name
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(folder, target)
     (target / local.STAGED_MARKER).write_text(json.dumps(
         {"repo": produce.repo, "commit": commit, "full": True, "layout": "raw"}))
     return commit
+
+
+def _seal(run: _Running, produce: Produce) -> writer.Sealed:
+    from .outputs import run_prefix
+    step, dataset = run.step, produce.type == "dataset"
+    meta = {"kaos.run": step.run, "kaos.app": step.app, "kaos.step": step.step,
+            **{f"kaos.read.{r.name}": r.commit for r in lock.current().reads}}
+    if not dataset:       # what the model panel and the outputs repository have always had on a commit
+        meta.update(app=step.app, experiment=step.experiment, run=step.run, kind=produce.name)
+    return writer.seal(
+        run.client, produce.repo, run.outputs[produce.name], name=produce.name,
+        prefix="" if dataset else run_prefix(step.experiment, step.run, produce.name),
+        branch=writer.run_branch(step.run, step.step, produce.name),
+        tag_prefix=writer.keep_prefix(step.run, step.step) if dataset else None,
+        message=f"{produce.name}: {step.experiment}/{step.run}", meta=meta)
+
+
+def _save(run: _Running) -> list:
+    """Save every output; returns their ledger writes. Seal all of them first, promote only then: a step that
+    fails while writing moves no ``main``. Models and artifacts are promoted before datasets, so that the one
+    case that cannot be undone (two datasets promoted, the second merge failing) is as narrow as it can be."""
+    if os.environ.get(LOCAL_WORK_ENV):
+        root = pathlib.Path(os.environ[local.STAGED_ENV])
+        return [lock.Write(p.name, p.type, p.repo, _keep_locally(p, run.outputs[p.name], root))
+                for p in run.step.produces]
+    sealed, writes, repo = [], [], ""
+    try:
+        for produce in run.step.produces:
+            repo = produce.repo
+            sealed.append((produce, _seal(run, produce)))
+        for produce, s in sorted(sealed, key=lambda item: item[0].type == "dataset"):
+            repo = produce.repo
+            commit = writer.promote(s) if produce.type != "dataset" or produce.promote else s.commit
+            writes.append(lock.Write(produce.name, produce.type, produce.repo, commit))
+    except PermissionDenied as exc:
+        _fail(f"this app may not write {repo}: only what the step declares in produces=[...] in pipeline.py can "
+              f"be written. ({exc})")
+    except AuthError as exc:
+        _fail("lakeFS rejected the credential this step was given, or it has expired. The app cannot fix this: "
+              f"report it to the platform team with the run's name ({run.step.run}). ({exc})")
+    finally:
+        for _, s in sealed:
+            writer.discard(s)
+    order = {p.name: i for i, p in enumerate(run.step.produces)}
+    return sorted(writes, key=lambda w: order[w.name])
 
 
 # ------------------------------------------------------------------------------------------------------- result
@@ -466,9 +491,8 @@ def result(**values) -> None:
     if problems:
         _fail("\n".join(problems))
     _sized(_result(values, [lock.Write(p.name, p.type, p.repo, "0" * 64) for p in produces]))   # before any save
-    for produce in produces:
-        commit = _save(run, produce, run.outputs[produce.name])
-        lock.current().wrote(lock.Write(produce.name, produce.type, produce.repo, commit))
+    for write in _save(run):
+        lock.current().wrote(write)
     text = _sized(_result(values, lock.current().writes))
     _ledger_on_mlflow()
     target = _work(RESULT_FILE)
@@ -487,35 +511,45 @@ def _ledger_on_mlflow() -> None:
 
 
 # ------------------------------------------------------------------------------- a step must not end without one
-def _watch_exit(run: _Running) -> None:
-    """A step that ends well without a result would hand nothing on. Make that a failure of this step."""
-    real_exit, real_hook = sys.exit, sys.excepthook
+class _Quit(SystemExit):
+    """What ``sys.exit`` raises once a step has started: the same exit, but the step can tell it from others."""
 
-    def exit_(code=0):
-        run.exit_code = code
-        real_exit(code)
+
+def _watch_exit(run: _Running) -> None:
+    """A step that ends without a result would hand nothing on, so it must end with a non-zero exit code.
+
+    Whatever the interpreter is leaving with is only known if it is a ``sys.exit(n)`` that nothing caught (also
+    what ``argparse`` and ``checkpoint.exit_for_restart`` do); that code is kept. Everything else without a result,
+    a normal end, an exit code 0, a caught exit, a ``raise SystemExit(n)``, ends with 1. Out of reach: ``os._exit``.
+    """
+    real_hook = sys.excepthook
+
+    def exit_(code=None):
+        exc = _Quit(code)
+        if threading.current_thread() is threading.main_thread():   # in another thread it only ends that thread
+            run.quit = exc
+        raise exc
 
     def hook(*args):
         run.raised = True
         real_hook(*args)
 
+    run.undo = (sys.exit, real_hook)
     sys.exit, sys.excepthook = exit_, hook
     atexit.register(_at_exit, run)
 
 
-def leaving(code) -> None:
-    """Tell the step that the process is about to exit with ``code`` on purpose (kaos-lib's own exits)."""
-    if _running is not None:
-        _running.exit_code = code
-
-
-def _ended_without_result(run: _Running) -> bool:
-    return (run is _running and not run.done and not run.raised and run.exit_code in (None, 0)
-            and os.getpid() == run.pid)
+def _chosen_code(run: _Running) -> int:
+    """The non-zero exit code a ``sys.exit`` that nothing caught is leaving with, else 0."""
+    exc = run.quit
+    if exc is None or exc.__traceback__ is None or exc.__traceback__.tb_frame.f_back is not None:
+        return 0      # no exit at all, or it was caught on the way up: the step went on
+    code = exc.code
+    return code if isinstance(code, int) else (0 if code is None else 1)
 
 
 def _at_exit(run: _Running) -> None:
-    if _ended_without_result(run):
+    if run is _running and not run.done and not run.raised and os.getpid() == run.pid and not _chosen_code(run):
         print(f"ERROR: step '{run.step.step}' ended without step.result(): the next step would get nothing. "
               "Call step.result() as the last line.", file=sys.stderr, flush=True)
         sys.stdout.flush()

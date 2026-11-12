@@ -141,8 +141,3 @@ def context(environ: Optional[Mapping] = None) -> Context:
 def run_id(environ: Optional[Mapping] = None) -> Optional[str]:
     """The run's name, or None outside a pipeline run."""
     return context(environ).run_id
-
-
-def in_step(environ: Optional[Mapping] = None) -> bool:
-    """Whether this process is a pipeline step (the platform set the step context)."""
-    return bool((os.environ if environ is None else environ).get(STEP_CONTEXT_ENV))

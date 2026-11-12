@@ -267,7 +267,8 @@ class RealLakeFS:
         if path.startswith("/kaos/"):
             return self.kaos.get(path, (404, b"<html><body>404 page not found</body></html>"))
         if self.deny:
-            return self.deny, {"message": "insufficient permissions"}
+            return (401 if self.deny == "refused" else self.deny), {
+                "message": "error authenticating request" if self.deny == 401 else "insufficient permissions"}
         if request.method == "POST" and path.endswith("/objects") and self.upload_answers:
             self.writes.pop()
             return self.upload_answers.pop(0), {"message": "try again"}

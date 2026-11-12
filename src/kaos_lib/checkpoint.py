@@ -345,8 +345,7 @@ def _end_step(final: pathlib.Path) -> None:
     print("kaos-lib: checkpoint saved to %s; ending the step with exit code %d so it continues in a new job"
           % (final, CONTINUE_EXIT_CODE), file=sys.stderr, flush=True)
     sys.stdout.flush()
-    _leaving()
-    raise SystemExit(CONTINUE_EXIT_CODE)
+    sys.exit(CONTINUE_EXIT_CODE)
 
 
 _MISSING = object()
@@ -451,18 +450,10 @@ def progress(value: Any) -> None:
     _atomic_write(dir() / PROGRESS_FILE, body)
 
 
-def _leaving() -> None:
-    """A step that is ended to be continued hands on no result yet: that is not a step without a result."""
-    step = sys.modules.get("kaos_lib.step")
-    if step is not None:
-        step.leaving(CONTINUE_EXIT_CODE)
-
-
 def exit_for_restart() -> None:
     """End the step so it is continued: exit code 85. Call it after ``save`` when ``stop_requested()`` is true."""
     sys.stdout.flush()
-    _leaving()
-    raise SystemExit(CONTINUE_EXIT_CODE)
+    sys.exit(CONTINUE_EXIT_CODE)
 
 
 def _save_and_end(save_fn: Optional[Callable[[pathlib.Path], Any]]) -> bool:

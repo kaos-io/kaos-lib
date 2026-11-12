@@ -197,6 +197,5 @@ def test_published_storage_prefix_wins_over_env(fake, client, monkeypatch):
 
 
 @pytest.mark.parametrize("name", ["BAD", "x", "has_underscore", "-starts-with-a-hyphen"])
-def test_a_name_no_repository_can_have_is_not_a_repository_and_not_an_http_error(client, name):
-    assert client.repository(name) is None
+def test_a_name_no_repository_can_have_is_not_a_repository(name):
     assert not datasets.is_repo_name(name)

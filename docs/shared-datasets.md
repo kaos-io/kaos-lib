@@ -25,7 +25,8 @@ kaosctl dataset pull team-a/dataset-cats@v3  # read-only copy
   read on exactly the datasets it shares with your project.
 - **Cache**: `<cache>/<owner>/<repo>/<commit>` (your own: `<cache>/<repo>/<commit>`); the copy's marker records
   the owner, so your `dataset-x` and the owner's `dataset-x` never mix, even at the same commit id. A staged copy
-  (`$KUBECORE_STAGED_DIR`) is used only when its `.kaos-ready` record names the same repository and owner.
+  (a folder under `$KAOS_STAGED_ROOT`) is used only when its `.kaos-ready` record names the same repository and owner
+  and says it holds the whole commit.
 - **Read-only**: `release`, `push` and `create` of a `<owner>/...` name are refused before anything is sent.
 - **Errors**: an owner that is not a project of your organisation, or a lakeFS too old to serve
   `/kaos/v1/peers`, is a one-line error. In `list --shared`, a peer that answers 401 shares nothing with you; a

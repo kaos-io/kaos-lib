@@ -25,7 +25,6 @@ def test_full_environment():
         experiment="baseline", lakefs_endpoint="http://lakefs.example:8000",
         mlflow_uri="http://mlflow.example:5000", support="current")
     assert ctx.outputs_repo == "outputs-hera-demo"
-    assert runtime.in_step(FULL) and not runtime.in_step({})
 
 
 def test_empty_environment_is_all_none():

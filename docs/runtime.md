@@ -7,7 +7,6 @@ is not the step's entry (a library, a helper) and for the step's share of a shar
 from kaos_lib import runtime
 ctx = runtime.context()    # frozen dataclass; a value that was not given is None, and it never raises
 runtime.run_id()           # the run's name, or None outside a pipeline run
-runtime.in_step()          # whether this process is a pipeline step
 runtime.usable_cpus()      # the cores to size worker pools by (see "A shared HPC node" below)
 ```
 
