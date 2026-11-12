@@ -518,13 +518,14 @@ def test_result_puts_reads_and_writes_on_the_mlflow_run_as_the_steps_own_file(mo
 
 
 # -------------------------------------------------------------------------------- a step must not end without one
-def run_entry(tmp_path, body, context="context-escapes"):
+def run_entry(tmp_path, body, context="context-escapes", pre="", stdout=False):
     script = tmp_path / "entry.py"
-    script.write_text("from kaos_lib import step\nstep.WORK = %r\nstep.RESULT_FILE = %r\nstep.start()\n%s\n"
-                      % (str(tmp_path / "work"), str(tmp_path / "work" / "output" / "kaos-result.json"), body))
+    script.write_text("%sfrom kaos_lib import step\nstep.WORK = %r\nstep.RESULT_FILE = %r\nstep.start()\n%s\n"
+                      % (pre, str(tmp_path / "work"), str(tmp_path / "work" / "output" / "kaos-result.json"), body))
     env = {**os.environ, "PYTHONPATH": str(pathlib.Path(kaos_lib.__file__).parent.parent), step.ENV: wire(context)}
     done = subprocess.run([sys.executable, str(script)], env=env, capture_output=True, text=True, timeout=120)
-    return done.returncode, done.stderr, tmp_path / "work" / "output" / "kaos-result.json"
+    result = tmp_path / "work" / "output" / "kaos-result.json"
+    return (done.returncode, done.stderr, result, done.stdout) if stdout else (done.returncode, done.stderr, result)
 
 
 ENDED = "ended without step.result()"
@@ -536,6 +537,11 @@ EXITS = [   # body, exit code, whether a result file exists, whether the "ended 
     ("import sys; sys.exit(3)", 3, False, False),
     ("import sys\ntry:\n    sys.exit(3)\nexcept SystemExit:\n    raise", 3, False, False),
     ("import sys; sys.exit('a message')", 1, False, False),
+    ("import sys; sys.exit(256)", 1, False, True),      # 8 bits only: 256 would end as 0
+    ("import sys; sys.exit(512)", 1, False, True),
+    ("import sys; sys.exit(257)", 1, False, False),
+    ("import sys; sys.exit('text')", 1, False, False),
+    ("import sys; sys.exit(None)", 1, False, True),
     ("import sys\ntry:\n    sys.exit(2)\nexcept SystemExit:\n    pass", 2, False, False),     # caught: keeps its code
     ("import argparse\ntry:\n    argparse.ArgumentParser().parse_args(['--nope'])\nexcept SystemExit:\n    pass", 2,
      False, False),
@@ -556,6 +562,14 @@ EXITS = [   # body, exit code, whether a result file exists, whether the "ended 
 def test_a_step_ends_non_zero_without_a_result_and_keeps_the_exit_code_it_chose(tmp_path, body, code, has_result, says):
     got, err, file = run_entry(tmp_path, body)
     assert got == code and file.exists() is has_result and (ENDED in err) is says, err
+
+
+def test_handlers_registered_before_start_run_and_those_after_run_once_when_the_step_has_no_result(tmp_path):
+    pre = "import atexit\natexit.register(lambda: print('BEFORE START'))\n"
+    body = "import atexit\natexit.register(lambda: print('AFTER START', flush=True))"
+    got, err, file, out = run_entry(tmp_path, body, pre=pre, stdout=True)
+    assert got == 1 and not file.exists() and ENDED in err
+    assert out.splitlines().count("BEFORE START") == 1 and out.splitlines().count("AFTER START") == 1
 
 
 def test_the_hook_is_taken_off_when_the_step_is_forgotten(monkeypatch):

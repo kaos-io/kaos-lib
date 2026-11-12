@@ -181,7 +181,8 @@ class _Running:
         self.checks: dict = {}       # produce name -> (layout, min_files)
         self.done = False
         self.pid = os.getpid()
-        self.undo = None             # sys.exit and sys.excepthook as they were
+        self.undo = None             # sys.exit, sys.excepthook and atexit.register as they were
+        self.late = []               # the exit handlers registered after start()
         self.quit = None             # the exit code of the last sys.exit of the main thread
         self.raised = False          # an exception reached the top
         self._client = None
@@ -244,7 +245,7 @@ def stop() -> None:
     """Forget the running step (tests; a long-lived process between steps)."""
     global _running
     if _running is not None and _running.undo:
-        sys.exit, sys.excepthook = _running.undo
+        sys.exit, sys.excepthook, atexit.register = _running.undo
         atexit.unregister(_at_exit)
     _running = None
     lock.strict(None)
@@ -523,26 +524,37 @@ def _watch_exit(run: _Running) -> None:
     caught one keeps its code as well. In every other case without a result (a normal end, exit code 0, an exit in
     another thread, a bare ``raise SystemExit(n)``) the step ends with 1. Out of reach: ``os._exit``.
     """
-    real_exit, real_hook = sys.exit, sys.excepthook
+    real_exit, real_hook, real_register = sys.exit, sys.excepthook, atexit.register
 
     def exit_(code=None):
         if threading.current_thread() is threading.main_thread():
-            run.quit = code if isinstance(code, int) else (0 if code is None else 1)
+            run.quit = code % 256 if isinstance(code, int) else (0 if code is None else 1)   # the process keeps 8 bits
         real_exit(code)
 
     def hook(*args):
         run.raised = True
         real_hook(*args)
 
-    run.undo = (real_exit, real_hook)
-    sys.exit, sys.excepthook = exit_, hook
-    atexit.register(_at_exit, run)
+    def register(func, *args, **kwargs):
+        run.late.append(func)
+        return real_register(func, *args, **kwargs)
+
+    run.undo = (real_exit, real_hook, real_register)
+    sys.exit, sys.excepthook, atexit.register = exit_, hook, register
+    real_register(_at_exit, run)
 
 
 def _at_exit(run: _Running) -> None:
     if run is _running and not run.done and not run.raised and os.getpid() == run.pid:
-        if not run.quit:      # nothing chose a non-zero code: the step would have ended well
+        code = (run.quit or 0) % 256
+        if not code:          # nothing chose a non-zero code: the step would have ended well
             print(f"ERROR: step '{run.step.step}' ended without step.result(): the next step would get nothing. "
                   "Call step.result() as the last line.", file=sys.stderr, flush=True)
+        # Exit handlers run last-registered first, so this one has run before those registered before start(). Those
+        # that were registered after it have run already: take them off, then run the rest before forcing the exit.
+        atexit.unregister(_at_exit)
+        for func in run.late:
+            atexit.unregister(func)
+        atexit._run_exitfuncs()
         sys.stdout.flush()
-        os._exit(run.quit or 1)
+        os._exit(code or 1)
