@@ -16,7 +16,7 @@ Example:
 pipeline.py:7: error L-E05 DependencyOrProducer: Step 'evaluate' needs 'train', which is defined after it ...
     fix: Move the line that defines 'train' above this step.
     docs: .../lint/L-E05.html
-config/dataset.yaml:1:10: warning L-W03 UnpinnedDataset: The dataset 'dataset-default@latest' follows the newest data ...
+steps/train/app/entry.py:7:7: warning L-W03 DatasetVersionInCode: This string names a dataset and a version ...
 0 errors, 1 warning, 0 infos; 2 rules skipped. Rule set 2.0.0; facts from: built-in default.
 ```
 
@@ -128,7 +128,7 @@ render and when a step is submitted.
 | error | [L-E09 PlatformConfigGroup](lint/L-E09.md) | the `platform` group still in the app's config |
 | warning | [L-W01 LongGpuStepNotResumable](lint/L-W01.md) | a long GPU step known not to continue |
 | warning | [L-W02 IdleTimeoutOff](lint/L-W02.md) | the idle limit turned off |
-| warning | [L-W03 UnpinnedDataset](lint/L-W03.md) | a dataset reference that follows `@latest` |
+| warning | [L-W03 DatasetVersionInCode](lint/L-W03.md) | a dataset version written in step code |
 | warning | [L-W04 NoMlflowOrModelNotRegistered](lint/L-W04.md) | no MLflow logging, or no registered model |
 | warning | [L-W05 DeclaredResumableDidNotResume](lint/L-W05.md) | a step declared resumable restarted from zero on the platform |
 | error | [L-D01 MissingKaosLibArg](lint/L-D01.md) | a step uses kaos-lib but its Dockerfile has no `ARG KAOS_LIB_PACKAGE` |

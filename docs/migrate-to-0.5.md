@@ -42,14 +42,17 @@ The placeholder is not a kind, so `kaosctl lint` keeps failing until you replace
 If your app has a folder `config/platform/`, delete it. A step never reads addresses or platform settings from
 the config: they are not in `ctx.params`.
 
+`from kubecore.authoring import pipeline, step` (and `model`, `artifact`, `dataset`) in `pipeline.py` stays as it is:
+that is the platform's own module for describing a pipeline, not the old name of kaos-lib.
+
 Then add by hand what `--fix` cannot know:
 
 | add | when |
 | --- | --- |
-| `inputs=["dataset"]` | the step reads a dataset. Name the setting that holds the reference (`dataset: dataset-my-data@v3` in `config/`). |
+| `inputs=["dataset"]` | the step reads a dataset. Name the setting that holds the reference (`dataset: dataset-my-data@v3` in `config/`). `inputs=` is all the platform needs to pin it; keep the setting in `reads=` only if the step also reads the value itself from `ctx.params`. |
 | `produces=[model("model")]` | the step saves a model |
 | `produces=[artifact("report")]` | the step saves other files of the run |
-| `produces=[dataset("clean")]` | the step writes a dataset that later steps or runs read |
+| `produces=[dataset("clean")]` | the step writes a dataset that later steps or runs read. Its repository is `dataset-<app>-clean` |
 
 Before:
 
@@ -85,7 +88,10 @@ platform pins every input before the first step starts.
 | passing a path, a commit or a run name to the next step | nothing: the next step calls `step.input("model")` |
 | `Path("/work/output/<name>.json").write_text(json.dumps(...))` | `step.result(key=value, ...)` |
 | `lock.record(...)`, `lock.write(...)` | nothing: reads and writes are recorded for you |
-| `from kubecore import ...`, the `kubecore` and `kaos-cli` commands | `from kaos_lib import ...`, `kaosctl` |
+| `from kubecore import ...` (the old import name of kaos-lib), the `kubecore` and `kaos-cli` commands | `from kaos_lib import ...`, `kaosctl` |
+| `datasets.materialize(...)` returned the layout's entry (for `yolo`, the `data.yaml` file) | `step.input("dataset")` returns the **folder**: for `yolo` use `step.input("dataset") / "data.yaml"` |
+| a dataset with no files made `materialize` raise `EmptyDataset` | the step fails with one line that names the input, the dataset and what to do |
+| a test called `main(client=...)` and passed `--params` | `kaos_lib.testing.running(tmp_path, inputs={...}, params={...})`, then call `main()` ([The step API](step.md#test-a-step-in-your-own-tests)) |
 
 Before:
 
@@ -161,4 +167,6 @@ kaosctl step run train --input dataset=./a-few-files
 | `outputs.run(...)`, `outputs.write_run(...)` | still there for scripts outside a pipeline; a step uses `step.output()` |
 | the path of a model: `checkpoints/<experiment>/<run>/` | `<name>/<experiment>/<run>/`, where `<name>` is the name in `model("<name>")`. Name it `checkpoints` to keep the old path. |
 
-The Dockerfile, `config/`, checkpoints ([Long runs](checkpoint.md)), progress and MLflow calls do not change.
+`config/`, checkpoints ([Long runs](checkpoint.md)), progress and MLflow calls do not change. The Dockerfile does not
+change either when it installs kaos-lib through `ARG KAOS_LIB_PACKAGE`, as the templates' do: the platform passes the
+version. A Dockerfile that pins its own kaos-lib needs the pin raised to 0.5.

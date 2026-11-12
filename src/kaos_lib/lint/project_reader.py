@@ -1,5 +1,5 @@
 """Reads the rest of the repository the rules need: the config tree's sections, the dataset default and what each
-step's source does (checkpoints, MLflow, model registration, `latest` dataset references).
+step's source does (checkpoints, MLflow, model registration, dataset versions named in code).
 
 Why: several rules look at files next to pipeline.py. Keeping the reading here, with its limits, means a rule is a
 few lines of judgement and the linter stays static: step code is parsed, never imported or run.
@@ -20,9 +20,9 @@ from .constants import (CHECKPOINT_DIR_ENV, CHECKPOINT_FRAMEWORKS, CHECKPOINT_ST
 
 ENTRY_FILE = "app/entry.py"        # the module the platform starts: python -m app.entry
 from .model import Span
-from .source import SourceFile, TooLarge, inside, parse_python, read_text
+from .source import SourceFile, TooLarge, inside, parse_python, read_text, walk
 
-LATEST_REF = re.compile(r"@latest\b")
+VERSION_REF = re.compile(r"\bdataset-[a-z0-9][a-z0-9-]*@[A-Za-z0-9][\w./-]*")   # a dataset and a version, in code
 PLATFORM_SECTION = "platform"   # the platform-owned group: not a section a step reads
 
 
@@ -34,7 +34,7 @@ class StepSource:
                                        # or a framework the library hooks automatically
     uses_mlflow: bool = False
     registers_model: bool = False
-    latest_refs: list = field(default_factory=list)   # (file, Span) of a string holding `@latest`
+    version_refs: list = field(default_factory=list)  # (file, Span) of a string naming a dataset and a version
     has_entry: bool = False            # app/entry.py exists: the module the platform starts
     starts_step: bool = False          # the code calls kaos_lib.step (step.start())
     old_contract: list = field(default_factory=list)  # (file, Span, what): how steps were written before kaos_lib.step
@@ -76,6 +76,24 @@ def config_sections(root: pathlib.Path) -> Optional[set]:
             names.update(str(k) for k in doc if k != "defaults")
     names.discard(PLATFORM_SECTION)
     return names
+
+
+def config_values(root: pathlib.Path) -> Optional[dict]:
+    """Every top-level value the config tree defines, as ``{name: is it plain text}``: a section such as ``train:``
+    holds a mapping, ``dataset: dataset-x@v1`` is text. None without a config folder."""
+    cfg = root / CONFIG_DIR
+    if not cfg.is_dir() or cfg.is_symlink():
+        return None
+    found = {}
+    for p in sorted(cfg.iterdir()):
+        if p.suffix in (".yaml", ".yml") and inside(root, p) and p.stat().st_size <= MAX_FILE_BYTES:
+            try:
+                doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, yaml.YAMLError):
+                continue
+            if isinstance(doc, dict):
+                found.update({str(k): isinstance(v, str) for k, v in doc.items() if k != "defaults"})
+    return found
 
 
 def dataset_default(root: pathlib.Path) -> Optional[DatasetDefault]:
@@ -147,8 +165,8 @@ def _scan_python(src: SourceFile, out: StepSource) -> None:
             out.uses_mlflow |= "mlflow" in n.value.lower()
             out.uses_checkpoint |= CHECKPOINT_DIR_ENV in n.value
             out.registers_model |= n.value.startswith("models:/")
-            if LATEST_REF.search(n.value):
-                out.latest_refs.append((src.rel, src.span(n)))
+            if VERSION_REF.search(n.value):
+                out.version_refs.append((src.rel, src.span(n)))
             if n.value == OLD_ENTRY_ARGUMENT:
                 out.old_contract.append((src.rel, src.span(n), f"takes {OLD_ENTRY_ARGUMENT} on its command line"))
             elif n.value in OLD_ENTRY_VARIABLES:
@@ -164,7 +182,7 @@ def read_step_source(root: pathlib.Path, name: str) -> StepSource:
         return out
     out.found = True
     budget, count = MAX_STEP_BYTES, 0
-    for path in sorted(folder.rglob("*")):
+    for path in walk(folder):
         if path.suffix not in (".py", ".toml", ".txt") or not inside(root, path):
             continue
         count += 1

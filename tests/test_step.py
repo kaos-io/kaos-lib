@@ -10,6 +10,7 @@ import pytest
 
 import kaos_lib
 from kaos_lib import datasets, lock, step
+from kaos_lib.layouts import local
 from kaos_lib.errors import DatasetError, EmptyDataset, StepError
 
 FIXTURES = pathlib.Path(__file__).with_name("contract_fixtures")
@@ -272,6 +273,33 @@ def test_inside_a_step_a_dataset_the_run_did_not_pin_is_refused(monkeypatch, lak
     assert [r.name for r in lock.current().reads] == ["raw"]
 
 
+def test_inside_a_step_a_commit_given_in_code_is_no_way_round_the_pin(monkeypatch, lake):
+    client = lake.client()
+    begin(monkeypatch, lake.context("context-no-upstream"), client)
+    other, pinned = lake.head("dataset-labels"), lake.commit_of["raw"]
+    ref = datasets.DatasetRef("dataset-labels", "latest")
+    with pytest.raises(DatasetError, match="dataset-labels is not an input of step 'prepare'"):
+        datasets.resolve(ref, client, commit=other)
+    with pytest.raises(DatasetError, match="dataset-labels is not an input of step 'prepare'"):
+        datasets.resolve(datasets.DatasetRef("dataset-labels", "latest", commit=other), client)
+    with pytest.raises(DatasetError, match="dataset-raw-images is not an input"):          # not the pinned commit
+        datasets.resolve(datasets.DatasetRef("dataset-raw-images", "latest"), client, commit=other)
+    with pytest.raises(DatasetError, match="dataset-labels is not an input"):
+        datasets.materialize(datasets.DatasetRef.parse("dataset-labels@" + other), client=client)
+    assert datasets.resolve(datasets.DatasetRef("dataset-raw-images", "latest"), client, commit=pinned) == pinned
+
+
+def test_an_input_without_files_is_one_line_naming_the_input_and_what_to_do(monkeypatch, lake):
+    empty = lake.add_repo("dataset-void", metadata={"kaos.kind": "dataset"})
+    context = lake.context("context-no-upstream")
+    context["ledger"]["reads"][0].update(repo="dataset-void", commit=empty, ref="latest")
+    begin(monkeypatch, context, lake.client())
+    with pytest.raises(StepError, match=r"input 'raw': dataset-void holds no files at the version this run read "
+                                        r"\(latest\). Push data to it with `kaosctl dataset push <folder> "
+                                        r"dataset-void`, or choose another dataset for 'raw' on the run form."):
+        step.input("raw")
+
+
 def test_outside_a_step_a_resolve_asks_lakefs_as_before(lake):
     assert datasets.resolve(datasets.DatasetRef.parse("dataset-labels@latest"), lake.client()) \
         == lake.commit_of["labels"]
@@ -286,15 +314,6 @@ def test_a_pinned_commit_that_is_gone_is_said(monkeypatch, lake):
         step.input("raw")
 
 
-def test_an_input_without_files_is_an_empty_dataset(monkeypatch, lake):
-    empty = lake.add_repo("dataset-void", metadata={"kaos.kind": "dataset"})
-    context = lake.context("context-no-upstream")
-    context["ledger"]["reads"][0].update(repo="dataset-void", commit=empty)
-    begin(monkeypatch, context, lake.client())
-    with pytest.raises(EmptyDataset, match="holds no files"):
-        step.input("raw")
-
-
 def test_a_whole_staged_copy_is_used_and_anything_else_is_downloaded_with_a_line(monkeypatch, lake, tmp_path, capsys):
     begin(monkeypatch, lake.context("context-no-upstream"), lake.client())
     staged = tmp_path / "staged" / "raw"
@@ -302,11 +321,11 @@ def test_a_whole_staged_copy_is_used_and_anything_else_is_downloaded_with_a_line
     (staged / "from-staging.bin").write_bytes(b"s")
     monkeypatch.setenv("KAOS_STAGED_ROOT", str(tmp_path / "staged"))
     marker = {"repo": "dataset-raw-images", "commit": lake.commit_of["raw"]}
-    (staged / ".kaos-ready").write_text(json.dumps(marker))            # a copy that does not say it is whole
+    local.staged_marker(staged).write_text(json.dumps(marker))            # a copy that does not say it is whole
     assert step.input("raw") != staged
     assert f"input 'raw': no whole staged copy of dataset-raw-images at {lake.commit_of['raw']}; downloading it." \
         in capsys.readouterr().out
-    (staged / ".kaos-ready").write_text(json.dumps(dict(marker, full=True)))
+    local.staged_marker(staged).write_text(json.dumps(dict(marker, full=True)))
     assert step.input("raw") == staged and capsys.readouterr().out == ""
 
 
@@ -501,30 +520,57 @@ def test_result_puts_reads_and_writes_on_the_mlflow_run_as_the_steps_own_file(mo
 # -------------------------------------------------------------------------------- a step must not end without one
 def run_entry(tmp_path, body, context="context-escapes"):
     script = tmp_path / "entry.py"
-    script.write_text("from kaos_lib import step\nstep.RESULT_FILE = %r\nstep.start()\n%s\n"
-                      % (str(tmp_path / "kaos-result.json"), body))
+    script.write_text("from kaos_lib import step\nstep.WORK = %r\nstep.RESULT_FILE = %r\nstep.start()\n%s\n"
+                      % (str(tmp_path / "work"), str(tmp_path / "work" / "output" / "kaos-result.json"), body))
     env = {**os.environ, "PYTHONPATH": str(pathlib.Path(kaos_lib.__file__).parent.parent), step.ENV: wire(context)}
     done = subprocess.run([sys.executable, str(script)], env=env, capture_output=True, text=True, timeout=120)
-    return done.returncode, done.stderr, (tmp_path / "kaos-result.json")
+    return done.returncode, done.stderr, tmp_path / "work" / "output" / "kaos-result.json"
 
 
-def test_a_step_that_ends_well_without_a_result_fails(tmp_path):
-    code, err, file = run_entry(tmp_path, "print('all done')")
-    assert code == 1 and not file.exists()
-    assert "ERROR: step 'prepare' ended without step.result(): the next step would get nothing. " \
-           "Call step.result() as the last line." in err
+ENDED = "ended without step.result()"
+EXITS = [   # body, exit code, whether a result file exists, whether the "ended without" line is printed
+    ("pass", 1, False, True),
+    ("raise SystemExit(0)", 1, False, True),
+    ("import sys; sys.exit(0)", 1, False, True),
+    ("raise SystemExit(3)", 1, False, True),            # not told from a normal end: out of reach, but never zero
+    ("import sys; sys.exit(3)", 3, False, False),
+    ("import sys\ntry:\n    sys.exit(3)\nexcept SystemExit:\n    raise", 3, False, False),
+    ("import sys; sys.exit('a message')", 1, False, False),
+    ("import sys\ntry:\n    sys.exit(2)\nexcept SystemExit:\n    pass", 2, False, False),     # caught: keeps its code
+    ("import argparse\ntry:\n    argparse.ArgumentParser().parse_args(['--nope'])\nexcept SystemExit:\n    pass", 2,
+     False, False),
+    ("import argparse\nargparse.ArgumentParser().parse_args(['--nope'])", 2, False, False),
+    ("import sys, threading\nt = threading.Thread(target=lambda: sys.exit(1)); t.start(); t.join()", 1, False, True),
+    ("raise RuntimeError('boom')", 1, False, False),
+    ("import sys\nsys.excepthook = lambda *a: print('custom hook')\nraise RuntimeError('x')", 1, False, True),
+    ("try:\n    raise RuntimeError('train failed')\nexcept Exception as e:\n    print('error', e)", 1, False, True),
+    ("step.result(a=1)", 0, True, False),
+    ("step.result(a=1)\nraise RuntimeError('late')", 1, True, False),
+    ("step.result(a=1)\nstep.result(a=2)", 1, True, False),
+    ("from kaos_lib import checkpoint; checkpoint.exit_for_restart()", 85, False, False),
+    ("import os; os._exit(0)", 0, False, False),        # out of reach: nothing runs after it
+]
 
 
-def test_a_step_that_hands_on_a_result_ends_well(tmp_path):
-    code, err, file = run_entry(tmp_path, "step.result(n=1)")
-    assert (code, err) == (0, "") and json.loads(file.read_text())["values"] == {"n": 1}
-
-
-@pytest.mark.parametrize("body,code", [
-    ("raise ValueError('boom')", 1),
-    ("import sys; sys.exit(3)", 3),
-    ("from kaos_lib import checkpoint; checkpoint.exit_for_restart()", 85),
-])
-def test_a_step_that_fails_or_is_continued_keeps_its_own_exit(tmp_path, body, code):
+@pytest.mark.parametrize("body,code,has_result,says", EXITS, ids=[e[0].splitlines()[0][:50] for e in EXITS])
+def test_a_step_ends_non_zero_without_a_result_and_keeps_the_exit_code_it_chose(tmp_path, body, code, has_result, says):
     got, err, file = run_entry(tmp_path, body)
-    assert got == code and "ended without step.result()" not in err and not file.exists()
+    assert got == code and file.exists() is has_result and (ENDED in err) is says, err
+
+
+def test_the_hook_is_taken_off_when_the_step_is_forgotten(monkeypatch):
+    real_exit, real_hook = sys.exit, sys.excepthook
+    begin(monkeypatch, wire("context-escapes"))
+    assert sys.exit is not real_exit
+    step.stop()
+    assert sys.exit is real_exit and sys.excepthook is real_hook
+
+
+def test_result_after_a_failed_result_works_once(monkeypatch, lake):
+    begin(monkeypatch, lake.context("context-one-upstream"), lake.client())
+    with pytest.raises(StepError, match="was not written"):
+        step.result()
+    fill("model")
+    step.result()
+    with pytest.raises(StepError, match=r"step.result\(\) was already called"):
+        step.result()

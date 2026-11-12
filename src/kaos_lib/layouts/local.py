@@ -20,9 +20,21 @@ from ..errors import DatasetError, EmptyDataset
 from ..lakefs import LakeFS
 from ..transfer import download_prefixes
 
-MARKER = ".kubecore-dataset.json"
+MARKER = ".kubecore-dataset.json"   # a copy's marker is the file beside its folder, never a file in it
 STAGED_ENV, CACHE_ENV = "KAOS_STAGED_ROOT", "KUBECORE_CACHE_DIR"
-STAGED_MARKER = ".kaos-ready"      # written last by whoever staged the folder: {"repo", "commit", "owner", "full"}
+STAGED_MARKER = ".kaos-ready"      # beside a staged folder, written last by whoever staged it:
+                                   # {"repo", "commit", "owner", "full", optional "layout"}
+
+
+def marker_file(directory: pathlib.Path) -> pathlib.Path:
+    """The marker of the copy in ``directory``: ``<directory>.kubecore-dataset.json``, next to it. A folder a step
+    reads holds only the engineer's files."""
+    return directory.with_name(directory.name + MARKER)
+
+
+def staged_marker(folder: pathlib.Path) -> pathlib.Path:
+    """The record of a staged folder: ``<folder>.kaos-ready``, next to it."""
+    return folder.with_name(folder.name + STAGED_MARKER)
 
 
 def cache_root() -> pathlib.Path:
@@ -45,8 +57,10 @@ def marker_matches(directory: pathlib.Path, repo: str, commit: str, prefix: Opti
                    include: Optional[list] = None) -> bool:
     """True when ``directory`` is a finished copy of exactly (owner, repo, commit, prefix, include)."""
     try:
-        m = json.loads((directory / MARKER).read_text())
+        m = json.loads(marker_file(directory).read_text())
     except (OSError, ValueError):
+        return False
+    if not directory.is_dir():
         return False
     same = m.get("repo") == repo and m.get("commit") == commit and (m.get("prefix") or None) == (prefix or None)
     same = same and (m.get("owner") or None) == (owner or None)
@@ -55,9 +69,9 @@ def marker_matches(directory: pathlib.Path, repo: str, commit: str, prefix: Opti
 
 
 def staged_info(staged: pathlib.Path) -> dict:
-    """The folder's ``.kaos-ready`` record, or {} when it has none or it is not a JSON object."""
+    """The folder's ``<folder>.kaos-ready`` record, or {} when it has none or it is not a JSON object."""
     try:
-        info = json.loads((staged / STAGED_MARKER).read_text())
+        info = json.loads(staged_marker(staged).read_text())
     except (OSError, ValueError):
         return {}
     return info if isinstance(info, dict) else {}
@@ -68,8 +82,8 @@ def staged_dir(commit: str, required: Optional[str] = None, *, repo: str,
     """The staged copy of ``repo`` at ``commit`` (holding the ``required`` file), else None.
 
     On an HPC (Slurm) site the inputs of a step are copied next to the job before it starts: one folder per
-    input under ``$KAOS_STAGED_ROOT``, named after the input. A folder is used only when its ``.kaos-ready``
-    record names this repository, this commit and this owner (absent or null for the own project) and says
+    input under ``$KAOS_STAGED_ROOT``, named after the input. A folder is used only when its record
+    (``<name>.kaos-ready``, beside it) names this repository, this commit and this owner (absent or null for the own project) and says
     ``"full": true``, the whole tree of the commit. Anything else (another commit, a partial copy, no record)
     is not used, and the caller downloads. The record may also name the dataset's ``layout``; a step then reads
     the copy without asking lakeFS for it.
@@ -96,7 +110,8 @@ def fetch(client: LakeFS, repo: str, commit: str, prefixes, target: pathlib.Path
     folder that is not a kaos-lib copy. The marker records ``owner`` (None for the own project) and the
     layout's ``include`` patterns (None: the whole tree).
     """
-    if target.exists() and any(target.iterdir()) and not (target / MARKER).is_file():
+    in_cache = cache_root() in target.parents       # ours: a copy cut short by a crash is simply fetched again
+    if not in_cache and target.exists() and any(target.iterdir()) and not marker_file(target).is_file():
         raise DatasetError(f"{target} is not empty and is not a kaos-lib dataset copy; pick another folder.")
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=target.name + ".part-", dir=target.parent))
@@ -108,8 +123,9 @@ def fetch(client: LakeFS, repo: str, commit: str, prefixes, target: pathlib.Path
         marker = {"repo": repo, "commit": commit, "prefix": prefix, "owner": owner}
         if include:
             marker["include"] = list(include)
-        (tmp / MARKER).write_text(json.dumps(marker))
+        marker_file(target).unlink(missing_ok=True)      # no marker: not complete, until the folder is in place
         shutil.rmtree(target, ignore_errors=True)
         os.replace(tmp, target)  # atomic: a half-downloaded copy is never visible as complete
+        marker_file(target).write_text(json.dumps(marker))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

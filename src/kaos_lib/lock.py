@@ -342,6 +342,12 @@ def pinned(repo: str, ref: str, owner: Optional[str] = None) -> Optional[str]:
     return lock.pinned(repo, ref, owner) if lock else None
 
 
+def commits(repo: str, owner: Optional[str] = None) -> set:
+    """The commits of ``repo`` the replayed ledger holds (empty when nothing is replayed)."""
+    lock = replaying()
+    return {r.commit for r in lock.reads if r.repo == repo and r.owner == (owner or None)} if lock else set()
+
+
 def name_of(repo: str, commit: str, owner: Optional[str] = None) -> Optional[str]:
     """The name the replayed ledger gives the read of ``repo`` at ``commit``, or None."""
     lock = replaying()

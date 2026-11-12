@@ -35,7 +35,10 @@ REMOVED_STEP_PARAMS = {
 STEP_KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 PRODUCE_TYPES = ("model", "artifact", "dataset")
 RESERVED_NAME_PREFIX = "kaos-"
+RESERVED_STEP_NAMES = ("main", "compose-and-validate")   # also hpc-follower, which L-E04 reports
+RESERVED_STEP_SUFFIX = "-hpc"
 NAME_MAX = 40                        # characters of a step name, an input name and a produces name
+MAX_READABLE = 16                    # datasets a step can read by name: its inputs and what its needed steps produce
 MAX_NEEDS = 10                       # steps in one step's needs=: each may hand on a result of up to 8 KiB
 # What `kaosctl lint --fix` writes for a missing kind: it is not a kind, so the check keeps failing until one is chosen.
 KIND_PLACEHOLDER = "choose one: " + " | ".join(STEP_KINDS)

@@ -26,12 +26,21 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: every app changes o
   is checked against what the step wrote before and after it is sealed; `latest` moves only when the run asks, and never
   onto a dataset that another run changed in the meantime (the step then writes its version again on the new one).
 - Uploads are tried again after a failure that can pass (a dropped connection, a busy server).
+- `step.result()` saves in order: it checks everything it can, saves every output without moving any dataset's
+  `latest`, and only then moves `latest` of the datasets the run asked to move. A step that fails moves none. A model
+  or an artifact holds exactly the files of the attempt that made the result.
+- `kaos_lib.testing.running`: call a step's `main()` in your own tests with a prepared context and local folders.
+- `kaosctl dev --vscode` writes `.vscode/settings.json` (it is no longer written otherwise); `--kaos-lib` takes the
+  path of a checkout, a wheel or an archive on your machine.
+- A step that ends with exit code 0 without a result now ends with 1; the exit code a step chose is kept.
 - `kaosctl dataset push` to a new repository whose name no dataset can have is refused with the reason, before anything
   is created.
 
 ### Changed
 - `runtime.context()` takes the run, app, project, step, kind and experiment from what the platform hands the step.
 - Inside a pipeline step, `datasets.resolve` and `datasets.materialize` refuse a dataset the run did not pin.
+- `kaosctl lint` reads only the repository's own files (no virtualenv, `.kaos/`, caches or ignored folders) and its
+  `L-W03` now warns about a dataset version written in step code instead of the default version in config.
 - `kaosctl dataset versions BAD` and other invalid names answer "invalid dataset name" instead of an HTTP error.
 
 ### Removed
@@ -42,6 +51,9 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: every app changes o
   `KUBECORE_STEP`, `STEP_NAME`, `OUTPUTS_REPO`, `CHECKPOINT_BUCKET`, `KUBECORE_DATASET_*`, `DATASET*` and
   `KUBECORE_STAGED_DIR`.
 - `kaosctl step run --dataset` (use `--input NAME=REPO@REF`).
+- A file next to every step folder that the platform keeps for itself: the marker of a downloaded or staged copy is the
+  file beside the folder (`<folder>.kubecore-dataset.json`, `<folder>.kaos-ready`), never a file in it, so a step sees
+  only the files of the dataset.
 
 ## 0.4.0 (unreleased)
 

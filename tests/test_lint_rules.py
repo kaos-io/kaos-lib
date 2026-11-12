@@ -48,9 +48,9 @@ def test_every_rule_is_in_the_corpus_or_documented_as_inactive():
 
 # --- the variants of the rules that have several ways to fire ------------------------------------------------
 
-def messages(tmp_path, body, steps=None, catalogue=None, rule=None):
+def messages(tmp_path, body, steps=None, catalogue=None, rule=None, config=None):
     from lint_corpus import repo
-    report = run(tmp_path, repo(body, steps), catalogue)
+    report = run(tmp_path, repo(body, steps, config), catalogue)
     return [f.message for f in report.findings if rule is None or f.rule == rule]
 
 
@@ -80,9 +80,7 @@ def test_should_report_a_cycle_in_raw_hera_depends(tmp_path):
     ('    a = step("a", kind="train", hpc_time_limit="2h", gpu=True)\n', "no argument 'hpc_time_limit'"),
     ('    a = step("a", kind="train", outputs=["metrics"])\n', "no argument 'outputs'"),
     ('    a = step("a", kind="train", walltime="2 hours", gpu=True)\n', "must be minutes or hours"),
-    ('    a = step("a", kind="train", walltime="2h")\n', "only applies to gpu=True"),
     ('    a = step("a", kind="train", resumable="soon", gpu=True)\n', "resumable='soon'"),
-    ('    a = step("a", kind="train", resumable=True)\n', "only applies to gpu=True"),
     ('    a = step("a", kind="train", checkpoint_every=0, gpu=True)\n', "checkpoint_every=0"),
     ('    a = step("a", kind="train", idle_timeout="never", gpu=True)\n', "idle_timeout='never'"),
     ('    a = step()\n', "without a name"),
@@ -141,6 +139,22 @@ def test_w04_reports_a_pipeline_that_never_registers_a_model(tmp_path):
     assert any("registers a model" in m for m in out)
 
 
-def test_w03_reports_latest_in_step_code(tmp_path):
-    code = "REF = 'dataset-default@latest'\n"
-    assert any("@latest" in m for m in messages(tmp_path, '    a = step("a", kind="train")\n', {"a": code}, rule="L-W03"))
+@pytest.mark.parametrize("text", ["dataset-default@latest", "dataset-default@v3", "dataset-default@" + "a" * 40])
+def test_w03_reports_a_dataset_version_named_in_step_code(tmp_path, text):
+    code = f"REF = '{text}'\n"
+    assert any("names a dataset and a version" in m
+               for m in messages(tmp_path, '    a = step("a", kind="train")\n', {"a": code}, rule="L-W03"))
+
+
+@pytest.mark.parametrize("config", ["dataset: dataset-default@latest\n", "dataset: dataset-default\n",
+                                    "dataset: dataset-default@v1\n"])
+def test_w03_leaves_the_default_version_in_config_alone(tmp_path, config):
+    from lint_corpus import CONFIG
+    got = messages(tmp_path, '    a = step("a", kind="train", reads=["dataset"])\n',
+                   config={**CONFIG, "config/dataset.yaml": config}, rule="L-W03")
+    assert got == []
+
+
+@pytest.mark.parametrize("kw", ['walltime="2h"', "resumable=True", 'checkpoint_every="20m"', 'idle_timeout="40m"'])
+def test_a_step_without_a_gpu_may_declare_what_the_engine_accepts_for_every_step(tmp_path, kw):
+    assert messages(tmp_path, f'    a = step("a", kind="train", {kw})\n', rule="L-E06") == []

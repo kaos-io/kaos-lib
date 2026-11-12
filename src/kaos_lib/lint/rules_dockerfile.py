@@ -20,7 +20,7 @@ from .model import ERROR, INFO, WARNING, Span
 from .pipeline_reader import UNKNOWN
 from .project_reader import step_folder
 from .registry import Hit, LintContext, rule
-from .source import TooLarge, inside, parse_python, read_text
+from .source import TooLarge, inside, parse_python, read_text, walk
 
 _CUDA_PACKAGES = re.compile(CUDA_PACKAGE_PATTERN, re.I)
 _DEPENDENCY_FILES = ("pyproject.toml", "requirements.txt", "requirements-cuda.txt", "requirements-gpu.txt")
@@ -73,7 +73,7 @@ def _imports_kaos_lib(ctx: LintContext, step: DockerStep) -> bool:
     if step._imports is None:
         step._imports = False
         budget, count = MAX_STEP_BYTES, 0
-        for path in sorted((ctx.root / step.folder).rglob("*.py")):
+        for path in (p for p in walk(ctx.root / step.folder) if p.suffix == ".py"):
             count += 1
             if count > MAX_STEP_FILES or not inside(ctx.root, path):
                 continue

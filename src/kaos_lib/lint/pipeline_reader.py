@@ -35,6 +35,7 @@ class Step:
     args: dict = field(default_factory=dict)       # parameter name -> the argument's syntax node
     unknown_keywords: list = field(default_factory=list)   # keyword nodes the library does not accept
     opaque: bool = False                # *args or **kwargs: the arguments cannot be read
+    extra_positional: list = field(default_factory=list)   # arguments after the name given by position
 
     def node(self, key: str) -> Optional[ast.AST]:
         return self.args.get(key)
@@ -118,10 +119,12 @@ def _bound_names(tree: ast.AST) -> set:
 def _make_step(call: ast.Call, var: Optional[str], dynamic: bool) -> Step:
     step = Step(call, var, dynamic)
     for i, arg in enumerate(call.args):
-        if isinstance(arg, ast.Starred) or i >= len(STEP_PARAMS):
+        if isinstance(arg, ast.Starred):
             step.opaque = True
-        else:
-            step.args[STEP_PARAMS[i]] = arg
+        elif i == 0:
+            step.args["name"] = arg
+        else:                       # everything after the name is keyword-only
+            step.extra_positional.append(arg)
     for kw in call.keywords:
         if kw.arg is None:
             step.opaque = True

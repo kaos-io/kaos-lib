@@ -40,9 +40,9 @@ result. Use `step.upstream("x", optional=True)` in a step that can work without 
 | --- | --- | --- | --- |
 | `model("name")` | your app's outputs repository, `outputs-<app>` | `<name>/<experiment>/<run>/` | from that path, or from the MLflow model registry when a step registers it |
 | `artifact("name")` | `outputs-<app>` | `<name>/<experiment>/<run>/` | from that path |
-| `dataset("name")` | the dataset `dataset-<name>`, a repository of its own | the dataset's root | as an input: a setting such as `clean: dataset-clean@latest` named in `inputs=` |
+| `dataset("name")` | the dataset `dataset-<app>-<name>`, a repository of its own | the dataset's root | as an input: a setting such as `clean: dataset-hera1-clean@latest` named in `inputs=` |
 
-Each step makes exactly one commit per output per run. [Outputs](outputs.md) describes the outputs repository
+Each output of a step is one commit per run; a retry of the step that writes the same files makes no second one. [Outputs](outputs.md) describes the outputs repository
 and how to browse it. [A dataset a step produces](steps-and-datasets.md#a-dataset-a-step-produces) explains
 dataset versions: what a run stores, and when the dataset's `latest` moves.
 

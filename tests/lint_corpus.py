@@ -120,10 +120,9 @@ CASES = {
         repo('    t = step("work", kind="train", gpu=True, idle_timeout="40m")\n'),
         None, (4, "idle limit")),
     "L-W03": (
-        repo('    a = step("a", kind="train", reads=["dataset"])\n',
-             config={**CONFIG, "config/dataset.yaml": "dataset: \"dataset-default@latest\"\n"}),
-        repo('    a = step("a", kind="train", reads=["dataset"])\n'),
-        None, (1, "newest data")),
+        repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP + "REF = 'dataset-default@latest'\n"}),
+        repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP}),
+        None, (7, "names a dataset and a version")),
     "L-W04": (
         repo('    t = step("train-x", kind="train", gpu=True, reads=["train"])\n', {"train-x": PLAIN_STEP}),
         repo('    t = step("train-x", kind="train", gpu=True, reads=["train"])\n', {"train-x": MLFLOW_STEP}),

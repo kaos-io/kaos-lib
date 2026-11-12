@@ -67,7 +67,10 @@ def fix_pipeline(text: str, rel: str = "pipeline.py") -> tuple:
         first = at(step.call.func.end_lineno, step.call.func.end_col_offset) + 1
         for kw in step.unknown_keywords:
             start = at(kw.lineno, kw.col_offset)
-            if kw.arg == OLD_TIME:
+            if kw.arg == OLD_TIME and NEW_TIME in step.args:
+                changes.append(f"{label}: {OLD_TIME}= left as it is: walltime= is already there. Remove the one you "
+                               "do not mean")
+            elif kw.arg == OLD_TIME:
                 edits.append((start, start + len(OLD_TIME), NEW_TIME.encode()))
                 changes.append(f"{label}: {OLD_TIME}= renamed to {NEW_TIME}=")
             elif kw.arg == OUTPUTS:

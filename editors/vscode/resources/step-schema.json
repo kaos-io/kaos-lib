@@ -175,7 +175,7 @@
         "default": "False",
         "gpu_only": false,
         "pattern": null,
-        "doc": "Run the step on a GPU. Only GPU steps can run on the HPC (Slurm) site, so `walltime` and `resumable` need `gpu=True`.",
+        "doc": "Run the step on a GPU: the platform gives it one. Without it the step runs on a CPU machine.",
         "snippet": "True",
         "values": [
           {
@@ -257,9 +257,9 @@
         "type": "str",
         "required": false,
         "default": null,
-        "gpu_only": true,
+        "gpu_only": false,
         "pattern": "^[0-9]+[mh]?$",
-        "doc": "The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). Only for `gpu=True` steps. Without it the platform uses 4 hours. A step with a limit above 4 hours should be resumable.",
+        "doc": "The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). For a step that runs on an HPC (Slurm) class. Without it the platform uses 4 hours. A step with a limit above 4 hours should be resumable.",
         "snippet": "\"${1:12h}\"",
         "values": [
           {
@@ -312,9 +312,9 @@
         "type": "bool|str",
         "required": false,
         "default": null,
-        "gpu_only": true,
+        "gpu_only": false,
         "pattern": "^[0-9]+[mh]?$",
-        "doc": "Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save 10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says the step never continues. Only for `gpu=True` steps; save with `kaos_lib.checkpoint`.",
+        "doc": "Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save 10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says the step never continues. Save with `kaos_lib.checkpoint`.",
         "snippet": "True",
         "values": [
           {
@@ -606,9 +606,9 @@
     },
     {
       "id": "L-W03",
-      "name": "UnpinnedDataset",
+      "name": "DatasetVersionInCode",
       "level": "warning",
-      "fix": "Pin a version: use <dataset>@v1 (a released version) instead of @latest, so a run always reads the same data.",
+      "fix": "Declare the dataset in inputs=[...] in pipeline.py and read it with step.input(): the version is chosen on the run form, never in step code.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W03.html"
     },
     {

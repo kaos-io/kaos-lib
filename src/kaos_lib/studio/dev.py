@@ -41,7 +41,7 @@ def requirements_text(deps: StepDeps, spec: kaoslib.KaosLibSpec) -> str:
 
 
 def setup_step(step: steps.StepInfo, spec_flag: Optional[str], context: Optional[str], uv: Optional[str],
-               echo=print) -> DevOutcome:
+               echo=print, editor_hint: bool = False) -> DevOutcome:
     """Set up one step's environment and interpreter hint. Never runs the step's code."""
     deps = read_step_deps(step.path)
     spec = kaoslib.resolve(spec_flag, context, deps.kaos_lib_default)
@@ -52,7 +52,7 @@ def setup_step(step: steps.StepInfo, spec_flag: Optional[str], context: Optional
     if result.status == "failed":
         echo(result.log[-2000:])
         return DevOutcome(step.name, "failed", result.note)
-    hint = vscode.write_interpreter_hint(step.path)
+    hint = vscode.write_interpreter_hint(step.path) if editor_hint else "unchanged"
     uses = deps.declares_kaos_lib_arg or deps.imports_kaos_lib
     detail = f"Python {result.python}" + (f", kaos-lib from {spec.source}" if uses else "")
     extras = [n for n in (note, "" if hint in ("written", "unchanged") else hint) if n]
@@ -72,7 +72,7 @@ def run_dev(args) -> int:
             skipped.append(step)
             continue
         print(f"{step.name}: setting up {step.folder}/{VENV_DIR} ...")
-        outcomes.append(setup_step(step, args.kaos_lib, args.context, uv))
+        outcomes.append(setup_step(step, args.kaos_lib, args.context, uv, editor_hint=args.vscode))
     for o in outcomes:
         print(f"  {o.step}: {o.status} ({o.detail})" if o.detail else f"  {o.step}: {o.status}")
     for s in skipped:

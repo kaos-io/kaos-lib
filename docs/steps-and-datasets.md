@@ -102,17 +102,19 @@ step.result(rows=rows)
 data = step.input("clean")           # exactly what "prepare" wrote in this run
 ```
 
-A later run reads the same dataset as an ordinary input: a setting `clean: dataset-clean@latest` named in `inputs=`.
+In code the dataset is just `"clean"`. Its repository carries your app's name, `dataset-<app>-clean` (for the app
+`hera1`, `dataset-hera1-clean`), so two apps made from one template never share a dataset. A later run, or another
+pipeline, reads it as an ordinary input: a setting `clean: dataset-hera1-clean@latest` named in `inputs=`.
 
 What `step.result()` does with the folder:
 
 | | |
 | --- | --- |
-| the version | The dataset `dataset-clean` gets one new version that holds exactly the files of the folder: files you did not write are not in it. |
+| the version | The dataset (`dataset-<app>-clean`) gets one new version that holds exactly the files of the folder: files you did not write are not in it. |
 | only what changed is stored | The folder is compared with the dataset's last version. Unchanged files are not uploaded and take no new space, so a run that changes one file uploads one file, and the difference between two versions is the real change. Keep each file at the same path in every run. |
 | the same content | A run that writes exactly the last version makes no new version. |
 | every run keeps its version | The steps after it in the same run read exactly that version, and it stays readable by its commit. |
-| `latest` | It moves to the run's version only when the run asks for it: the run form has that choice for each dataset the pipeline produces. An experiment therefore never changes what other pipelines read. |
+| `latest` | It moves to the run's version only when the run asks for it. Until the run form has a field for it, put `plan: {promote: {clean: true}}` in the run's advanced config (the name is the one in `produces=`). An experiment therefore never changes what other pipelines read. |
 | two runs at once | When two runs both ask to move `latest`, the second one notices that the dataset changed, writes its version again on top of the new one, and then moves `latest`. `latest` is always one run's complete version, never a mix of two. |
 | a step that is stopped half-way | It leaves no version. The next attempt writes it once. |
 | who may write | Only the app whose pipeline declares the dataset in `produces=`. People read it and can name its versions. |

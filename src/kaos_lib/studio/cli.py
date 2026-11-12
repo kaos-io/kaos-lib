@@ -9,8 +9,8 @@ import argparse
 from . import build, dev, pipeline_engine, run
 from .constants import DEFAULT_SAMPLE_MB
 
-KAOS_LIB_HELP = ("the kaos-lib to install, as a pip requirement (default: the Dockerfile's own default, else this "
-                 "kaosctl's version)")
+KAOS_LIB_HELP = ("the kaos-lib to install, as a pip requirement or the path of a checkout, a wheel or an archive on "
+                 "this machine (default: the Dockerfile's own default, else this kaosctl's version)")
 CONTEXT_HELP = ("the platform's pipeline-context file: its kaosLib.spec is the kaos-lib the platform's build passes, "
                 "its engine block the pipeline engine the platform renders with")
 ENGINE_WHEEL_HELP = ("the pipeline engine release to use, as its wheel URL with the checksum (default: "
@@ -28,8 +28,10 @@ def add_commands(sub: argparse._SubParsersAction) -> None:
     sp.add_argument("path", nargs="?", default=".", help="your app folder (default: the current folder)")
     sp.add_argument("--step", action="append", default=[], metavar="NAME", help="set up only this step (repeat for more)")
     sp.add_argument("--all", action="store_true", help="also set up steps whose dependencies are several GB (torch, CUDA)")
-    sp.add_argument("--kaos-lib", metavar="REQUIREMENT", help=KAOS_LIB_HELP)
+    sp.add_argument("--kaos-lib", metavar="REQUIREMENT|PATH", help=KAOS_LIB_HELP)
     sp.add_argument("--context", metavar="FILE", help=CONTEXT_HELP)
+    sp.add_argument("--vscode", action="store_true", help="also write .vscode/settings.json in each step folder, "
+                    "pointing VS Code at the step's Python (not written otherwise)")
     sp.set_defaults(func=dev.run_dev)
 
     st = sub.add_parser("step", help="work with one step of your pipeline on this machine")
@@ -52,7 +54,7 @@ def add_commands(sub: argparse._SubParsersAction) -> None:
                          "the step is treated as not run)")
     sp.add_argument("--sample-mb", type=int, default=DEFAULT_SAMPLE_MB, metavar="MB",
                     help=f"the most the sample downloads (default {DEFAULT_SAMPLE_MB})")
-    sp.add_argument("--kaos-lib", metavar="REQUIREMENT", help=KAOS_LIB_HELP)
+    sp.add_argument("--kaos-lib", metavar="REQUIREMENT|PATH", help=KAOS_LIB_HELP)
     sp.add_argument("--context", metavar="FILE", help=CONTEXT_HELP)
     sp.add_argument("--engine-wheel", metavar="URL#sha256=HEX", help=ENGINE_WHEEL_HELP)
     sp.add_argument("--profile", choices=pipeline_engine.PROFILES, help=PROFILE_HELP)

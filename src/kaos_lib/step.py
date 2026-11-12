@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from . import lock, runtime, writer
-from .errors import AuthError, LockError, NotFoundError, PermissionDenied, StepError
+from .errors import AuthError, EmptyDataset, LockError, NotFoundError, PermissionDenied, StepError
 from .layouts import local
 
 ENV = runtime.STEP_CONTEXT_ENV
@@ -182,7 +182,7 @@ class _Running:
         self.done = False
         self.pid = os.getpid()
         self.undo = None             # sys.exit and sys.excepthook as they were
-        self.quit = None             # the last sys.exit of the main thread
+        self.quit = None             # the exit code of the last sys.exit of the main thread
         self.raised = False          # an exception reached the top
         self._client = None
 
@@ -295,6 +295,10 @@ def input(name: str, optional: bool = False) -> Optional[pathlib.Path]:  # noqa:
     except NotFoundError:
         entry = read or write
         _fail(f"input '{name}': commit {entry.commit} of {entry.repo} does not exist any more.")
+    except EmptyDataset:
+        _fail(f"input '{name}': {read.repo} holds no files at the version this run read ({read.ref}). Push data to "
+              f"it with `kaosctl dataset push <folder> {read.repo}`, or choose another dataset for '{name}' on the "
+              "run form.")
 
 
 def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Path:
@@ -403,7 +407,7 @@ def _keep_locally(produce: Produce, folder: pathlib.Path, root: pathlib.Path) ->
     target = root / produce.name
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(folder, target)
-    (target / local.STAGED_MARKER).write_text(json.dumps(
+    local.staged_marker(target).write_text(json.dumps(
         {"repo": produce.repo, "commit": commit, "full": True, "layout": "raw"}))
     return commit
 
@@ -511,46 +515,34 @@ def _ledger_on_mlflow() -> None:
 
 
 # ------------------------------------------------------------------------------- a step must not end without one
-class _Quit(SystemExit):
-    """What ``sys.exit`` raises once a step has started: the same exit, but the step can tell it from others."""
-
-
 def _watch_exit(run: _Running) -> None:
     """A step that ends without a result would hand nothing on, so it must end with a non-zero exit code.
 
-    Whatever the interpreter is leaving with is only known if it is a ``sys.exit(n)`` that nothing caught (also
-    what ``argparse`` and ``checkpoint.exit_for_restart`` do); that code is kept. Everything else without a result,
-    a normal end, an exit code 0, a caught exit, a ``raise SystemExit(n)``, ends with 1. Out of reach: ``os._exit``.
+    The exit code of the last ``sys.exit(n)`` of the main thread is kept (it is also what ``argparse`` and
+    ``checkpoint.exit_for_restart`` use); a step cannot tell whether that exit was the one that ended it, so a
+    caught one keeps its code as well. In every other case without a result (a normal end, exit code 0, an exit in
+    another thread, a bare ``raise SystemExit(n)``) the step ends with 1. Out of reach: ``os._exit``.
     """
-    real_hook = sys.excepthook
+    real_exit, real_hook = sys.exit, sys.excepthook
 
     def exit_(code=None):
-        exc = _Quit(code)
-        if threading.current_thread() is threading.main_thread():   # in another thread it only ends that thread
-            run.quit = exc
-        raise exc
+        if threading.current_thread() is threading.main_thread():
+            run.quit = code if isinstance(code, int) else (0 if code is None else 1)
+        real_exit(code)
 
     def hook(*args):
         run.raised = True
         real_hook(*args)
 
-    run.undo = (sys.exit, real_hook)
+    run.undo = (real_exit, real_hook)
     sys.exit, sys.excepthook = exit_, hook
     atexit.register(_at_exit, run)
 
 
-def _chosen_code(run: _Running) -> int:
-    """The non-zero exit code a ``sys.exit`` that nothing caught is leaving with, else 0."""
-    exc = run.quit
-    if exc is None or exc.__traceback__ is None or exc.__traceback__.tb_frame.f_back is not None:
-        return 0      # no exit at all, or it was caught on the way up: the step went on
-    code = exc.code
-    return code if isinstance(code, int) else (0 if code is None else 1)
-
-
 def _at_exit(run: _Running) -> None:
-    if run is _running and not run.done and not run.raised and os.getpid() == run.pid and not _chosen_code(run):
-        print(f"ERROR: step '{run.step.step}' ended without step.result(): the next step would get nothing. "
-              "Call step.result() as the last line.", file=sys.stderr, flush=True)
+    if run is _running and not run.done and not run.raised and os.getpid() == run.pid:
+        if not run.quit:      # nothing chose a non-zero code: the step would have ended well
+            print(f"ERROR: step '{run.step.step}' ended without step.result(): the next step would get nothing. "
+                  "Call step.result() as the last line.", file=sys.stderr, flush=True)
         sys.stdout.flush()
-        os._exit(1)
+        os._exit(run.quit or 1)

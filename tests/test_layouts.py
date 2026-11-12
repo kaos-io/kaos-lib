@@ -184,7 +184,7 @@ def test_own_layout_create_validate_push_pull(fake, client, samples_dir, tmp_pat
 
     out = datasets.materialize(datasets.DatasetRef.parse(f"{repo}@latest"), client=client)   # by the label
     assert out.is_dir() and (out / "data/1.json").is_file() and not (out / "notes").exists()
-    marker = json.loads((out / local.MARKER).read_text())
+    marker = json.loads(local.marker_file(out).read_text())
     assert marker["include"] == ["meta.yaml", "data/**"]
     n = len(fake.calls)
     assert datasets.materialize(datasets.DatasetRef.parse(f"{repo}@latest"), client=client) == out

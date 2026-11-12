@@ -65,6 +65,8 @@ Returns a folder (`pathlib.Path`). `name` is one of two things, and nothing else
 | in the step's `inputs=` | the dataset version the run pinned for that setting |
 | a dataset, model or artifact that a step in `needs=` produced | what that step wrote in this run |
 
+- The folder holds only the files of the dataset or of what the step before it wrote. Nothing of the platform's is in
+  it, so `folder.rglob("*")` counts your files and a copy loop copies only them.
 - It takes a name and nothing else. There is no version argument: the version was chosen when the run was
   submitted (on the run form, or the default in `config/`) and reached the step as one exact version.
 - The files are downloaded once and kept; a second call, or a second step on the same machine, downloads
@@ -97,15 +99,18 @@ export = step.upstream("export", optional=True)     # None when "export" did not
 
 ## `step.output(name)`
 
-Returns an empty local folder for something the step declared in `produces=`. Write files into it. Nothing is
-saved until `step.result()`; every declared output must hold at least one file by then.
+Returns a local folder for something the step declared in `produces=`. It is empty each time the step starts, also
+on a retry on the same machine, so it never holds a file of an earlier attempt. Write files into it, and only your
+own: the platform keeps its records beside the folder, never in it. Nothing is saved until `step.result()`; every
+declared output must hold at least one file by then.
 
 | declared as | saved as |
 | --- | --- |
 | `model("name")`, `artifact("name")` | the files of this run, in your app's outputs repository under `<name>/<experiment>/<run>/` |
-| `dataset("name")` | a new version of the dataset `dataset-<name>`: exactly the files of the folder |
+| `dataset("name")` | a new version of the dataset `dataset-<app>-<name>`: exactly the files of the folder |
 
-Names in `produces=` use lowercase letters, digits and hyphens, at most 40 characters.
+Names in `produces=` use lowercase letters, digits and hyphens, at most 40 characters. A dataset may not hold a
+file in a folder called `.kaos/`: the platform keeps it for itself.
 
 [Results](results.md) says where each ends up and how a later step or run reads it.
 
@@ -124,6 +129,19 @@ For any other condition, raise an error in your code before `step.result()`.
 
 The last call of every step. It checks the outputs, saves each one, and hands the result on.
 
+It works in order, so that a step that fails moves nothing that other pipelines read:
+
+1. It checks everything it can without saving: the values, the size of the result, that every declared output
+   was written, and your `check()`s.
+2. It saves every output, but moves no dataset's `latest`.
+3. Only when all of them are saved, it moves `latest` of the datasets the run asked to move
+   (`plan: {promote: {<name>: true}}` in the run's advanced config).
+4. It writes the result.
+
+A step that fails in 1 or 2 leaves no new version that anyone reads by default. One case cannot be avoided: when a
+step moves `latest` of two datasets, these are two separate changes, and the second can fail after the first
+has happened. A retry of the step then finds the first already done and completes the second.
+
 - `values` are small JSON values (text, numbers, booleans, lists, dictionaries) for the steps that need this
   one. They are also shown on the run page.
 - A result holds a few kilobytes: its limit is 8 KiB. Log metrics to MLflow, and write anything larger into an
@@ -131,6 +149,37 @@ The last call of every step. It checks the outputs, saves each one, and hands th
 - Call it exactly once. A step with nothing to hand on calls `step.result()`.
 - Value names that start with `kaos-` are the platform's.
 - A step that ends without it fails, even with exit code 0: otherwise the next step would start with nothing.
+
+## Test a step in your own tests
+
+`kaos_lib.testing.running` prepares what the platform hands a step, in the same process, so a test calls the
+step's `main()` directly. Nothing is uploaded and nothing needs a login:
+
+```python
+from kaos_lib import testing
+from app import entry
+
+def test_count_files(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "a.txt").write_text("a")
+    with testing.running(tmp_path, kind="evaluate", inputs={"dataset": data},
+                         produces=[("artifact", "report")]) as run:
+        entry.main()
+    assert run.result["values"] == {"files": 1}
+    assert (run.output("report") / "count.txt").exists()
+```
+
+| argument | meaning |
+| --- | --- |
+| `params` | what `step.start().params` holds |
+| `inputs` | input name to a folder of files |
+| `upstream` | step name to the values it handed on, or to `None` for a step that did not run |
+| `produces` | a list of `("model" or "artifact" or "dataset", name)` |
+| `kind`, `name`, `app`, `experiment` | the step's own fields |
+
+`run.result` is what the step handed on (`None` when it wrote none) and `run.output(name)` the folder it saved.
+Several steps one after the other on your machine: [`kaosctl step run`](step-run.md).
 
 ## What goes wrong, and what the message says
 
@@ -156,6 +205,9 @@ hands nothing on.
 | `result()` is called twice | `step.result() was already called` |
 | the step may not write a repository | `this app may not write <repository>` |
 | the step ends without `result()` | `step '<step>' ended without step.result()` |
+| an input has no files | `input '<name>': <dataset> holds no files at the version this run read` |
+| a dataset output holds a file in `.kaos/` | `output '<name>' holds a file in .kaos/` |
+| lakeFS rejected the step's credential | `lakeFS rejected the credential this step was given` |
 
 ## Tracking and long runs
 

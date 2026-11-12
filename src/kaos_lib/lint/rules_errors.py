@@ -9,9 +9,9 @@ import ast
 import re
 from typing import Iterable
 
-from .constants import (COMPUTE_CLASS_KEYS, DISK_PATTERN, IDENTITY_NAMES, KIND_PLACEHOLDER, MAX_NEEDS, MIGRATION_URL, NAME_MAX,
+from .constants import (COMPUTE_CLASS_KEYS, DISK_PATTERN, IDENTITY_NAMES, KIND_PLACEHOLDER, MAX_NEEDS, MAX_READABLE, MIGRATION_URL, NAME_MAX,
                         OLD_ENTRY_ARGUMENT, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
-                        RESERVED_NAME_PREFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
+                        RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
                         TIME_PATTERN)
 from .model import ERROR
 from .pipeline_reader import UNKNOWN, literal
@@ -228,6 +228,15 @@ def _unknown_arguments(ctx, step) -> Iterable[Hit]:
         if kw.arg in REMOVED_STEP_PARAMS:
             fix += f" `kaosctl lint --fix` does it. Guide: {MIGRATION_URL}"
         yield Hit(ctx.file, ctx.span(kw), f"step() has no argument '{kw.arg}', so the render fails.", fix)
+    seen = set()
+    for kw in step.call.keywords:
+        if kw.arg in seen:
+            yield Hit(ctx.file, ctx.span(kw), f"step() is given '{kw.arg}' twice, so the render fails.",
+                      f"Remove one of the two {kw.arg}=.")
+        seen.add(kw.arg)
+    for arg in step.extra_positional:
+        yield Hit(ctx.file, ctx.span(arg), "step() takes only the name by position: every other argument is given by "
+                  "keyword, so this render fails.", "Write it as a keyword, for example kind='train'.")
     if not step.opaque and "name" not in step.args:
         yield Hit(ctx.file, ctx.span(step.call), "step() is called without a name.", "Give the step a name.")
 
@@ -240,15 +249,11 @@ def _disk(ctx, step) -> Iterable[Hit]:
 
 
 def _time_arguments(ctx, step) -> Iterable[Hit]:
-    limit, resumable, gpu = step.value("walltime", None), step.value("resumable", None), step.is_gpu
+    limit, resumable = step.value("walltime", None), step.value("resumable", None)
     if limit is not UNKNOWN and limit is not None:
         if not (isinstance(limit, str) and _TIME.match(limit)):
             yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: "
                       f"walltime={limit!r} must be minutes or hours as text, like '90m', '12h' or '720'.")
-        elif gpu is False:
-            yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: walltime only "
-                      f"applies to gpu=True steps; only GPU steps run on the HPC (Slurm) site.",
-                      "Add gpu=True, or remove walltime.")
     if resumable is UNKNOWN or resumable is None or resumable is False:
         return
     ok = resumable is True or (isinstance(resumable, str) and _TIME.match(resumable)
@@ -257,10 +262,6 @@ def _time_arguments(ctx, step) -> Iterable[Hit]:
         yield Hit(ctx.file, ctx.span(step.node("resumable")), f"{_step_label(step)}: resumable={resumable!r} must "
                   f"be True or a lead time like '20m' or '1h': how long before the time limit the step is told "
                   f"to save its checkpoint.")
-    elif gpu is False:
-        yield Hit(ctx.file, ctx.span(step.node("resumable")), f"{_step_label(step)}: resumable only applies to "
-                  f"gpu=True steps; only GPU steps run on the HPC (Slurm) site.",
-                  "Add gpu=True, or remove resumable.")
 
 
 def _every_arguments(ctx, step) -> Iterable[Hit]:
@@ -279,8 +280,9 @@ def _every_arguments(ctx, step) -> Iterable[Hit]:
 @rule("L-E07", "StepDeclaration", ERROR,
       "Give every step a kind, name its dataset inputs in inputs=[...] and what it writes in produces=[...].")
 def step_declaration(ctx: LintContext) -> Iterable[Hit]:
+    writers = {}                                    # dataset name -> the step that produces it
     for block in ctx.pipeline.blocks:
-        made = {}                                   # step variable -> the names it produces
+        made = {}                                   # step variable -> what it produces, as (type, name)
         for step in block.steps:
             if step.opaque:
                 continue
@@ -288,7 +290,9 @@ def step_declaration(ctx: LintContext) -> Iterable[Hit]:
             yield from _kind(ctx, step)
             inputs = yield from _inputs(ctx, step)
             produced = yield from _produces(ctx, step)
+            yield from _control_handles_no_data(ctx, step, inputs, produced)
             yield from _same_name_twice(ctx, step, inputs, made)
+            yield from _one_writer(ctx, step, produced, writers)
             if step.var:
                 made[step.var] = produced
 
@@ -300,9 +304,15 @@ _NAMES = (f"Use lowercase letters, digits and hyphens, at most {NAME_MAX} charac
 
 def _step_name(ctx, step) -> Iterable[Hit]:
     name = step.name
-    if isinstance(name, str) and _STEP_NAME.match(name) and (len(name) > NAME_MAX or name.startswith(RESERVED_NAME_PREFIX)):
+    if not isinstance(name, str) or not _STEP_NAME.match(name):
+        return
+    if len(name) > NAME_MAX or name.startswith(RESERVED_NAME_PREFIX):
         yield Hit(ctx.file, ctx.span(step.node("name")), f"The step name '{name}' cannot be used. " + _NAMES,
                   "Rename the step and its steps/<folder>.")
+    elif name in RESERVED_STEP_NAMES or name.endswith(RESERVED_STEP_SUFFIX):
+        yield Hit(ctx.file, ctx.span(step.node("name")), f"The step name '{name}' is the platform's: it keeps "
+                  f"{', '.join(RESERVED_STEP_NAMES)} for itself and names the HPC (Slurm) variant of a step "
+                  f"'<step>{RESERVED_STEP_SUFFIX}'.", "Rename the step and its steps/<folder>.")
 
 
 def _kind(ctx, step) -> Iterable[Hit]:
@@ -317,6 +327,25 @@ def _kind(ctx, step) -> Iterable[Hit]:
             f"is {kind!r}, which is not a kind"
         yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)}: kind {chosen}. A step is one of "
                   f"{kinds}.", "Choose the kind that says what the step does.")
+
+
+def _control_handles_no_data(ctx, step, inputs, produced) -> Iterable[Hit]:
+    if step.value("kind") == "control" and (inputs or produced):
+        yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)} is a control step: it steers the run "
+                  "and handles no data, so it takes no inputs= and no produces=.",
+                  "Give the step the kind of the work it does: " + ", ".join(k for k in STEP_KINDS if k != "control"))
+
+
+def _one_writer(ctx, step, produced, writers) -> Iterable[Hit]:
+    for kind, name in produced:
+        if kind != "dataset":
+            continue
+        if name in writers:
+            yield Hit(ctx.file, ctx.span(step.node("produces")), f"{_step_label(step)}: the dataset '{name}' is "
+                      f"already produced by step '{writers[name]}'. A dataset has one writer.",
+                      "Give one of the two datasets another name.")
+        else:
+            writers[name] = step.name if isinstance(step.name, str) else "another step"
 
 
 def _inputs(ctx, step):
@@ -337,6 +366,11 @@ def _inputs(ctx, step):
         if not _NAME.match(name) or name.startswith(RESERVED_NAME_PREFIX):
             yield Hit(ctx.file, ctx.span(node), f"{_step_label(step)}: {name!r} is not a name for an input. " + _NAMES,
                       "Rename the config value, and the name in inputs=[...].")
+        elif ctx.values is not None and not ctx.values.get(name):
+            what = "is a section of the config, not a value" if name in ctx.values else "is not in config/"
+            yield Hit(ctx.file, ctx.span(node), f"{_step_label(step)}: the input '{name}' {what}. An input is the name "
+                      f"of a top-level config value that holds a dataset reference, for example dataset: "
+                      f"dataset-default@latest in config/dataset.yaml.", "Add the value to config/, or fix the name.")
     return list(value)
 
 
@@ -349,17 +383,22 @@ def _produces(ctx, step):
             yield Hit(ctx.file, ctx.span(node), f"{_step_label(step)}: produces must be a list, for example "
                       f"produces=[model(\"model\")].")
         return []
-    seen, datasets = set(), []
+    seen, produced = set(), []
     for el in node.elts:
-        kind = el.func.id if isinstance(el, ast.Call) and isinstance(el.func, ast.Name) else None
+        func = el.func if isinstance(el, ast.Call) else None
+        kind = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
         name = literal(el.args[0]) if kind and el.args else UNKNOWN
         if kind not in PRODUCE_TYPES:
             yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: produces takes model(\"name\"), "
                       f"artifact(\"name\") or dataset(\"name\"), not this.")
             continue
-        if any(kw.arg == "of" for kw in el.keywords):
-            yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: dataset(..., of=...) is reserved for a "
-                      f"later release and is refused at render.", "Remove of=.")
+        for kw in el.keywords:
+            if kw.arg == "of":
+                yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: dataset(..., of=...) is reserved for a "
+                          f"later release and is refused at render.", "Remove of=.")
+            else:
+                yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: {kind}() takes a name and nothing else.",
+                          f"Remove {kw.arg or '**'}=.")
         if name is UNKNOWN:
             continue
         if not isinstance(name, str) or not _NAME.match(name) or name.startswith(RESERVED_NAME_PREFIX):
@@ -370,8 +409,8 @@ def _produces(ctx, step):
                       "Give each thing the step produces its own name.")
         seen.add(name)
         if isinstance(name, str):
-            datasets.append(name)
-    return datasets
+            produced.append((kind, name))
+    return produced
 
 
 def _same_name_twice(ctx, step, inputs, made) -> Iterable[Hit]:
@@ -381,8 +420,10 @@ def _same_name_twice(ctx, step, inputs, made) -> Iterable[Hit]:
     if isinstance(needs, (ast.List, ast.Tuple)) and len(needs.elts) > MAX_NEEDS:
         yield Hit(ctx.file, ctx.span(needs), f"{_step_label(step)} needs {len(needs.elts)} steps; a step can need "
                   f"at most {MAX_NEEDS}.", "Put a step in between that gathers some of their results.")
+    readable = len(inputs)
     for el in needs.elts if isinstance(needs, (ast.List, ast.Tuple)) else ():
-        for name in made.get(getattr(el, "id", None), ()):
+        for kind, name in made.get(getattr(el, "id", None), ()):
+            readable += kind == "dataset"
             if name in inputs:
                 yield Hit(ctx.file, ctx.span(step.node("inputs")), f"{_step_label(step)} has the input '{name}' "
                           f"and needs a step that produces '{name}': step.input(\"{name}\") could mean either.",
@@ -392,6 +433,10 @@ def _same_name_twice(ctx, step, inputs, made) -> Iterable[Hit]:
                           f"both produce '{name}': step.input(\"{name}\") could mean either.",
                           "Rename what one of the two steps produces.")
             seen.setdefault(name, el.id)
+    if readable > MAX_READABLE:
+        yield Hit(ctx.file, ctx.span(step.call), f"{_step_label(step)} can read {readable} datasets by name (its "
+                  f"inputs and the datasets of the steps it needs); a step may have at most {MAX_READABLE}.",
+                  "Split the step, or join datasets it reads.")
 
 
 @rule("L-E08", "StepNotMoved", ERROR,

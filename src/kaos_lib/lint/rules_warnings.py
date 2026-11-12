@@ -42,22 +42,18 @@ def idle_timeout_off(ctx: LintContext) -> Iterable[Hit]:
                       f"until the time limit.")
 
 
-@rule("L-W03", "UnpinnedDataset", WARNING,
-      "Pin a version: use <dataset>@v1 (a released version) instead of @latest, so a run always reads the same "
-      "data.")
-def unpinned_dataset(ctx: LintContext) -> Iterable[Hit]:
+@rule("L-W03", "DatasetVersionInCode", WARNING,
+      "Declare the dataset in inputs=[...] in pipeline.py and read it with step.input(): the version is chosen on the "
+      "run form, never in step code.")
+def dataset_version_in_code(ctx: LintContext) -> Iterable[Hit]:
     seen = set()
-    if ctx.dataset is not None and "@latest" in ctx.dataset.value:
-        yield Hit(ctx.dataset.file, ctx.dataset.span,
-                  f"The dataset '{ctx.dataset.value}' follows the newest data: two runs of the same code can read "
-                  f"different data.")
     for step in ctx.pipeline.steps:
         source = ctx.step_source(step)
-        for file, span in (source.latest_refs if source else []):
+        for file, span in (source.version_refs if source else []):
             if (file, span) not in seen:
                 seen.add((file, span))
-                yield Hit(file, span, "A dataset reference uses @latest: a run reads whatever is newest at the "
-                          "time, so results cannot be reproduced.")
+                yield Hit(file, span, "This string names a dataset and a version. A step reads only the versions the "
+                          "run pinned, so a version written in code is either ignored or refused.")
 
 
 @rule("L-W04", "NoMlflowOrModelNotRegistered", WARNING,

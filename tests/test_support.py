@@ -131,6 +131,7 @@ def test_packaged_release_json_is_valid_and_matches_this_version():
     # >=0.5, breaking) in one commit of its own, merged when the platform cuts over (PRD kaos#1911).
     assert meta["version"] == "0.4.0" and kaos_lib.__version__ == "0.5.0"
     assert meta["supported"] == ">=0.2" and meta["deprecated"] == [] and meta["breaking"] is False
+    assert meta["migration"].endswith("/docs/migrate-to-0.5.html")      # a live page: only the policy is still 0.4's
     assert support.check(kaos_lib.__version__, meta)["verdict"] == "current"
 
 
@@ -176,7 +177,7 @@ def test_step_start_logs_and_continues(capsys, installed, expected):
 
 
 def test_step_start_continues_when_deprecated(capsys):
-    meta = dict(POLICY, deprecated=[{"range": "<0.3", "unsupported_after": "2999-01-01"}])
+    meta = dict(POLICY, breaking=False, deprecated=[{"range": "<0.3", "unsupported_after": "2999-01-01"}])
     assert support.at_step_start("0.2.0", env_with(meta))["verdict"] == "deprecated"
     err = capsys.readouterr().err
     assert "must be rebuilt with a newer kaos-lib" in err and "tell the platform team" in err
@@ -363,3 +364,32 @@ def test_from_lakefs_survives_a_network_error(fake):
 
     client.session = Down()
     assert support.from_lakefs(client) is None
+
+
+# ----------------------------------------- a release that changes how a step is written (``breaking``)
+BREAKING = dict(POLICY, version="0.5.0", supported=">=0.5.0.dev0", deprecated=[], breaking=True,
+                migration="https://example.test/migrate-to-0.5.html")
+
+
+@pytest.mark.parametrize("installed", ["0.5.0", "0.5.0rc1", "0.5.0rc25", "0.5.0.dev3", "0.5.1", "0.6.0rc2"])
+def test_every_prerelease_and_release_of_the_breaking_line_is_supported(installed):
+    assert support.check(installed, BREAKING)["verdict"] in ("current", "behind")
+
+
+@pytest.mark.parametrize("installed", ["0.4.0", "0.4.9", "0.4.0rc25", "0.3.0"])
+def test_the_line_before_it_is_not(installed):
+    assert support.check(installed, BREAKING)["verdict"] == "unsupported"
+
+
+def test_a_step_on_the_old_line_is_told_that_its_code_has_to_change_and_where_the_guide_is(capsys):
+    with pytest.raises(UnsupportedVersion) as err:
+        support.at_step_start("0.4.0", env_with(BREAKING))
+    for text in (str(err.value), capsys.readouterr().err):
+        assert "this app's code has to change" in text and "rebuilding the image with a newer kaos-lib is not enough" in text
+        assert "https://example.test/migrate-to-0.5.html" in text and "must be rebuilt" not in text
+
+
+def test_a_policy_that_is_not_breaking_keeps_the_rebuild_advice(capsys):
+    with pytest.raises(UnsupportedVersion) as err:
+        support.at_step_start("0.1.0", env_with(dict(POLICY, breaking=False)))
+    assert "must be rebuilt with a newer kaos-lib" in str(err.value)

@@ -62,8 +62,7 @@ _PARAMS = {
                 _value('[dataset("clean")]', "The step writes a version of the dataset `clean`.")]),
     "gpu": dict(
         type="bool", rules=("L-E06", "L-W01", "L-W02"), snippet="True",
-        doc="Run the step on a GPU. Only GPU steps can run on the HPC (Slurm) site, so `walltime` and "
-            "`resumable` need `gpu=True`.",
+        doc="Run the step on a GPU: the platform gives it one. Without it the step runs on a CPU machine.",
         default="False",
         values=[_value("True", "The step gets one GPU."), _value("False", "A CPU step (the default).")]),
     "inputs": dict(
@@ -91,16 +90,16 @@ _PARAMS = {
     "walltime": dict(
         type="str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-I02"), snippet='"${1:12h}"',
         doc="The time limit of the step on the HPC (Slurm) site, as minutes or hours in text: `\"90m\"`, `\"12h\"` or "
-            f"`\"720\"` (minutes). Only for `gpu=True` steps. Without it the platform uses {DEFAULT_LIMIT_MINUTES // 60} "
+            f"`\"720\"` (minutes). For a step that runs on an HPC (Slurm) class. Without it the platform uses {DEFAULT_LIMIT_MINUTES // 60} "
             f"hours. A step with a limit above {LONG_GPU_STEP_MINUTES // 60} hours should be resumable.",
-        pattern=TIME_PATTERN, gpu_only=True,
+        pattern=TIME_PATTERN,
         values=[_value('"90m"', "90 minutes."), _value('"4h"', "4 hours."), _value('"12h"', "12 hours."),
                 _value('"24h"', "24 hours.")]),
     "resumable": dict(
-        type="bool|str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-W05"), snippet="True", gpu_only=True,
+        type="bool|str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-W05"), snippet="True",
         doc="Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save "
             "10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says "
-            "the step never continues. Only for `gpu=True` steps; save with `kaos_lib.checkpoint`.",
+            "the step never continues. Save with `kaos_lib.checkpoint`.",
         pattern=TIME_PATTERN,
         values=[_value("True", "Resumable: the step saves a checkpoint 10 minutes before its time limit."),
                 _value("False", "Not resumable: the step is never continued from a checkpoint."),

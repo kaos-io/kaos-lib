@@ -157,3 +157,43 @@ def test_an_app_cannot_write_a_dataset_another_app_declares(lake, tmp_path):
 def test_a_dataset_nobody_declared_does_not_exist_for_the_writer(lake, tmp_path):
     with pytest.raises((StepError, AuthError)):
         write(lake.app_client("writer"), "dataset-undeclared", folder(tmp_path, {"x.bin": b"x"}), "run-1")
+
+
+def test_a_retry_with_the_same_content_reuses_the_sealed_commit_and_its_tag(lake, tmp_path):
+    client = lake.wait_for_dataset("writer", "dataset-written-5")
+    commits = {write(client, "dataset-written-5", folder(tmp_path, {"x": b"x"}, f"o{i}"), "run-1", promote=False)
+               for i in range(4)}
+    assert len(commits) == 1 and [t["id"] for t in client.tags("dataset-written-5")] == [f"k-run-1-prepare-{next(iter(commits))[:12]}"]
+
+
+def test_more_than_a_page_of_files_is_listed_mirrored_and_shrunk(lake, tmp_path):
+    client = lake.wait_for_dataset("writer", "dataset-written-6")
+    files = {f"d/{i:05d}.bin": str(i).encode() for i in range(1100)}
+    assert len(tree(client, "dataset-written-6", write(client, "dataset-written-6", folder(tmp_path, files, "big"), "run-1"))) == 1100
+    version = write(client, "dataset-written-6", folder(tmp_path, {"d/00000.bin": b"0", "new": b"n"}, "small"), "run-2")
+    assert tree(client, "dataset-written-6", "main") == ["d/00000.bin", "new"] and version == client.branch_commit("dataset-written-6", "main")
+
+
+def test_a_second_live_attempt_cannot_swap_content_under_the_first(lake, tmp_path):
+    client, other = lake.wait_for_dataset("writer", "dataset-written-7"), lake.app_client("writer")
+    s = writer.seal(client, "dataset-written-7", folder(tmp_path, {"a.bin": b"a"}, "a"), name="out",
+                    branch=writer.run_branch("run-1", "prepare", "out"), tag_prefix=writer.keep_prefix("run-1", "prepare"),
+                    message="out", meta={"kaos.run": "run-1"})
+    writer.seal(other, "dataset-written-7", folder(tmp_path, {"b.bin": b"b"}, "b"), name="out",
+                branch=writer.run_branch("run-1", "prepare", "out"), tag_prefix=writer.keep_prefix("run-1", "prepare"),
+                message="out", meta={"kaos.run": "run-1"})
+    writer.promote(s)
+    assert tree(client, "dataset-written-7", "main") == ["a.bin"]
+
+
+def test_a_failing_seal_leaves_no_run_branch_and_the_merge_commit_carries_the_run(lake, tmp_path):
+    client = lake.wait_for_dataset("writer", "dataset-written-8")
+    real = client.commit
+    client.commit = lambda *a, **k: (_ for _ in ()).throw(LakeFSError("boom", 500))
+    with pytest.raises(LakeFSError):
+        write(client, "dataset-written-8", folder(tmp_path, {"x": b"x"}), "run-1")
+    assert not client.branch_exists("dataset-written-8", "run-run-1-prepare-out")
+    client.commit = real
+    version = write(client, "dataset-written-8", folder(tmp_path, {"x": b"x"}), "run-1")
+    info = client.commit_info("dataset-written-8", version)
+    assert info["metadata"].get("kaos.run") == "run-1" and info["message"] == "out: run-1"

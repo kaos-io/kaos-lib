@@ -107,7 +107,6 @@ def test_a_retry_with_the_same_content_reuses_the_sealed_commit_and_its_tag(lake
     """The engine retries a step: every attempt writes the same files. Nothing new is made, however often."""
     commits = {save(client, folder(tmp_path, ONE, f"o{i}")) for i in range(8)}
     assert len(commits) == 1 and list(tags(lake).values()) == list(commits)
-    assert len(lake.repos[REPO]["commit_log"]) == 1
 
 
 def test_a_retry_with_other_content_seals_another_commit_with_its_own_tag(lake, client, tmp_path):

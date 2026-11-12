@@ -7,6 +7,8 @@ Generated from the code's docstrings on every build. The guides show how the pie
 
 ::: kaos_lib.step
 
+::: kaos_lib.testing
+
 ::: kaos_lib.datasets
 
 ::: kaos_lib.outputs

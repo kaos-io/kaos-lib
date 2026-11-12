@@ -139,8 +139,13 @@ def test_should_set_up_a_heavy_step_when_it_is_named_or_all_is_given(repo, venv_
     assert venv_stub.calls and any(c[:2] == ["/usr/bin/uv", "venv"] for c in venv_stub.calls)
 
 
-def test_should_write_the_interpreter_hint_into_each_step_folder(repo, venv_stub):
+def test_should_not_write_the_interpreter_hint_unless_asked(repo, venv_stub):
     cli.main(["dev", str(repo), "--step", "data-summary"])
+    assert not (repo / "steps/data_summary/.vscode").exists()
+
+
+def test_should_write_the_interpreter_hint_into_each_step_folder_on_request(repo, venv_stub):
+    cli.main(["dev", str(repo), "--step", "data-summary", "--vscode"])
     settings = json.loads((repo / "steps/data_summary/.vscode/settings.json").read_text())
     assert settings == {"python.defaultInterpreterPath": vscode.interpreter_value()}
     assert settings["python.defaultInterpreterPath"].startswith("${workspaceFolder}/.venv/")
@@ -150,10 +155,10 @@ def test_should_merge_into_an_existing_settings_file_and_leave_a_commented_one_a
     d = repo / "steps/data_summary/.vscode"
     d.mkdir()
     (d / "settings.json").write_text('{"editor.tabSize": 2}')
-    cli.main(["dev", str(repo), "--step", "data-summary"])
+    cli.main(["dev", str(repo), "--step", "data-summary", "--vscode"])
     assert json.loads((d / "settings.json").read_text())["editor.tabSize"] == 2
     (d / "settings.json").write_text('// mine\n{"a": 1}\n')
-    cli.main(["dev", str(repo), "--step", "data-summary"])
+    cli.main(["dev", str(repo), "--step", "data-summary", "--vscode"])
     assert (d / "settings.json").read_text().startswith("// mine") and "left" in capsys.readouterr().out
 
 

@@ -186,8 +186,9 @@ if __name__ == "__main__":
 | writes | a version of the dataset `clean`: the two files in `step.output("clean")` |
 | hands on | `rows` and `dropped` |
 | the next steps | read it with `step.input("clean")` |
-| a later run | reads it as an input: a setting `clean: dataset-clean@latest` named in `inputs=` |
-| `latest` of `dataset-clean` | moves to this run's version only when the run asks for it on the run form |
+| the repository | `dataset-<app>-clean`: your app's name is in it, for example `dataset-hera1-clean` |
+| a later run | reads it as an input: a setting `clean: dataset-hera1-clean@latest` named in `inputs=` |
+| `latest` of the dataset | moves to this run's version only when the run asks for it: `plan: {promote: {clean: true}}` in the run's advanced config |
 
 Write every file under the same path in every run. Then a run that changes one file uploads one file, and the
 difference between two versions is the real change. More:

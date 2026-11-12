@@ -48,6 +48,15 @@ def is_dataset_name(repo: str) -> bool:
     return repo.startswith(DATASET_PREFIX) and bool(_NAME_RE.match(repo[len(DATASET_PREFIX):]))
 
 
+def produced_repo(app: str, name: str) -> str:
+    """The repository of the dataset ``name`` that a step of app ``app`` produces: ``dataset-<app>-<name>``.
+
+    The engine writes the repository of every produced dataset into the step context and kaos-lib takes it from
+    there. This is the one place that spells the rule out, for ``kaosctl step run``, where there is no engine.
+    """
+    return f"{DATASET_PREFIX}{app}-{name}"
+
+
 def dataset_repo(name: str) -> str:
     """``dataset-<name>`` from ``name`` or ``dataset-<name>``; validates the 3-48 char ``[a-z0-9-]`` rule."""
     short = name[len(DATASET_PREFIX):] if name.startswith(DATASET_PREFIX) else name
@@ -192,11 +201,11 @@ def resolve(ref: DatasetRef, client: Optional[LakeFS] = None, commit: Optional[s
     its locked commit, also with no lakeFS call. Every answer is recorded in ``lock.current()``.
 
     Inside a pipeline step the run's ledger is replayed and nothing else is read: a repository it does not
-    cover is refused, so a step never picks a version by itself.
+    cover, or a commit it does not hold for that repository, is refused, so a step never picks a version by itself.
     """
     pinned = commit or ref.commit
     found = ref.with_commit(pinned).commit if pinned else _lock.pinned(ref.repo, ref.version, ref.owner)
-    if not found and _lock.refusing():
+    if _lock.refusing() and found not in _lock.commits(ref.repo, ref.owner):
         raise DatasetError(f"{ref.repo} is not an input of step '{_lock.refusing()}': a step reads only the "
                            "versions the run pinned. Add the config value that names it to inputs=[...] in "
                            "pipeline.py.")

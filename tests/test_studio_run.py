@@ -9,7 +9,7 @@ import re
 import pytest
 
 from kaos_lib import cli
-from kaos_lib.studio import envallow, proc, run, sample, steps
+from kaos_lib.studio import envallow, pipeline_engine, proc, run, sample, steps
 from fake_lakefs import FakeLakeFS
 from studio_helpers import fake_venv, template_repo
 
@@ -30,8 +30,22 @@ step.result()
 '''
 
 
+PARAMS = "summary:\n  label: Data summary\ndata:\n  seed: 42\ndataset: dataset-default@v1\n"
+real_resolve_pin = pipeline_engine.resolve_pin
+
+
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
+    """An app, and a stand-in for the platform's pipeline engine that composes ``PARAMS`` plus the overrides."""
+    def compose(root, py, profile, overrides, output):
+        text = PARAMS + "".join(token.replace("=", ": ", 1) + "\n" for token in overrides)
+        output.write_text(text)
+        return text
+
+    monkeypatch.setattr(pipeline_engine, "resolve_pin", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline_engine, "ensure", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline_engine, "profile_of", lambda *a, **k: "hera")
+    monkeypatch.setattr(pipeline_engine, "compose", compose)
     root = template_repo(tmp_path / "app")
     for s in steps.discover(root):
         fake_venv(s.path)
@@ -94,9 +108,12 @@ def test_should_give_a_step_a_local_folder_as_its_input_and_keep_what_it_produce
     result = kept(repo, "dataset-loading")
     assert result["values"] == {"files": 3}
     assert [(r["name"], r["repo"], r["ref"]) for r in result["reads"]] == [("dataset", "dataset-default", "v1")]
-    assert [(w["name"], w["type"], w["repo"]) for w in result["writes"]] == [("clean", "dataset", "dataset-clean")]
-    assert sorted(p.name for p in (repo / ".kaos/local/staged/clean").iterdir()) == [".kaos-ready", "a.jpg", "b.jpg", "c.jpg"]
-    assert not (images / ".kaos-ready").exists()                        # the user's folder is never written to
+    assert [(w["name"], w["type"], w["repo"]) for w in result["writes"]] == [("clean", "dataset", "dataset-app-clean")]
+    staged = repo / ".kaos/local/staged"
+    assert sorted(p.name for p in (staged / "clean").iterdir()) == ["a.jpg", "b.jpg", "c.jpg"]   # only the files
+    assert sorted(p.name for p in (staged / "dataset").rglob("*") if p.is_file()) == ["a.jpg", "b.jpg", "c.jpg"]
+    assert json.loads((staged / "clean.kaos-ready").read_text())["full"] is True and (staged / "dataset.kaos-ready").is_file()
+    assert not list(images.glob("*.kaos-ready"))                        # the user's folder is never written to
 
 
 def test_the_next_step_gets_the_result_of_the_last_local_run_of_the_step_it_needs(repo, images, capsys):
@@ -166,7 +183,7 @@ def test_should_hold_no_platform_secret_in_the_steps_environment_or_in_any_file(
         if path.is_file():
             text = path.read_text(errors="ignore")
             assert not [v for v in SECRETS.values() if v in text], path
-    assert env["KAOS_LOCAL_WORK"].endswith("work/data-summary") and env["KAOS_STAGED_ROOT"] == env["KAOS_LOCAL_OUTPUTS"]
+    assert env["KAOS_LOCAL_WORK"].endswith("work/data-summary") and env["KAOS_STAGED_ROOT"].endswith("staged")
 
 
 def test_should_say_clearly_when_a_step_reads_a_platform_service(repo, capsys):
@@ -220,8 +237,8 @@ def test_should_set_up_the_environment_first_when_the_step_has_none(tmp_path, mo
     assert calls == ["data-summary"] and "has no environment yet" in capsys.readouterr().out
 
 
-def test_should_ask_for_the_engine_or_a_params_file_when_the_app_has_no_engine_copy(repo, capsys, monkeypatch):
-    (repo / "kubecore/compose.py").unlink()
+def test_should_ask_for_the_engine_or_a_params_file_when_none_is_given(repo, capsys, monkeypatch):
+    monkeypatch.setattr(pipeline_engine, "resolve_pin", real_resolve_pin)
     monkeypatch.delenv("KAOS_ENGINE_WHEEL", raising=False)
     assert cli.main(["step", "run", "data-summary", str(repo)]) == 1
     err = capsys.readouterr().err

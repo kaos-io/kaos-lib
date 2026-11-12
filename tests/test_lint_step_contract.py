@@ -5,16 +5,16 @@ from kaos_lib.lint import lint_project
 from kaos_lib.lint.cli import main as kaosctl_lint
 from kaos_lib.lint.constants import KIND_PLACEHOLDER, STEP_KINDS
 from kaos_lib.lint.fix import fix_config, fix_pipeline
-from lint_corpus import HEADER, OLD_STEP, PLAIN_STEP, repo, write_repo
+from lint_corpus import CONFIG, HEADER, OLD_STEP, PLAIN_STEP, repo, write_repo
 
 
-def findings(tmp_path, body, steps=None, rule="L-E07"):
-    report = lint_project(str(write_repo(tmp_path, repo(body, steps))))
+def findings(tmp_path, body, steps=None, rule="L-E07", config=None):
+    report = lint_project(str(write_repo(tmp_path, repo(body, steps, config))))
     return [f for f in report.findings if f.rule == rule]
 
 
-def messages(tmp_path, body, steps=None, rule="L-E07"):
-    return [f.message + " " + (f.fix or "") for f in findings(tmp_path, body, steps, rule)]
+def messages(tmp_path, body, steps=None, rule="L-E07", config=None):
+    return [f.message + " " + (f.fix or "") for f in findings(tmp_path, body, steps, rule, config)]
 
 
 # ------------------------------------------------------------------------------------------------------ L-E07
@@ -61,7 +61,7 @@ def test_a_full_declaration_is_clean_and_values_that_are_not_literals_are_not_ju
             '    b = step("b", kind="train", needs=[a], inputs=["labels"], gpu=True, walltime="12h",\n'
             '             produces=[model("model"), artifact("report")])\n'
             '    c = step("c", kind=KIND, inputs=INPUTS, produces=PRODUCES)\n')
-    assert findings(tmp_path, body) == []
+    assert findings(tmp_path, body, config={**CONFIG, "config/data.yaml": "raw: dataset-raw@latest\nlabels: dataset-l@v1\n"}) == []
 
 
 def test_a_missing_kind_links_the_guide(tmp_path):
@@ -121,6 +121,7 @@ AFTER = HEADER + f"""    load = step("load", {PLACE}, reads=["dataset"])
 def test_fix_renames_removes_and_adds_a_kind_placeholder_and_nothing_else():
     fixed, changes = fix_pipeline(BEFORE)
     assert fixed == AFTER
+    compile(fixed, "pipeline.py", "exec")
     assert changes == [
         "line 4: step 'load': outputs= removed (hand values on with step.result(...))",
         "line 4: step 'load': kind= added as a placeholder; choose one of the kinds it lists",
@@ -138,6 +139,7 @@ def test_fix_never_chooses_a_kind_so_the_check_still_fails_and_lists_the_kinds(t
     assert kaosctl_lint([str(root), "--fix"]) == 2
     out = capsys.readouterr()
     assert (root / "pipeline.py").read_text() == AFTER
+    compile((root / "pipeline.py").read_text(), "pipeline.py", "exec")
     assert out.err.count("fixed pipeline.py line") == 7
     assert out.out.count("is still the placeholder `kaosctl lint --fix` wrote. A step is one of ingest, transform, "
                          "train, evaluate, publish, control.") == 3
@@ -155,7 +157,25 @@ def test_fix_on_a_file_with_nothing_to_fix_and_on_one_that_does_not_parse(tmp_pa
 
 def test_fix_keeps_text_that_is_not_ascii():
     text = HEADER + '    a = step("a", reads=["données"], hpc_time_limit="2h", gpu=True)   # é\n'
-    assert fix_pipeline(text)[0] == HEADER + f'    a = step("a", {PLACE}, reads=["données"], walltime="2h", gpu=True)   # é\n'
+    fixed = fix_pipeline(text)[0]
+    assert fixed == HEADER + f'    a = step("a", {PLACE}, reads=["données"], walltime="2h", gpu=True)   # é\n'
+    compile(fixed, "pipeline.py", "exec")
+
+
+@pytest.mark.parametrize("body", [
+    '    a = step("a", gpu=True, walltime="1h", hpc_time_limit="2h")\n',
+    '    a = step("a", gpu=True, hpc_time_limit="2h", walltime="1h")\n',
+    '    a = step("a", outputs=["x"])\n',
+    '    a = step(outputs=["x"], name="a")\n',
+    '    a = step("a", gpu=True,\n             outputs=["x"],\n             hpc_time_limit="2h")\n',
+])
+def test_the_fixed_file_is_always_valid_python_and_a_duplicate_keyword_is_never_written(body):
+    fixed, changes = fix_pipeline(HEADER + body)
+    compile(fixed, "pipeline.py", "exec")
+    assert fixed.count("walltime=") <= 1
+    if "walltime=" in body and "hpc_time_limit" in body:
+        assert "hpc_time_limit" in fixed and any("left as it is: walltime= is already there" in c for c in changes)
+    assert fix_pipeline(fixed)[0] == fixed                                         # a second run changes nothing
 
 
 def test_fix_refuses_text_from_standard_input(tmp_path, capsys):
@@ -190,3 +210,59 @@ def test_fix_removes_the_platform_line_from_the_defaults_and_nothing_else(tmp_pa
 
 def test_a_section_called_platform_inside_a_file_is_not_the_group(tmp_path):
     assert fix_config("defaults:\n  - train\nplatform:\n  note: mine\n")[1] == []
+
+
+# ------------------------------------------------------------------------------- what the linter does not read
+def test_lint_does_not_read_a_virtualenv_kaos_dev_made_nor_what_git_ignores(tmp_path):
+    files = repo('    a = step("a", kind="train")\n', {"a": PLAIN_STEP})
+    bad = "import argparse\nargparse.ArgumentParser().add_argument('--params')\n"      # what L-E08 would flag
+    files.update({"steps/a/.venv/lib/python3.12/site-packages/kaos_lib/old.py": bad,
+                  "steps/a/myenv/pyvenv.cfg": "home = /usr/bin\n", "steps/a/myenv/lib/x.py": bad,
+                  "steps/a/.kaos/local/y.py": bad, "steps/a/build/z.py": bad, "steps/a/.gitignore": "# built\nbuild/\n"})
+    report = lint_project(str(write_repo(tmp_path, files)))
+    assert [f for f in report.findings if f.rule in ("L-E08", "L-E00")] == []
+    write_repo(tmp_path, {"steps/a/app/helper.py": bad})                                 # the app's own file counts
+    assert [f.file for f in lint_project(str(tmp_path)).findings if f.rule == "L-E08"] == ["steps/a/app/helper.py"]
+
+
+# ------------------------------------------------------------ what the engine refuses, the linter refuses too
+ENGINE = [
+    ('    a = step("a", "train")\n', "L-E06", "step() takes only the name by position"),
+    ('    a = step("a", kind="control", inputs=["dataset"])\n', "L-E07", "is a control step: it steers the run"),
+    ('    a = step("a", kind="control", produces=[artifact("r")])\n', "L-E07", "is a control step"),
+    ('    a = step("main", kind="train")\n', "L-E07", "The step name 'main' is the platform's"),
+    ('    a = step("compose-and-validate", kind="train")\n', "L-E07", "is the platform's"),
+    ('    a = step("x-hpc", kind="train")\n', "L-E07", "The step name 'x-hpc' is the platform's"),
+    ('    a = step("a", kind="train", inputs=[%s])\n' % ", ".join(f'"i{i}"' for i in range(17)), "L-E07",
+     "can read 17 datasets by name"),
+    ('    a = step("a", kind="transform", produces=[dataset("clean")])\n'
+     '    b = step("b", kind="transform", produces=[dataset("clean")])\n', "L-E07",
+     "the dataset 'clean' is already produced by step 'a'. A dataset has one writer"),
+    ('    a = step("a", kind="train", inputs=["nope"])\n', "L-E07", "the input 'nope' is not in config/"),
+    ('    a = step("a", kind="train", inputs=["experiment"])\n', "L-E07", "the input 'experiment' is a section"),
+    ('    a = step("a", kind="transform", produces=[dataset("clean", extra=1)])\n', "L-E07",
+     "dataset() takes a name and nothing else"),
+]
+
+
+@pytest.mark.parametrize("body,rule,expect", ENGINE, ids=[e[2][:40] for e in ENGINE])
+def test_lint_refuses_what_the_engine_refuses(tmp_path, body, rule, expect):
+    assert any(expect in m for m in messages(tmp_path, body, rule=rule)), messages(tmp_path, body, rule=rule)
+
+
+def test_readable_datasets_count_inputs_and_what_the_needed_steps_produce(tmp_path):
+    body = ('    a = step("a", kind="transform", produces=[%s])\n' % ", ".join(f'dataset("d{i}")' for i in range(16))
+            + '    b = step("b", kind="train", needs=[a], inputs=["dataset"])\n')
+    assert any("can read 17 datasets" in m for m in messages(tmp_path, body))
+
+
+def test_a_repeated_keyword_is_reported(tmp_path):
+    assert any("step() is given 'kind' twice" in m for m in
+               messages(tmp_path, '    a = step("a", kind="train", kind="train")\n', rule="L-E06"))
+
+
+def test_an_attribute_call_in_produces_is_the_same_as_a_name(tmp_path):
+    body = '    import kubecore.authoring as au\n    a = step("a", kind="train", produces=[au.model("m")])\n'
+    assert findings(tmp_path, body) == []
+    body = '    import kubecore.authoring as au\n    a = step("a", kind="train", produces=[au.model("kaos-m")])\n'
+    assert any("names starting with 'kaos-'" in m for m in messages(tmp_path, body))

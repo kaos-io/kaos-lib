@@ -33,7 +33,7 @@ def test_the_buffer_wins_over_the_file_on_disk(tmp_path, monkeypatch, capsys):
 
 def test_an_unsaved_error_is_found_though_the_disk_is_clean(tmp_path, monkeypatch, capsys):
     root = write_repo(tmp_path, repo('    step("a", kind="train")\n'))
-    bad = repo('    step("a", kind="train", walltime="1h")\n')["pipeline.py"]
+    bad = repo('    step("a", kind="train", walltime="1 hour")\n')["pipeline.py"]
     code, out, _ = run(monkeypatch, capsys, bad, str(root), "--format", "json", "--stdin-path", "pipeline.py")
     assert code == 2 and [f["rule"] for f in json.loads(out)["findings"]] == ["L-E06"]
 

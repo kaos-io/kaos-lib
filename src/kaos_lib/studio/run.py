@@ -10,7 +10,6 @@ allowlisted environment (CON-16) and needs no login or network unless a sample o
 from __future__ import annotations
 
 import datetime
-import hashlib
 import json
 import os
 import pathlib
@@ -20,15 +19,13 @@ import sys
 
 import yaml
 
-from .. import lock
+from .. import datasets, lock, testing
 from ..errors import KaosLibError
-from ..layouts.local import STAGED_MARKER
 from ..lint.constants import STEP_KINDS
 from . import envallow, pipeline_engine, pyenv, proc, sample, steps
-from .constants import (COMPOSE_STEP, LOCAL_DIR, LOCAL_RUN_ID, OUTPUT_PRINT_CHARS, VENV_DIR)
+from .constants import LOCAL_DIR, LOCAL_RUN_ID, OUTPUT_PRINT_CHARS, VENV_DIR
 from .dev import setup_step
 
-ABSENT = {"version": 1, "status": "absent"}     # what the platform hands a step for a needed step without a result
 RESULT_NAME = "kaos-result.json"
 PLATFORM_SECTIONS = ("platform", "plan")
 
@@ -57,37 +54,20 @@ def ensure_environment(step: steps.StepInfo, args) -> pathlib.Path:
 
 
 def compose_params(root: pathlib.Path, args, local: pathlib.Path) -> str:
-    """The composed params.yaml text: `--params-file`, else the platform's pipeline engine (an app without its own
-    `kubecore/`), else `python -m kubecore.compose` in compose-and-validate's environment."""
+    """The composed params.yaml text: `--params-file`, else the platform's pipeline engine (fetched, checked and run
+    as `kaosctl render` does)."""
     if args.params_file:
         try:
             return pathlib.Path(args.params_file).read_text(encoding="utf-8")
         except OSError as exc:
             raise KaosLibError(f"cannot read --params-file {args.params_file}: {exc.strerror or exc}") from None
-    if not (root / "kubecore" / "compose.py").is_file():
-        # The app holds no copy of the engine: compose with the platform's release, as its CI does.
-        try:
-            pin = pipeline_engine.resolve_pin(getattr(args, "engine_wheel", None), args.context)
-        except KaosLibError as exc:
-            raise KaosLibError(f"{exc} Or pass --params-file with a params.yaml you already have.") from None
-        py = pipeline_engine.ensure(root, pin, pyenv.find_uv())
-        profile = pipeline_engine.profile_of(root, getattr(args, "profile", None))
-        return pipeline_engine.compose(root, py, profile, list(args.override), local / "params.yaml")
-    compose = steps.find(root, COMPOSE_STEP)
-    py = ensure_environment(compose, args)
-    out = local / "params.yaml"
-    env = {**envallow.allowed(os.environ), "PYTHONPATH": str(root)}
-    done = proc.run([str(py), "-m", "kubecore.compose", *args.override, "--output", str(out)], env=env, cwd=root, timeout=300)
-    if not done.ok:
-        raise KaosLibError("composing the parameters failed:\n" + done.text[-1500:])
-    return out.read_text(encoding="utf-8")
-
-
-def _hash(folder: pathlib.Path) -> str:
-    """A stand-in for a commit: the SHA-256 of the folder's file names and sizes."""
-    listing = "".join(f"{f.relative_to(folder).as_posix()} {f.stat().st_size}\n"
-                      for f in sorted(folder.rglob("*")) if f.is_file() and f.name != STAGED_MARKER)
-    return hashlib.sha256(listing.encode()).hexdigest()
+    try:
+        pin = pipeline_engine.resolve_pin(getattr(args, "engine_wheel", None), args.context)
+    except KaosLibError as exc:
+        raise KaosLibError(f"{exc} Or pass --params-file with a params.yaml you already have.") from None
+    py = pipeline_engine.ensure(root, pin, pyenv.find_uv())
+    profile = pipeline_engine.profile_of(root, getattr(args, "profile", None))
+    return pipeline_engine.compose(root, py, profile, list(args.override), local / "params.yaml")
 
 
 def _dataset_of(params: dict, name: str) -> tuple:
@@ -95,7 +75,7 @@ def _dataset_of(params: dict, name: str) -> tuple:
     would have pinned. A setting that holds no reference gives `dataset-<name>` at `local`."""
     value = params.get(name)
     repo, _, ref = value.rpartition("/")[2].partition("@") if isinstance(value, str) else ("", "", "")
-    return repo or f"dataset-{name}", ref or "local"
+    return repo or datasets.dataset_repo(name), ref or "local"
 
 
 def stage_inputs(step: steps.StepInfo, args, params: dict, staged: pathlib.Path) -> list:
@@ -116,19 +96,15 @@ def stage_inputs(step: steps.StepInfo, args, params: dict, staged: pathlib.Path)
                                f"on this machine) or --input {name}=<dataset>@<version> (a small sample; needs "
                                "`kaosctl login`).")
         target, value = staged / name, given[name]
-        shutil.rmtree(target, ignore_errors=True)
         repo, ref = _dataset_of(params, name)
         if pathlib.Path(value).is_dir():
-            shutil.copytree(value, target)
-            layout, where = "raw", f"the folder {value}"
+            reads.append(testing.stage_input(staged, name, value, repo, ref))
+            where = f"the folder {value}"
         else:
+            shutil.rmtree(target, ignore_errors=True)
             files, size = sample.pull_sample(value, target, args.sample_mb)
-            layout, where = sample.layout(value), f"a sample of {value} ({files} file(s), {size // 1024} KiB)"
-            repo, ref = sample.repository(value), value.partition("@")[2]
-        commit = _hash(target)
-        (target / STAGED_MARKER).write_text(json.dumps({"repo": repo, "commit": commit, "full": True,
-                                                         "layout": layout}), encoding="utf-8")
-        reads.append({"name": name, "repo": repo, "owner": None, "ref": ref, "commit": commit})
+            reads.append(testing.mark(target, sample.repository(value), value.partition("@")[2], sample.layout(value)))
+            where = f"a sample of {value} ({files} file(s), {size // 1024} KiB)"
         print(f"  input {name}: {where}")
     return reads
 
@@ -147,7 +123,7 @@ def upstream_results(step: steps.StepInfo, args, results: pathlib.Path) -> dict:
         kept = results / f"{name}.json"
         text = given.get(name) or (kept.read_text(encoding="utf-8") if kept.is_file() else None)
         try:
-            out[name] = json.loads(text) if text else dict(ABSENT)
+            out[name] = json.loads(text) if text else dict(testing.ABSENT)
         except ValueError as exc:
             raise KaosLibError(f"the result given for {name} is not JSON ({exc}).") from None
         where = "from --upstream" if name in given else f"from its last local run ({kept.name})" if text else \
@@ -165,20 +141,16 @@ def step_context(root: pathlib.Path, step: steps.StepInfo, params: dict, reads: 
     run = f"{LOCAL_RUN_ID}-{datetime.datetime.now(datetime.timezone.utc):%Y%m%dt%H%M%Sz}"
     # As on the platform: a step gets the config sections it names in reads=, never the platform's own.
     own = {k: v for k, v in params.items() if k in step.reads and k not in PLATFORM_SECTIONS}
-    return {"version": 1, "run": run, "app": app, "project": "local", "step": step.name, "kind": step.kind,
-            "experiment": experiment if isinstance(experiment, str) and experiment else app, "params": own,
-            "ledger": {"version": 2, "reads": reads, "writes": []},
-            "produces": [{"name": name, "type": kind,
-                          "repo": f"dataset-{name}" if kind == "dataset" else f"outputs-{app}"}
-                         for kind, name in step.produces],
-            "upstream": upstream}
+    return testing.local_context(run=run, app=app, step_name=step.name, kind=step.kind, params=own, reads=reads,
+                                 experiment=experiment if isinstance(experiment, str) and experiment else app,
+                                 produces=step.produces, upstream=upstream)
 
 
 def child_env(work: pathlib.Path, staged: pathlib.Path, context: dict) -> dict:
     """The environment of the step: the allowlist, the step context and where this machine keeps things. Nothing
     from the platform."""
     return {**envallow.allowed(os.environ), "KAOS_STEP_CONTEXT": lock.wire(context), "KAOS_LOCAL_WORK": str(work),
-            "KAOS_STAGED_ROOT": str(staged), "KAOS_LOCAL_OUTPUTS": str(staged), "PYTHONUNBUFFERED": "1"}
+            "KAOS_STAGED_ROOT": str(staged), "PYTHONUNBUFFERED": "1"}
 
 
 def print_result(step: steps.StepInfo, work: pathlib.Path, results: pathlib.Path, staged: pathlib.Path) -> None:

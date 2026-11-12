@@ -14,7 +14,7 @@ from .catalogue import Catalogue, default_catalogue
 from .constants import MAX_FILE_BYTES, PIPELINE_FILE, RULESET_VERSION
 from .model import ERROR, Finding, Report, Skipped, Span
 from .pipeline_reader import read_pipeline
-from .project_reader import config_sections, dataset_default
+from .project_reader import config_sections, config_values, dataset_default
 from .registry import (REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, RULES, Hit, LintContext, Rule)
 from .source import TooLarge, buffer_source, parse_python, read_text
 
@@ -77,7 +77,8 @@ def lint_project(root, catalogue: Optional[Catalogue] = None, pipeline_file: str
         report.findings.append(_not_analysable(f"{pipeline_file} is not valid Python, so it cannot be read.",
                                                src.rel))
         return _with_skips(report, catalogue)
-    ctx = LintContext(root, read_pipeline(src), catalogue, config_sections(root), dataset_default(root))
+    ctx = LintContext(root, read_pipeline(src), catalogue, config_sections(root), dataset_default(root),
+                      config_values(root))
     for rule in RULES:
         if _missing_facts(rule, catalogue) is None:
             report.findings += [_finding(rule, h) for h in rule.check(ctx)]

@@ -154,11 +154,11 @@ def test_cache_dir_puts_shared_copies_under_the_owner(tmp_path):
 def test_marker_must_match_the_owner(tmp_path):
     d = tmp_path / "copy"
     d.mkdir()
-    (d / local.MARKER).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None, "owner": "a"}))
+    local.marker_file(d).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None, "owner": "a"}))
     assert local.marker_matches(d, "dataset-x", "c1", owner="a")
     assert not local.marker_matches(d, "dataset-x", "c1")                 # the own dataset-x
     assert not local.marker_matches(d, "dataset-x", "c1", owner="b")
-    (d / local.MARKER).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None}))  # 0.1 marker
+    local.marker_file(d).write_text(json.dumps({"repo": "dataset-x", "commit": "c1", "prefix": None}))  # 0.1 marker
     assert local.marker_matches(d, "dataset-x", "c1") and not local.marker_matches(d, "dataset-x", "c1", owner="a")
 
 
@@ -182,7 +182,7 @@ def test_staged_dir_checks_repository_owner_and_that_the_copy_is_whole(tmp_path,
     staged = tmp_path / "staged" / "raw"            # one folder per input, named after it
     staged.mkdir(parents=True)
     (tmp_path / "staged" / "other-input").mkdir()   # an input of the same step that is not this one
-    (staged / ".kaos-ready").write_text(record if isinstance(record, str) else json.dumps(record))
+    local.staged_marker(staged).write_text(record if isinstance(record, str) else json.dumps(record))
     monkeypatch.setenv("KAOS_STAGED_ROOT", str(tmp_path / "staged"))
     assert (local.staged_dir("c1", repo=repo, owner=owner) == staged) is used
     assert local.staged_dir("c2", repo=repo, owner=owner) is None             # another commit: never

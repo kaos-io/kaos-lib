@@ -20,8 +20,7 @@ UPLOAD_ATTEMPTS = 4                               # one upload is tried this oft
 RETRY_STATUSES = (408, 429, 500, 502, 503, 504)   # answers that can pass
 RETRY_PAUSE_S = 1.0                               # before the second try; doubled each time
 
-# layouts.local.MARKER: a pulled copy's marker never goes back up when the folder is pushed.
-IGNORED_NAMES = {".DS_Store", "Thumbs.db", ".kubecore-dataset.json", ".kaos-ready"}
+IGNORED_NAMES = {".DS_Store", "Thumbs.db"}
 
 
 @dataclass

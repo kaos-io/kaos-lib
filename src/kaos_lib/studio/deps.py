@@ -15,6 +15,7 @@ from typing import Optional
 
 from ..lint import dockerfile as df
 from ..lint.constants import KAOS_LIB_ARG
+from ..lint.source import walk
 from .constants import HEAVY_PACKAGES
 
 try:                                    # Python 3.11+ reads TOML itself; older Pythons use the tomli package
@@ -72,7 +73,7 @@ def read_step_deps(step_dir: pathlib.Path) -> StepDeps:
 
 
 def _mentions_kaos_lib(step_dir: pathlib.Path, max_files: int = 300, max_bytes: int = 1024 * 1024) -> bool:
-    for n, path in enumerate(sorted(step_dir.rglob("*.py"))):
+    for n, path in enumerate(p for p in walk(step_dir) if p.suffix == ".py"):
         if n >= max_files:
             break
         try:
