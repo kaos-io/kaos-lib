@@ -5,22 +5,16 @@ pipelines with it: each step is a small Python program that reads data, does wor
 
 --8<-- "generated/built.md"
 
-This guide is one path. Each page adds one idea to the app you have, and ends with something you ran. Start at the
-first page and stop wherever you have what you need. The app is the one the hera template creates.
+The guide has four parts. Each page belongs to exactly one.
 
-| | page | what you do |
+| part | you want to | pages |
 |---|---|---|
-| 1 | [Run it](run-it.md) | create a pipeline from the template, run it as it is, read its result |
-| 2 | [Your first step](first-step.md) | read the 17 lines of a step and change them |
-| 3 | [Settings](settings.md) | a value in `config/` becomes a field on the run form |
-| 4 | [Read data](read-data.md) | declare an input and pick its version on the form |
-| 5 | [Pass things on](pass-things-on.md) | hand a value, then a file, to the next step |
-| 6 | [Produce a dataset](produce-a-dataset.md) | seal a version, promote it, read it from another pipeline |
-| 7 | [Bigger machines](bigger-machines.md) | pick a class; GPU steps |
-| 8 | [Long jobs](long-jobs.md) | checkpoints and resume |
-| 9 | [HPC (Slurm)](hpc.md) | the same step on a Slurm site |
-| 10 | [Try it locally](try-it-locally.md) | run, test and check a step on your laptop |
-| 11 | [A real pipeline](a-real-pipeline.md) | the yolo pipeline, read with what you know |
-| 12 | [Reference](reference.md) | the step API, `pipeline.py`, limits, commands |
+| **Start here** | learn, from a first run to a real pipeline, one idea a page | [1. Run it](run-it.md) to [11. A real pipeline](a-real-pipeline.md) |
+| **How it works** | understand the rules the platform follows | [Principles](principles.md), [What you must and what you can](must-and-can.md), [Datasets, versions and hashes](datasets-versions-hashes.md), [Glossary](glossary.md) |
+| **How to** | do one thing, with code that runs | [Data flow scenarios](data-flow.md), [Test your steps](test-your-steps.md), [See your results](see-your-results.md), [Add packages](add-packages.md), [Bring data in](bring-data-in.md), [Share a dataset](share-a-dataset.md), [Make a dataset layout](make-a-layout.md), [When something goes wrong](when-something-goes-wrong.md) |
+| **Reference** | look something up | [Cheat sheet](cheat-sheet.md), [Reference](reference.md), [Commands](generated/cli.md), [Python API](api.md), [Lint checks](lint.md) |
+
+New here? Start at [Run it](run-it.md) and stop wherever you have what you need. The app is the one the hera template
+creates. Page 6 ends with a pointer to [Principles](principles.md), which explains why everything works the way it does.
 
 The code on every page is a file that is run and checked when this guide is built.

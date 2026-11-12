@@ -25,12 +25,14 @@ You add a `train` step that makes several passes over `clean`, and keeps its pla
 - `checkpoint.save(state)` writes it into the checkpoint folder, atomically. Save at a point where a restart is safe.
 - `checkpoint.stop_requested()` is true when the platform wants the machine back. `checkpoint.exit_for_restart()` ends
   the step with exit code 85: "saved, run me again". The platform starts it again, with the folder as you left it.
-- `checkpoint_every="10m"` in `pipeline.py` makes the platform copy the folder every ten minutes. A GPU step is copied
-  without it, every ten minutes by default. `checkpoint_every=False` turns copying off.
+- `checkpoint_every="10m"` in `pipeline.py` makes the platform copy the folder every ten minutes
+  ([Reference](reference.md#pipelinepy)).
 
 ## Test the stop on your machine
 
-The test asks the step to stop after the second epoch, checks that it ended with 85, and runs it again:
+The test asks the step to stop after the second epoch, checks that it ended with 85, and runs it again. Save it as
+`step_tests/test_train.py` in your app. Install pytest once, in the Python environment where you installed kaos-lib:
+`pip install pytest`.
 
 ```python title="step_tests/test_train.py"
 --8<-- "examples/first-pipeline/long-job/step_tests/test_train.py"
@@ -40,11 +42,7 @@ The test asks the step to stop after the second epoch, checks that it ended with
 python -m pytest step_tests/test_train.py
 ```
 
-```text
-step_tests/test_train.py .                                               [100%]
-
-============================== 1 passed in 0.08s ===============================
-```
+The test passes when the step stopped with 85 and finished after it was run again.
 
 ## A framework with its own checkpoints
 
@@ -57,19 +55,14 @@ machine).
 
 Importing `kaos_lib` in a step that uses Ultralytics, PyTorch Lightning or Hugging Face attaches to them: they save
 into the folder, and a continued step resumes from it, with no code from you. A run you told to resume yourself
-(`resume=`, `ckpt_path=`, `resume_from_checkpoint=`) is left alone. `KAOS_CHECKPOINT_HOOKS=0` turns the hooks off.
+(`resume=`, `ckpt_path=`, `resume_from_checkpoint=`) is left alone. [Reference](reference.md#run-tools) says how to turn
+the hooks off.
 
-## What the platform does when a step ends
+## When a step ends
 
-| the step ended because | with a checkpoint | without one |
-|---|---|---|
-| its machine was lost (reclaimed, failed, drained) | continues from the newest good copy | runs again from the start, at most twice |
-| the time limit of a Slurm job was reached ([page 9](hpc.md)) | continues in a new job | ends |
-| a GPU step showed no GPU use and no new log line for 20 minutes | ends as idle, and is not run again | ends as idle |
-| your code failed (non-zero exit) | ends as failed | ends as failed |
-
-A continued step waits in the queue again, and its time counts against your budget. A copy is used only after the
-platform verified it. `checkpoint.progress(epoch)` tells the platform how far the step is: a continuation that gets no
-further than the copy it started from ends with `NoProgress` instead of repeating the same hours.
+What the platform does when a step ends early, with and without a checkpoint, is a table in the
+[Reference](reference.md#when-a-step-ends). A continued step waits in the queue again, and its time counts against your
+budget. `checkpoint.progress(epoch)` tells the platform how far the step is: a continuation that gets no further than the
+copy it started from ends with `NoProgress` instead of repeating the same hours.
 
 Next: [HPC (Slurm)](hpc.md).

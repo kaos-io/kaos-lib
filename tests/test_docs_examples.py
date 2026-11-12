@@ -72,18 +72,25 @@ def test_should_run_the_test_files_of_the_pages_long_jobs_and_try_it_locally(tmp
     assert run.returncode == 0, run.stdout + run.stderr
 
 
-def test_should_pass_the_params_file_of_the_page_try_it_locally_to_kaosctl_step_run(tmp_path):
+def test_should_run_the_two_commands_of_the_page_try_it_locally_on_the_folders_the_page_makes(tmp_path):
+    """The page makes `toy` on page 1 and `reference` itself (three files), then runs prepare and hello-world."""
     from kaos_lib import cli
     app = ex.assemble("try-locally", tmp_path / "app")
-    data = tmp_path / "toy"
-    data.mkdir()
-    (data / "a.txt").write_text("a\n")
-    (data / "empty.txt").write_text("")
-    code = cli.main(["step", "run", "prepare", str(app), "--params-file", str(app / "params.yaml"),
-                     "--python", sys.executable, "--input", f"dataset={data}"])
-    assert code == 0
+    toy = tmp_path / "toy"
+    toy.mkdir()
+    for name, text in {"a.txt": "one\n", "b.txt": "two two\n", "empty.txt": ""}.items():
+        (toy / name).write_text(text)
+    page = (DOCS / "try-it-locally.md").read_text(encoding="utf-8")
+    make = re.search(r"```bash\n(mkdir reference[^\n]*)\n```", page).group(1)
+    subprocess.run(make, shell=True, cwd=tmp_path, check=True)   # the lines of the page, as they stand
+    assert len(list((tmp_path / "reference").iterdir())) == 3
+    common = [str(app), "--params-file", str(app / "params.yaml"), "--python", sys.executable]
+    assert cli.main(["step", "run", "prepare", *common, "--input", f"dataset={toy}"]) == 0
     written = app / ".kaos" / "local" / "staged" / "clean"
-    assert [p.name for p in written.iterdir()] == ["a.txt"]
+    assert sorted(p.name for p in written.iterdir()) == ["a.txt", "b.txt"]
+    assert cli.main(["step", "run", "hello-world", *common, "--input", f"reference={tmp_path / 'reference'}"]) == 0
+    report = (app / ".kaos" / "local" / "staged" / "report" / "hello.txt").read_text()
+    assert "3 in the reference" in report and "2 files" in report, report
 
 
 def test_should_run_every_example_through_the_build_check():
@@ -106,3 +113,55 @@ def test_should_include_only_files_that_exist():
             if name.startswith("generated/"):  # written by docs_gen.py at build time, not kept in git
                 continue
             assert (DOCS / name).is_file() or (REPO / name).is_file(), f"{page.name} includes {target}"
+
+
+def test_should_compare_two_versions_of_a_dataset_read_by_one_step(tmp_path):
+    result = ex.flow_two_inputs(tmp_path)
+    assert [r["name"] for r in result["reads"]] == ["before", "after"]  # in the order of inputs=
+
+
+def test_should_let_the_step_after_a_skipped_step_run_with_and_without_its_result(tmp_path):
+    assert ex.flow_skip(tmp_path)["values"] == {"extra_ran": True}
+
+
+def test_should_run_the_tests_of_the_step_that_copes_with_a_skipped_step(tmp_path):
+    app = ex.flow_app("skip", tmp_path)
+    run = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "step_tests"], cwd=app,
+                         capture_output=True, text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    assert run.returncode == 0 and "2 passed" in run.stdout, run.stdout + run.stderr
+
+
+def test_should_keep_the_model_of_the_better_of_two_steps_a_step_needs(tmp_path):
+    assert ex.flow_fan_in(tmp_path)["values"]["winner"] == "large"
+
+
+def test_should_name_a_setting_of_the_run_form_in_the_condition_of_a_skipped_step():
+    text = (ex.FLOWS / "skip" / "pipeline.py").read_text()
+    field = re.search(r"workflow\.parameters\.([a-z-]+)\}\}", text).group(1)
+    config = yaml.safe_load((ex.FLOWS / "skip" / "config" / "extra.yaml").read_text())
+    assert field == "-".join(["extra", *config["extra"]])  # config path with dashes: extra.mode is extra-mode
+
+
+def test_should_log_a_parameter_and_a_curve_to_mlflow_from_a_step_and_save_its_model(tmp_path):
+    assert ex.flow_metrics(tmp_path)["values"] == {"final_loss": 1 / 3}
+
+
+def test_should_bring_the_files_of_a_source_in_as_a_dataset_and_fail_when_the_source_gives_none(tmp_path):
+    assert ex.flow_ingest(tmp_path)["values"] == {"files": 2}
+
+
+def test_should_lint_the_dockerfile_that_adds_packages_without_an_error_or_a_warning(tmp_path):
+    ex.packages_dockerfile(tmp_path)
+
+
+def test_should_read_the_dataset_another_project_shares_as_a_reference_with_an_owner():
+    ex.shared_reference()
+
+
+def test_should_show_the_result_a_step_hands_on_with_what_it_read_and_wrote(tmp_path):
+    import json
+    shown = json.loads((ex.EXAMPLES / "ledger" / "hello-world-result.json").read_text())
+    assert ex.ledger_example(tmp_path) == shown
+    assert [r["name"] for r in shown["reads"]] == ["reference", "clean"]  # the inputs first, then what else it opened
+    assert [(w["name"], w["type"]) for w in shown["writes"]] == [("report", "artifact")]
+    assert all(len(x["commit"]) == 64 for x in shown["reads"] + shown["writes"])

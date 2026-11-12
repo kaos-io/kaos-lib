@@ -16,17 +16,16 @@ You have one input. `prepare` reads a dataset, and `pipeline.py` and `config/dat
 
 `step.input("dataset")` returns a folder that holds the files of the dataset.
 
-- `inputs=["dataset"]` names a top-level value of `config/` that holds a dataset reference.
-- A reference is `dataset-<name>` or `dataset-<name>@<version>`. The version is `v1`, `v2`, ..., `latest` (the newest
-  version) or a commit.
+- `inputs=["dataset"]` names a top-level value of `config/` that holds a dataset reference, `dataset-<name>` with a
+  version (the [forms of a reference](reference.md#dataset-references)).
 - `step.input("dataset")` takes the name and nothing else. There is no version in code, so there is no way to read a
   different version from the one the run chose.
 
 ## Pick the version on the form
 
 The field `dataset` on the run form lists your project's datasets and their versions. You pick one when you submit.
-Before the first step starts, the platform fixes the choice to one exact version, and every step of the run reads
-that version. A colleague who adds files while your run is going changes nothing for it.
+The platform fixes the choice to one exact version before the first step starts, and every step reads that version
+([when a version is fixed](datasets-versions-hashes.md#fixed-when-the-run-starts)).
 
 ```bash
 kaosctl dataset list
@@ -34,8 +33,8 @@ kaosctl dataset versions dataset-default
 kaosctl dataset release dataset-default
 ```
 
-`list` shows the datasets you can read, `versions` the versions of one, and `release` gives the newest state of a
-dataset the next version number.
+`list` shows the datasets you can read, `versions` the versions of one, and `release` gives the version `latest` points
+to the next version number ([what a version is](datasets-versions-hashes.md#what-a-version-is)).
 
 ## Add a second input
 
@@ -64,14 +63,8 @@ dataset for each, submit, and read the log:
 [hello-world] hello (my-experiment-v1): 2 files (12 bytes) in clean, 3 in the reference, 1 dropped by prepare
 ```
 
-## Rules
-
-- A step reads what it declares. `step.input("other")` for a name that is not in `inputs=` raises
-  `'other' is not an input of step 'hello-world'. Its inputs are: ...`. Reading a dataset another way, by its name in
-  code, is refused too.
-- The folder is read-only. Copy the files you change into an output. A tool that writes beside its input gets
-  `step.input("reference", writable=True)`: a private copy that costs the dataset's size in disk and time.
-- A dataset with no files fails the step: `input 'reference': dataset-x holds no files at the version this run read`.
-- A dataset a project shares with yours is `<owner>/dataset-<name>@<version>`, in the same field.
+The rules for reading are in [What you must and what you can](must-and-can.md#you-must), and what you see when a
+dataset is empty is in [When something goes wrong](when-something-goes-wrong.md#a-run-fails). A dataset another project shares with yours is read in the same
+field ([Share a dataset](share-a-dataset.md)).
 
 Next: [Pass things on](pass-things-on.md).

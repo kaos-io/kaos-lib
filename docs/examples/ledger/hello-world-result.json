@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "status": "ok",
+  "values": {
+    "files": 2,
+    "size": 12,
+    "reference": 3
+  },
+  "reads": [
+    {
+      "name": "reference",
+      "repo": "dataset-reference",
+      "owner": null,
+      "ref": "local",
+      "commit": "a5374f4d3583acc74af1c3431ed2f4d157f43753dc73d8a9f25aeed29345f787"
+    },
+    {
+      "name": "clean",
+      "repo": "dataset-myapp-clean",
+      "owner": null,
+      "ref": "37592accd6a211f20307af0db7fceebf98c50367442b65eb1391ac0e6d6d3e96",
+      "commit": "37592accd6a211f20307af0db7fceebf98c50367442b65eb1391ac0e6d6d3e96"
+    }
+  ],
+  "writes": [
+    {
+      "name": "report",
+      "type": "artifact",
+      "repo": "outputs-myapp",
+      "commit": "9cd132210f59fb736ef1286a5c5afb3399c30bff22c36e6329f46b19866b10a8"
+    }
+  ]
+}

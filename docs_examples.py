@@ -33,6 +33,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 EXAMPLES = HERE / "docs" / "examples"
 FIRST = EXAMPLES / "first-pipeline"
 SECOND = EXAMPLES / "second-pipeline"
+FLOWS = EXAMPLES / "flows"
 # The folders of FIRST in the order the pages lay them over the template.
 STATES = ("template", "first-step", "settings", "read-data", "pass-on", "produce", "gpu", "long-job", "hpc", "try-locally")
 DOCKERFILE = '''FROM python:3.11-slim
@@ -207,6 +208,165 @@ class Walk:
         return run.result
 
 
+def run_step(app: pathlib.Path, work: pathlib.Path, name: str, kind: str, produces: list = (), params=None, **kwargs):
+    """One step of an example app, started with `kaos_lib.testing.running`; returns (result, run)."""
+    from kaos_lib import testing
+    work.mkdir(parents=True, exist_ok=True)
+    with testing.running(work, kind=kind, name=name, app="myapp", experiment="my-experiment-v1", params=params or {},
+                         produces=list(produces), **kwargs) as run, contextlib.redirect_stdout(io.StringIO()):
+        load(app, name.replace("-", "_")).main()
+    if run.result is None:
+        raise ExampleError(f"the step {name} handed on no result")
+    return run.result, run
+
+
+def flow_app(name: str, tmp: pathlib.Path) -> pathlib.Path:
+    """The example app `flows/<name>`, with an image file for every step; it must lint without an error."""
+    app = tmp / name
+    shutil.copytree(FLOWS / name, app)
+    complete(app)
+    report = lint(app)
+    if report.errors:
+        raise ExampleError(f"kaosctl lint finds errors in flows/{name}:\n{report.to_json()}")
+    return app
+
+
+def flow_two_inputs(tmp: pathlib.Path) -> dict:
+    """A step with two inputs: two versions of one dataset, side by side."""
+    app = flow_app("two-inputs", tmp)
+    before = _tree(tmp / "before", **{"a.txt": "a", "b.txt": "b"})
+    after = _tree(tmp / "after", **{"b.txt": "b", "c.txt": "c", "d.txt": "d"})
+    result, run = run_step(app, tmp / "run", "compare", "evaluate", [("artifact", "changes")],
+                           inputs={"before": before, "after": after})
+    if result["values"] != {"added": 2, "removed": 1}:
+        raise ExampleError(f"compare handed on {result['values']}")
+    if sorted(r["name"] for r in result["reads"]) != ["after", "before"]:
+        raise ExampleError("compare did not record both inputs as read")
+    if (run.output("changes") / "changes.txt").read_text() != "added c.txt\nadded d.txt\nremoved a.txt\n":
+        raise ExampleError("compare wrote another list of changes")
+    return result
+
+
+def flow_skip(tmp: pathlib.Path) -> dict:
+    """A step that may be skipped, and the step after it that copes: run both ways."""
+    app = flow_app("skip", tmp)
+    summary = _tree(tmp / "summary", **{"summary.txt": "base ran\n"})
+    base, _ = run_step(app, tmp / "base", "base", "transform", [("artifact", "summary")])
+    if base["values"] != {"base": True}:
+        raise ExampleError(f"base handed on {base['values']}")
+    skipped, run = run_step(app, tmp / "final-1", "final", "publish", [("artifact", "final-report")],
+                            upstream={"base": base["values"], "extra": None}, upstream_writes={"base": {"summary": summary}})
+    if skipped["values"] != {"extra_ran": False}:
+        raise ExampleError(f"final handed on {skipped['values']} after a skipped extra")
+    extra, extra_run = run_step(app, tmp / "extra", "extra", "evaluate", [("artifact", "extra-report")],
+                                upstream={"base": base["values"]}, upstream_writes={"base": {"summary": summary}})
+    ran, run = run_step(app, tmp / "final-2", "final", "publish", [("artifact", "final-report")],
+                        upstream={"base": base["values"], "extra": extra["values"]},
+                        upstream_writes={"extra": {"extra-report": extra_run.output("extra-report")}})
+    if ran["values"] != {"extra_ran": True} or "score 7" not in (run.output("final-report") / "final.txt").read_text():
+        raise ExampleError("final did not use the result of extra")
+    return ran
+
+
+def flow_fan_in(tmp: pathlib.Path) -> dict:
+    """One step that needs two others: it reads both results and the model of the better one."""
+    app = flow_app("fan-in", tmp)
+    params = {"train": {"small_epochs": 3, "large_epochs": 9}}
+    trained = {}
+    for size in ("small", "large"):
+        trained[size] = run_step(app, tmp / size, f"train-{size}", "train", [("model", size)], params=params)
+    result, run = run_step(
+        app, tmp / "pick", "pick-best", "evaluate", [("artifact", "winner")],
+        upstream={f"train-{s}": trained[s][0]["values"] for s in trained},
+        upstream_writes={f"train-{s}": {s: {"folder": trained[s][1].output(s), "type": "model"}} for s in trained})
+    if result["values"] != {"winner": "large", "score_small": 3, "score_large": 9}:
+        raise ExampleError(f"pick-best handed on {result['values']}")
+    if (run.output("winner") / "weights.txt").read_text() != "large model, 9 epochs\n":
+        raise ExampleError("pick-best did not keep the model of the winner")
+    return result
+
+
+def ledger_example(tmp: pathlib.Path) -> dict:
+    """The result of `hello-world` of the page 5 app when `prepare` wrote the dataset `clean` in this run: it names
+    what the step read (the input `reference`, and `clean`) and what it wrote (the artifact `report`). The commits
+    are fingerprints of the content here; on the platform they are the commits of the data store."""
+    app = assemble("pass-on", tmp / "app")
+    clean = _tree(tmp / "clean", **{"a.txt": "alpha\n", "b.txt": "bravo\n"})
+    dropped = _tree(tmp / "dropped", **{"dropped.txt": "empty.txt\n"})
+    reference = _tree(tmp / "reference", **{"r1.txt": "1", "r2.txt": "2", "r3.txt": "3"})
+    result, _ = run_step(app, tmp / "run", "hello-world", "evaluate", [("artifact", "report")],
+                         params={"hello": {"title": "hello"}}, inputs={"reference": reference},
+                         upstream={"prepare": {"files": 2, "dropped": 1}},
+                         upstream_writes={"prepare": {"clean": {"folder": clean, "type": "dataset"},
+                                                      "dropped-files": dropped}})
+    return result
+
+
+def flow_metrics(tmp: pathlib.Path) -> dict:
+    """A step that logs a parameter and a curve to MLflow (a local store stands in for the project's server) and
+    saves a model: the metrics must be there, and the model folder holds the weights."""
+    app = flow_app("metrics", tmp)
+    store = tmp / "mlruns"
+    env = {"MLFLOW_TRACKING_URI": f"file://{store}", "MLFLOW_TRACKING_TOKEN": "a-token", "MLFLOW_ALLOW_FILE_STORE": "true"}
+    saved = {key: os.environ.get(key) for key in (*env, "MLFLOW_TRACKING_AUTH")}   # the call sets the last one
+    had = {name for name in sys.modules if name.split(".")[0] == "mlflow"}
+    try:
+        os.environ.update(env)
+        result, run = run_step(app, tmp / "run", "train", "train", [("model", "model")], params={"train": {"epochs": 3}})
+        from mlflow.tracking import MlflowClient
+        client = MlflowClient()
+        found = client.search_runs([client.get_experiment_by_name("my-experiment-v1").experiment_id])
+        curve = [m.value for m in client.get_metric_history(found[0].info.run_id, "loss")]
+    finally:
+        for name in [m for m in sys.modules if m.split(".")[0] == "mlflow" and m not in had]:
+            del sys.modules[name]          # the package keeps the store it was pointed at: leave no import behind
+        for key, value in saved.items():
+            os.environ.pop(key, None) if value is None else os.environ.__setitem__(key, value)
+    if curve != [1.0, 0.5, 1 / 3] or found[0].data.params != {"epochs": "3"}:
+        raise ExampleError(f"train logged {curve} and {found[0].data.params} to MLflow")
+    if (run.output("model") / "weights.txt").read_text() != "trained for 3 epochs\n" or result["values"] != {"final_loss": 1 / 3}:
+        raise ExampleError(f"train handed on {result['values']}")
+    return result
+
+
+def flow_ingest(tmp: pathlib.Path) -> dict:
+    """An `ingest` step that reads a folder standing in for the outside source, and a source with no file."""
+    app = flow_app("ingest", tmp)
+    source = _tree(tmp / "source", **{"a.csv": "1,2\n", "b.csv": "3,4\n", "notes.txt": "not data\n"})
+    result, run = run_step(app, tmp / "run", "fetch", "ingest", [("dataset", "raw")],
+                           params={"source": {"folder": str(source)}})
+    if result["values"] != {"files": 2} or sorted(p.name for p in run.output("raw").iterdir()) != ["a.csv", "b.csv"]:
+        raise ExampleError(f"fetch handed on {result['values']}")
+    from kaos_lib.errors import StepError
+    try:
+        run_step(app, tmp / "empty", "fetch", "ingest", [("dataset", "raw")],
+                 params={"source": {"folder": str(_tree(tmp / "nothing", **{"notes.txt": "x"}))}})
+    except StepError:
+        return result
+    raise ExampleError("fetch did not fail when the source gave no file")
+
+
+def packages_dockerfile(tmp: pathlib.Path) -> None:
+    """The Dockerfile of the page "Add packages", in a one-step app: no error or warning of the Dockerfile rules (L-D*);
+    L-D07 (the image runs as root) is an info for every Dockerfile of the template too."""
+    app = tmp / "app"
+    shutil.copytree(FLOWS / "metrics", app)
+    (app / "steps" / "train" / "app" / "__init__.py").touch()
+    shutil.copy(FLOWS / "packages" / "Dockerfile", app / "steps" / "train" / "Dockerfile")
+    findings = [f for f in lint(app).findings if f.rule.startswith("L-D") and f.level != "info"]
+    if findings:
+        raise ExampleError(f"the Dockerfile of the page Add packages has findings: {[f.rule for f in findings]}")
+
+
+def shared_reference() -> None:
+    """The setting of the page "Share a dataset" holds a reference to a dataset of another project."""
+    from kaos_lib.datasets import DatasetRef
+    value = yaml.safe_load((FLOWS / "shared" / "config" / "dataset.yaml").read_text(encoding="utf-8"))["dataset"]
+    ref = DatasetRef.parse(value)
+    if (ref.owner, ref.repo, ref.version) != ("acme-vision", "dataset-cats", "v1"):
+        raise ExampleError(f"{value!r} parses as {ref}")
+
+
 def check_all() -> None:
     """Every example: raises ExampleError (or the error of the step) on the first one that is wrong."""
     for state in STATES:
@@ -233,6 +393,12 @@ def check_all() -> None:
                     raise ExampleError("train did not count five epochs of the 12 bytes of clean across the stop")
     with tempfile.TemporaryDirectory() as tmp:
         Walk("template", pathlib.Path(tmp)).second()
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger_example(pathlib.Path(tmp))
+    for flow in (flow_two_inputs, flow_skip, flow_fan_in, flow_metrics, flow_ingest, packages_dockerfile):
+        with tempfile.TemporaryDirectory() as tmp:
+            flow(pathlib.Path(tmp))
+    shared_reference()
     for path in sorted(EXAMPLES.rglob("*.py")):
         compile(path.read_text(encoding="utf-8"), str(path), "exec")
     for path in sorted(EXAMPLES.rglob("*.yaml")):

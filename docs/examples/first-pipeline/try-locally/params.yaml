@@ -3,3 +3,5 @@ experiment:
   description: ""
 prepare:
   min_bytes: 1
+hello:
+  title: hello

@@ -29,7 +29,7 @@ skeleton:                       # what `create` writes; folders become <folder>/
       {{/if}}
       {{classes|count}} classes. Put clips in `clips/<split>/` and their labels in `labels/<split>/`.
 
-rules:                          # checked by kaosctl and by kaos-lake
+rules:                          # checked by kaosctl and by the data store
   required: [classes.yaml, "clips/train/*.wav", "clips/val/*.wav"]
   allowed: [README.md, classes.yaml, "clips/**", "labels/**"]
   extensions:
