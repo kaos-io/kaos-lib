@@ -4,7 +4,7 @@
 |---|---|
 | app | your pipeline project: `pipeline.py`, `config/` and `steps/`. Its name is the name of the repository |
 | step | one program of the pipeline, in `steps/<name>/`, started as `python -m app.entry` |
-| kind | what a step does: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`; each has a contract ([Step kinds](step-kinds.md)) |
+| kind | what a step does: `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`; each has a contract ([Step types](step-types.md)) |
 | run | one start of the pipeline, with the values on the run form. It has a name, and so does each of its steps' logs |
 | experiment | a name you choose for a series of runs (the setting `experiment.name`). The files of a run are kept under it |
 | run form | the form you fill in to start a run. Every plain value in `config/` is a field on it |
@@ -24,6 +24,6 @@
 | ledger | the list of what a step read and wrote, with exact version ids |
 | checkpoint | the state a long step saves so that it can continue after an interruption |
 
-See [Datasets, versions and hashes](datasets-versions-hashes.md) and [Principles](principles.md).
+See [The data contract](data-contract.md) and [Your contract with the platform](contract.md).
 
 Next: [Data flow scenarios](data-flow.md) shows how to do each thing in code.

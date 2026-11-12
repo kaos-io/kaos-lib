@@ -25,7 +25,7 @@ request they come from your project. Locally, a check that lacks them is listed 
 
 | option | does |
 |---|---|
-| (none) | built-in facts: the longest run and the continuations of [the limits](must-and-can.md#the-limits), no list of classes |
+| (none) | built-in facts: the longest run and the continuations of [the limits](contract.md#the-limits), no list of classes |
 | `--context FILE` | reads the facts from your project's context file |
 | `--catalogue FILE`, `--catalogue none` | reads them from a catalogue file, or skips every check that needs one |
 | `--export-catalogue FILE` | with `--context`, writes the catalogue and stops |

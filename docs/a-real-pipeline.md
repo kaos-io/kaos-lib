@@ -49,5 +49,5 @@ Create a pipeline from the YOLO template and put a YOLO dataset in your project 
 On the run form, pick the dataset and set `data-sample_size` to `50` and `data-seed` to any number. `prepare-data` keeps 50
 images of each split, the same 50 for the same seed. The run is short. When it works, set `data-sample_size` empty and run the full dataset on a GPU or on Slurm.
 
-You have now read a whole pipeline. Next: [Principles](principles.md) explains why everything works the way it does,
+You have now read a whole pipeline. Next: [Your contract with the platform](contract.md) states every rule the pipeline follows,
 and the [Reference](reference.md) holds the look-up tables.

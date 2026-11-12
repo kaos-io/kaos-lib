@@ -473,6 +473,113 @@ def shared_reference() -> None:
         raise ExampleError(f"{value!r} parses as {ref}")
 
 
+KINDS_EXAMPLES = EXAMPLES / "kinds"
+# The mistakes the step type pages show: (kind, lines of pipeline.py, the rule, the sentence `kaosctl lint` gives).
+# The page of the type must hold each sentence word for word.
+KIND_MISTAKES = (
+    ("ingest", 'fetch = step("fetch", kind="ingest", produces=[artifact("files")])', "L-E07",
+     "Step 'fetch': an ingest step brings data in, so it produces a dataset. Add produces=[dataset(\"name\")]."),
+    ("transform", 'clean = step("clean", kind="transform", inputs=["dataset"])', "L-E07",
+     "Step 'clean': a transform step turns data into something. Add produces=[...] with a dataset, a model or an artifact."),
+    ("train", 'train = step("train", kind="train", produces=[artifact("log")])', "L-E07",
+     "Step 'train': a train step produces a model. Add produces=[model(\"name\")], or give the step the kind of the "
+     "work it does (ingest, transform, evaluate, publish, control)."),
+    ("evaluate", 'score = step("score", kind="evaluate", produces=[dataset("scores")])', "L-E07",
+     "Step 'score': an evaluate step writes reports only, so it may not produce a dataset or a model. Use "
+     "kind=\"transform\" for a step that makes a dataset, kind=\"train\" for one that makes a model."),
+    ("publish", 'register = step("register", kind="publish", produces=[artifact("receipt")])', "L-E07",
+     "Step 'register': a publish step delivers a result and produces nothing here. Remove produces=, or give the step "
+     "the kind of the work it does."),
+    ("control", 'check = step("check", kind="control", inputs=["dataset"])', "L-E07",
+     "Step 'check' is a control step: it steers the run and handles no data, so it takes no inputs= and no produces=."),
+)
+
+
+def _lint_text(tmp: pathlib.Path, body: str):
+    """The findings for a pipeline with the line `body`, and the config and the folders a step needs."""
+    app = tmp / "mistake"
+    (app / "config").mkdir(parents=True)
+    (app / "steps").mkdir()
+    (app / "config" / "config.yaml").write_text("defaults:\n  - _self_\n  - dataset\n", encoding="utf-8")
+    (app / "config" / "dataset.yaml").write_text('dataset: "dataset-default"\n', encoding="utf-8")
+    (app / "pipeline.py").write_text("from kubecore.authoring import artifact, dataset, model, pipeline, step\n"
+                                     "with pipeline('p') as p:\n    " + body + "\n", encoding="utf-8")
+    complete(app)
+    return lint(app).findings
+
+
+def _kind_app(kind: str, tmp: pathlib.Path) -> pathlib.Path:
+    """The example app `kinds/<kind>` with an image file for every step; it must lint without an error."""
+    app = tmp / "app"
+    shutil.copytree(KINDS_EXAMPLES / kind, app)
+    complete(app)
+    report = lint(app)
+    if report.errors:
+        raise ExampleError(f"kaosctl lint finds errors in kinds/{kind}:\n{report.to_json()}")
+    return app
+
+
+def kind_examples(tmp: pathlib.Path) -> None:
+    """The minimal example of each step type: it lints without an error and its steps run. Ingest, publish and
+    control use the apps of docs/examples/flows, which the pages of the guide that need them show too."""
+    for number, flow in enumerate((flow_ingest, flow_publish, flow_control)):
+        flow(tmp / f"flow{number}")
+    from kaos_lib import checkpoint
+    data = _tree(tmp / "data", **{"a.txt": "alpha\n", "empty.txt": ""})
+    app = _kind_app("transform", tmp / "transform")
+    result, run = run_step(app, tmp / "transform" / "run", "filter", "transform", [("dataset", "filtered")],
+                           params={"filter": {"min_bytes": 1}}, inputs={"dataset": data})
+    if result["values"] != {"kept": 1} or [p.name for p in run.output("filtered").iterdir()] != ["a.txt"]:
+        raise ExampleError(f"filter handed on {result['values']}")
+    app = _kind_app("train", tmp / "train")
+    saved = os.environ.get(checkpoint.CHECKPOINT_DIR_ENV)
+    os.environ[checkpoint.CHECKPOINT_DIR_ENV] = str(tmp / "train" / "checkpoints")
+    try:
+        result, run = run_step(app, tmp / "train" / "run", "train", "train", [("model", "model")],
+                               params={"train": {"epochs": 3}}, inputs={"dataset": data})
+    finally:
+        if saved is None:
+            os.environ.pop(checkpoint.CHECKPOINT_DIR_ENV, None)
+        else:
+            os.environ[checkpoint.CHECKPOINT_DIR_ENV] = saved
+    if result["values"] != {"epochs": 3} or (run.output("model") / "weights.txt").read_text() != "trained for 3 epochs\n":
+        raise ExampleError(f"train handed on {result['values']}")
+    app = _kind_app("evaluate", tmp / "evaluate")
+    trained, trun = run_step(app, tmp / "evaluate" / "train", "train", "train", [("model", "model")])
+    result, run = run_step(app, tmp / "evaluate" / "run", "evaluate", "evaluate", [("artifact", "report")],
+                           params={"evaluate": {"threshold": 0.5}}, upstream={"train": trained["values"]},
+                           upstream_writes={"train": {"model": trun.output("model")}})
+    if result["values"] != {"score": 0.8, "passed": True} or result["writes"][0]["type"] != "artifact":
+        raise ExampleError(f"evaluate handed on {result}")
+
+
+def kind_mistakes(tmp: pathlib.Path) -> None:
+    """Each mistake of KIND_MISTAKES is an error of its rule with the sentence that the page of its type shows."""
+    for number, (kind, body, rule, sentence) in enumerate(KIND_MISTAKES):
+        found = [f for f in _lint_text(tmp / str(number), body) if f.rule == rule and sentence in f.message]
+        if not found or found[0].level != "error":
+            raise ExampleError(f"the {kind} mistake is not an error {rule} with the sentence on its page: {sentence!r}")
+        page = (HERE / "docs" / f"step-type-{kind}.md").read_text(encoding="utf-8")
+        if sentence not in page:
+            raise ExampleError(f"docs/step-type-{kind}.md does not show the sentence of kaosctl lint: {sentence!r}")
+
+
+def flow_gpus(tmp: pathlib.Path) -> None:
+    """The step of the page "One GPU or four": the app lints, and the sizes it picks follow the count it is told
+    (torch is the step's own package, so the decision is a function the test calls without it)."""
+    app = flow_app("gpus", tmp)
+    step_module = load(app, "train")
+    one, four = step_module.plan(1, 8, 64), step_module.plan(4, 32, 64)
+    if one != {"gpus": 1, "batch": 64, "workers": 8, "parallel": False} or \
+            four != {"gpus": 4, "batch": 256, "workers": 32, "parallel": True}:
+        raise ExampleError(f"the step of flows/gpus plans {one} and {four}")
+    from kaos_lib import runtime
+    shared = runtime.context({"KUBECORE_SLOT_GPUS": "1", "KUBECORE_SLOT_CPUS": "8", "KUBECORE_SLOT_SHARED": "1"}).slot
+    alone = runtime.context({"KUBECORE_SLOT_GPUS": "4"}).slot
+    if (shared.gpus, shared.shared, alone.gpus, alone.shared) != (1, True, 4, False):
+        raise ExampleError(f"the slot of a shared step and of a step alone: {shared} {alone}")
+
+
 def check_all() -> None:
     """Every example: raises ExampleError (or the error of the step) on the first one that is wrong."""
     for state in STATES:
@@ -502,9 +609,13 @@ def check_all() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         ledger_example(pathlib.Path(tmp))
     for flow in (flow_two_inputs, flow_skip, flow_fan_in, flow_metrics, flow_ingest, flow_publish, flow_control,
-                 flow_conditions, flow_sweep, packages_dockerfile):
+                 flow_conditions, flow_sweep, flow_gpus, packages_dockerfile):
         with tempfile.TemporaryDirectory() as tmp:
             flow(pathlib.Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        kind_examples(pathlib.Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        kind_mistakes(pathlib.Path(tmp))
     shared_reference()
     rerun_pin()
     for path in sorted(EXAMPLES.rglob("*.py")):

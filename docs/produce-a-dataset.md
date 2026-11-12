@@ -13,7 +13,7 @@ You have a step that produces a dataset. `prepare` declares it, and writes the f
 `step.output("clean")` is an empty folder. What it holds when `step.result()` is called becomes the dataset.
 
 `dataset("clean")` in the app `myapp` is the dataset `dataset-myapp-clean`, with the app's name in the middle
-([how datasets are named](datasets-versions-hashes.md#what-a-dataset-is)). Code uses the short name, `clean`, everywhere.
+([how datasets are named](data-contract.md#what-a-dataset-is)). Code uses the short name, `clean`, everywhere.
 
 ## What a run does with it
 
@@ -21,8 +21,8 @@ You have a step that produces a dataset. `prepare` declares it, and writes the f
   version never changes afterwards, and the steps after `prepare` in the same run read exactly that version.
 - **Only the difference is uploaded.** A run uploads only the files that differ from what the dataset holds and from
   what the last run sealed. A run that writes the same content as `latest` makes no new version; every other run makes
-  its own version ([how](datasets-versions-hashes.md#only-the-difference-is-uploaded)).
-- **A step that fails.** [What is saved](principles.md#what-is-saved) says what a failed step can leave behind.
+  its own version ([how](data-writes.md#only-the-difference-is-uploaded)).
+- **A step that fails.** [What is saved](data-writes.md#what-is-saved-and-when) says what a failed step can leave behind.
 - **Only the app that declares the dataset in `produces=` writes it.** People and other pipelines read it.
 
 To make the step fail when the folder holds too few files, call `step.check("clean", min_files=10)` before
@@ -62,9 +62,9 @@ A second pipeline reads the dataset like any dataset: a setting holds the reposi
 ```
 
 On the run form of the second pipeline the field `clean` offers your project's datasets and their versions,
-`dataset-myapp-clean` among them. `latest` is the version a run of `myapp` promoted last ([what `latest` is](datasets-versions-hashes.md#what-a-version-is)).
+`dataset-myapp-clean` among them. `latest` is the version a run of `myapp` promoted last ([what `latest` is](data-contract.md#what-a-version-is)).
 
 Names, the one-writer rule and the other rules for datasets are in
-[What you must and what you can](must-and-can.md).
+[Your contract with the platform](contract.md).
 
-Next: [Bigger machines](bigger-machines.md). To see why everything works this way, read [Principles](principles.md).
+Next: [Bigger machines](bigger-machines.md). The rules behind it are in [The data contract](data-contract.md).

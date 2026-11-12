@@ -15,7 +15,7 @@ A step does not name a queue or a quality of service. The platform chooses them.
 
 Slurm stops a job at its time limit. The limit is the one every step has, wherever it runs: the field `<step>-walltime`
 of the run form, whose default is `walltime=` on the step: `"90m"`, `"12h"` or `"720"` (minutes). A step that sets none
-gets `4h` ([the limits](must-and-can.md#the-limits)). [Long jobs](long-jobs.md#the-time-limit) says what happens when
+gets `4h` ([the limits](contract.md#the-limits)). [Long jobs](long-jobs.md#the-time-limit) says what happens when
 the limit is reached.
 
 ```python title="pipeline.py" hl_lines="24"
@@ -30,7 +30,8 @@ puts beside the job before it starts, and `step.input()` returns that copy. The 
 minutes or hours. Outputs, result and MLflow use the same calls as anywhere. The step code never names a place.
 
 Several steps of one project on one class may share a node: each gets its own GPU and its share of the CPUs and the
-memory. Compute only on the GPU the step is given.
+memory. Compute only on the GPU the step is given. [One GPU or four on HPC (Slurm)](one-or-four-gpus.md) shows how a step
+reads what it got.
 
 ## When the limit is reached
 
