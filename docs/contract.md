@@ -79,7 +79,7 @@ without its folder is refused, and the message names the folder to create (`L-E0
 8. **It runs a step again when the machine was lost** or the time limit was reached and the step can continue
    ([when a step ends](reference.md#when-a-step-ends)).
 9. **It moves `latest` once, at the end.** Only when every step went well, and only for the datasets whose
-   `promote-<name>` you ticked ([what a run writes](data-writes.md#when-latest-moves)).
+   `promote-<name>` the person who started the run set to `true` ([what a run writes](data-writes.md#when-latest-moves)).
 10. **It keeps some things and removes others, on a schedule** ([what is kept, and for how long](data-retention.md)).
 
 The same step code runs on the platform's own machines and on HPC (Slurm): the command, the context and the result are the
@@ -108,21 +108,22 @@ that fails half-way can leave behind.
 
 ## The run form
 
-Every field of the run form comes from somewhere. Nothing on it is written by hand.
+Every field of the run form is made by you or by the platform, and every value is set by the person who starts the run.
+This table says, for each field: who makes it, who sets its value and when, and the default.
 
-| field | where it comes from | default | rule |
+| field | who makes it | who sets the value, and when | default, and where it comes from |
 |---|---|---|---|
-| `experiment-name` and the other `experiment-*` fields | `config/experiment.yaml` | the value in the file | the experiment names the series of runs the files are kept under |
-| `<section>-<key>` for each plain value | the files of `config/` listed in `config/config.yaml` | the value in the file | a list is not a field. The text of the field is the comment next to the value |
-| a dataset field, named like the input | the top-level value in `config/` that `inputs=` names | the reference in the file | offers your project's datasets and their versions. The run pins the choice to one exact version |
-| `<step>-class` | the machine classes the step is offered | the default class of the step | the GPU classes only when the step has `gpu=True`; HPC (Slurm) classes only for a step that may run there ([where it runs](step-types.md)). A class the form does not offer is refused before the first step |
-| `<step>-walltime` | `walltime=` on the step | `walltime=`, else `4h` | minutes or hours (`90`, `90m`, `12h`): at least one minute, at most 30 days; longer than the lead of `resumable=` |
-| `<step>-checkpoint-every` | `checkpoint_every=` on the step | the value in code | minutes or hours. Present only for a step that declares it |
-| `promote-<name>` | one for each `dataset("<name>")` in `produces=` | `false` | `true` or `false`. `true` asks the run to move `latest` of that dataset at its end |
-| the fields a `when=` names | any field above, or a value of a step in `needs=` | | a `when=` on a field the form does not have is refused |
-| `<step>-matrix`, `<step>-parallel` | a step that runs many times: see [Sweeps](sweeps.md) | | the rules are on that page |
-| `config` | "Extra settings for this run, as YAML" | empty | at most 16 KiB. It replaces the values above |
-| `image-<step>` | set by the platform | | do not change |
+| `experiment-name` and the other `experiment-*` fields | you, in `config/experiment.yaml` | whoever starts the run, on the form | the value in the file |
+| `<section>-<key>`, one for each plain value | you, in the files of `config/` listed in `config/config.yaml`. A list is not a field. The comment next to the value is the text of the field | whoever starts the run, on the form | the value in the file |
+| a dataset field, named like the input | you: a top-level value in `config/` that `inputs=` names | whoever starts the run picks one of your project's datasets and versions. The platform pins it to one exact version when the run starts | the reference in the file |
+| `<step>-class` | the platform, for every step. You choose what it offers with `gpu=True` | whoever starts the run. A class the form does not offer is refused before the first step. GPU classes only with `gpu=True`; HPC (Slurm) classes only for a step that may run there ([where it runs](step-types.md)) | the step's default class, chosen by the platform |
+| `<step>-walltime` | the platform, for every step | whoever starts the run. Minutes or hours (`90`, `90m`, `12h`), at least one minute, at most 30 days, longer than the lead of `resumable=` | `walltime=` on the step, else `4h` |
+| `<step>-checkpoint-every` | the platform, for a step that declares `checkpoint_every=` | whoever starts the run. Minutes or hours | `checkpoint_every=` on the step |
+| `promote-<name>` | the platform, one for each `dataset("<name>")` in `produces=`. You write nothing for it | whoever starts the run picks `true` or `false`. `true` asks the run to move `latest` of that dataset at its end | `false`, set by the platform |
+| the fields a `when=` names | you: a `when=` names a field that is on the form (any field above), or a value of a step in `needs=` | whoever starts the run sets the field. A `when=` on a field the form does not have is refused | the default of the field it names |
+| `<step>-matrix`, `<step>-parallel` | a step that runs many times: see [Sweeps](sweeps.md) | see that page | see that page |
+| `config` | the platform, always: "Extra settings for this run, as YAML" | whoever starts the run. At most 16 KiB. It replaces the values above | empty |
+| `image-<step>` | the platform, always | the platform, when it builds your steps. Do not change | the image the platform built |
 
 ## What the platform refuses
 
@@ -188,7 +189,7 @@ What you see while a step runs is in [When something goes wrong](when-something-
   one context and one result.
 - **Versions are exact.** Every dataset a run reads is one exact version, fixed before the first step, and recorded in
   the result of every step. A version never changes after it is made.
-- **`latest` moves only at the end of a fully successful run, and only for the datasets you ticked.** It moves for all of
+- **`latest` moves only at the end of a fully successful run, and only for the datasets whose `promote-<name>` is `true`.** It moves for all of
   them or for none. A run that fails, or that you did not ask, leaves `latest` where it was.
 - **Nothing is saved before every output has passed its checks.**
 - **Only the app that declares a dataset writes it.**

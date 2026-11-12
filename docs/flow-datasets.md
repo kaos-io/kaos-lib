@@ -105,15 +105,15 @@ first pipeline writes it. The second only reads.
 **You want** `latest` to point to the version a run made. A step only makes its version. `latest` moves once, at the end of
 the run, and only when the whole run went well.
 
-The run form has a choice for each dataset the pipeline makes: `promote-<name>`, with the name from `produces=`
-(`promote-clean` for `dataset("clean")`). It offers `false` and `true`, and the default is `false`. Set it to `true` for the
-run that should move `latest`. A run that leaves it at `false` still makes its version, and leaves `latest` where it was, so
-an experiment never changes what other pipelines read.
+You write nothing for it. The platform adds one field `promote-<name>` to the run form for every `dataset("<name>")` in
+`produces=` (`promote-clean` for `dataset("clean")`). The person who starts the run picks `true` or `false`; the default is
+`false`. A run left at `false` still makes its version and leaves `latest` where it was, so an experiment never changes what
+other pipelines read.
 
 **The run records** the version the step made, in the step's result. Later steps of the run read that version, whether or
 not `latest` moves.
 
-What happens in each case is in [When `latest` moves](data-writes.md#when-latest-moves): when two datasets are ticked, when
+What happens in each case is in [When `latest` moves](data-writes.md#when-latest-moves): when two datasets are set to `true`, when
 two runs ask at once, and when the end of a run is cut short.
 
 Next: [The data contract](data-contract.md).

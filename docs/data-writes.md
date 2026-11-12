@@ -75,20 +75,24 @@ A step only makes its version. `latest` moves once, at the end of the run, and o
 does not ask still makes its version, and leaves `latest` where it was, so an experiment never changes what other pipelines
 read.
 
-The run form has a choice for each dataset the pipeline makes: `promote-<name>`, with the name from `produces=`
-(`promote-clean` for `dataset("clean")`). It offers `false` and `true`, and the default is `false`
-([how to ask](flow-datasets.md#move-latest)).
+You write nothing for it. The platform adds one field `promote-<name>` to the run form for every `dataset("<name>")` in
+`produces=` (`promote-clean` for `dataset("clean")`). The person who starts the run picks `true` or `false`, and the default
+is `false` ([how to ask](flow-datasets.md#move-latest)).
+
+`latest` moves once, at the end of the run, only if every step succeeded or was skipped, for every dataset whose field is
+`true`. A run that fails moves nothing. Every version the run made stays readable by its exact version.
 
 | the run | the version it made | `latest` |
 |---|---|---|
-| has `promote-clean` set to `true`, and every step ended well | new | moves to it, at the end of the run |
-| has `promote-clean` set to `true`, and a step failed | new, kept | stays |
-| leaves `promote-clean` at `false` | new, kept | stays |
-| writes the same files as `latest` already holds | none: the existing version is reused | unchanged |
-| has a step that was skipped, and the skipped step makes the dataset | none | unchanged |
+| `promote-clean` is `true`, and every step succeeded or was skipped | new | moves to it, at the end of the run |
+| `promote-clean` is `true`, and a step failed | new, kept | stays |
+| `promote-clean` is `false` | new, kept | stays |
+| the step wrote the same files as `latest` already holds | none: the existing version is reused | unchanged |
+| the step that makes the dataset was skipped | none | unchanged |
+| another run promoted the same dataset while this one ran | new, kept | stays: this run is refused at its end and fails, naming the dataset |
 
-**All or nothing.** When a pipeline makes two datasets and both are ticked, the run moves both `latest` names, or neither. At
-the end of the run the platform first checks every ticked dataset: its `latest` must still be the version the step started
+**All or nothing.** When a pipeline makes two datasets and both fields are `true`, the run moves both `latest` names, or neither. At
+the end of the run the platform first checks every dataset whose field is `true`: its `latest` must still be the version the step started
 from. If one has moved, the run moves none and fails, naming the dataset that moved. Every version the run made is kept.
 Then it moves them all. Steps skipped with a condition or with `step.skip()` make nothing, so their datasets are not moved,
 and the log of the run says so.

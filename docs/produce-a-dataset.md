@@ -36,10 +36,12 @@ the dataset ([HPC (Slurm)](hpc.md)). The check `L-W07` warns about a GPU step th
 
 ## Move `latest`
 
-The step only seals its version. The name `latest` moves to it when the run ends, if every step went well and the run
-asked (this is called promoting). A run without the request still seals its version, and `latest` stays where it is, so an
-experiment does not change what other pipelines read. [Move `latest`](flow-datasets.md#move-latest) shows the field of the
-run form that asks, and what happens when a pipeline makes more than one dataset.
+The step only seals its version. The name `latest` moves to it when the run ends, if every step succeeded or was skipped
+and the person who started the run set the field `promote-<name>` to `true` (this is called promoting). You write nothing
+for that field: the platform adds one for every `dataset("<name>")` in `produces=`, with the default `false`. A run left at
+`false` still seals its version, and `latest` stays where it is, so an experiment does not change what other pipelines
+read. [Move `latest`](flow-datasets.md#move-latest) shows the field, and [when `latest` moves](data-writes.md#when-latest-moves)
+says what happens when a pipeline makes more than one dataset.
 
 ## Read it from another pipeline
 
