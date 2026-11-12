@@ -127,10 +127,8 @@ def test_malformed_installed_version_is_unknown():
 def test_packaged_release_json_is_valid_and_matches_this_version():
     meta = support.packaged()
     assert support.validate_release(meta) == []
-    # The policy still describes 0.4: it is what the platform serves to running apps. It moves to 0.5 (supported
-    # >=0.5, breaking) in one commit of its own, merged when the platform cuts over (PRD kaos#1911).
-    assert meta["version"] == "0.4.0" and kaos_lib.__version__ == "0.5.0"
-    assert meta["supported"] == ">=0.2" and meta["deprecated"] == [] and meta["breaking"] is False
+    assert meta["version"] == kaos_lib.__version__ == "0.5.0"
+    assert meta["supported"] == ">=0.5.0.dev0" and meta["deprecated"] == [] and meta["breaking"] is True   # the step contract
     assert meta["migration"].endswith("/docs/migrate-to-0.5.html")      # a live page: only the policy is still 0.4's
     assert support.check(kaos_lib.__version__, meta)["verdict"] == "current"
 
@@ -393,3 +391,19 @@ def test_a_policy_that_is_not_breaking_keeps_the_rebuild_advice(capsys):
     with pytest.raises(UnsupportedVersion) as err:
         support.at_step_start("0.1.0", env_with(dict(POLICY, breaking=False)))
     assert "must be rebuilt with a newer kaos-lib" in str(err.value)
+
+
+@pytest.mark.parametrize("installed,ok", [
+    ("0.5.0", True), ("0.5.1", True), ("0.5.0rc1", True), ("0.5.0rc25", True), ("0.5.0.dev3", True),
+    ("0.6.0rc2", True), ("0.4.0", False), ("0.4.9", False), ("0.4.0rc25", False), ("0.3.0", False)])
+def test_the_served_policy_admits_every_version_of_the_0_5_line_the_channels_publish(installed, ok):
+    """A prerelease of 0.5 sorts below 0.5.0, so ">=0.5" would stop every step built on one."""
+    verdict = support.check(installed, support.packaged())["verdict"]
+    assert (verdict in ("current", "behind")) is ok, verdict
+
+
+def test_a_0_4_step_is_told_to_change_its_code_and_where_the_guide_is():
+    with pytest.raises(UnsupportedVersion) as err:
+        support.at_step_start("0.4.0", env_with(support.packaged()))
+    assert "this app's code has to change" in str(err.value)
+    assert "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/migrate-to-0.5.html" in str(err.value)
