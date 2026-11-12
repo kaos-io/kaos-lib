@@ -316,8 +316,9 @@ def test_should_refuse_a_python_that_is_missing_or_has_no_kaos_lib(repo, tmp_pat
 def test_should_resolve_a_relative_python_against_the_folder_the_command_was_called_from(repo, tmp_path, monkeypatch):
     here = tmp_path / "here"
     (here / "bin").mkdir(parents=True)
-    link = here / "bin" / "py"
-    link.symlink_to(sys.executable)
+    link = here / "bin" / "py"                                  # a wrapper, not a link: a linked interpreter
+    link.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')  # loses the packages of its environment
+    link.chmod(0o755)
     monkeypatch.chdir(here)
     seen = {}
     real = run.proc.stream
