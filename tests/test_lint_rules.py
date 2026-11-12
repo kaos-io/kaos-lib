@@ -266,3 +266,23 @@ def test_a_step_that_writes_a_name_a_needed_step_writes_is_refused(tmp_path):
     out = messages(tmp_path, body, {"first": "", "second": ""}, rule="L-E07")
     assert any("report is both something the step it needs, 'a', produces and one of its own outputs (produces=)" in m
                for m in out), out
+
+
+@pytest.mark.parametrize("walltime", ["721h", "43201", "43201m", "0m", "0"])
+def test_a_walltime_the_form_would_refuse_is_refused_by_lint_with_composes_sentence(tmp_path, walltime):
+    body = f'    a = step("train", kind="evaluate", walltime="{walltime}")\n'
+    out = messages(tmp_path, body, {"train": ""}, rule="L-E06")
+    assert any(f"train-walltime is '{walltime}'. Write minutes or hours, for example 90, 90m or 12h: at least one minute, "
+               "at most 30 days, no other unit." in m for m in out), out
+
+
+@pytest.mark.parametrize("walltime", ["720h", "43200", "1m"])
+def test_a_walltime_up_to_thirty_days_is_accepted_by_lint(tmp_path, walltime):
+    body = f'    a = step("train", kind="evaluate", walltime="{walltime}")\n'
+    assert not [m for m in messages(tmp_path, body, {"train": ""}, rule="L-E06") if "walltime" in m]
+
+
+def test_a_checkpoint_interval_over_thirty_days_is_refused_by_lint(tmp_path):
+    body = '    a = step("train", kind="evaluate", checkpoint_every="721h")\n'
+    out = messages(tmp_path, body, {"train": ""}, rule="L-E06")
+    assert any("train-checkpoint-every is '721h'. Write minutes or hours" in m for m in out), out

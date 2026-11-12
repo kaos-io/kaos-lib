@@ -77,8 +77,16 @@ So a training that needs 30 hours and has a limit of 12 hours is resumable, save
 ([L-W06](lint/L-W06.md)). `resumable=True` also makes the step save 10 minutes before its limit; the field
 `<step>-walltime` must then be longer than that lead.
 
-`checkpoint_every=` is the default of the field `<step>-checkpoint-every`: how often the platform copies the checkpoint
-folder. `kaos_lib.checkpoint` uses the field's value as the interval of `checkpoint.tick()` when your code sets none.
+The run form decides both times. The step keeps defaults in code, and the form value wins:
+
+| | who sets it | order, first wins | default |
+|---|---|---|---|
+| time limit | the field `<step>-walltime` of the run form | the form value, then `walltime=` in `step(...)` | `walltime=`, else 4 hours |
+| checkpoint interval | the field `<step>-checkpoint-every` of the run form. A step has it when it declares `checkpoint_every=` or `resumable=` (not `checkpoint_every=False`) | the form value, then `checkpoint_every=` in `step(...)`, then the value passed to `checkpoint.register(...)` in code, then the library's own (it adapts to the time a save takes) | `checkpoint_every=`, else 10 minutes for a `resumable=True` step |
+
+The platform's copy of the checkpoint folder and `checkpoint.tick()` read the same value, on the platform's own machines and
+on HPC (Slurm). A step with `checkpoint_every=False` has no field and keeps no copies. Both values are minutes or hours, at least one
+minute and at most 30 days: a `walltime=` or `checkpoint_every=` the form would refuse is refused when the pipeline is built.
 
 ## When a step ends
 

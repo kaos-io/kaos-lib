@@ -9,7 +9,7 @@ import ast
 import re
 from typing import Iterable
 
-from .constants import (COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, MIN_DATASET_NAME, NAME_MAX,
+from .constants import (LONGEST_MINUTES, COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, MIN_DATASET_NAME, NAME_MAX,
                         OLD_APP_NOTICE, OLD_ENTRY_ARGUMENT, PIPELINE_FILE, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
                         STEPS_DIR, TIME_PATTERN)
@@ -298,12 +298,22 @@ def _when_argument(ctx, step) -> Iterable[Hit]:
         return
 
 
+def _time_sentence(step, field, value) -> str:
+    """What compose says about a walltime or a checkpoint interval the run form would refuse (kubecore/run_settings.py
+    time_problem), for the field of this step."""
+    name = step.name if isinstance(step.name, str) else "<step>"
+    return (f"{name}-{field} is {str(value)!r}. Write minutes or hours, for example 90, 90m or 12h: at least one "
+            f"minute, at most 30 days, no other unit.")
+
+
 def _time_arguments(ctx, step) -> Iterable[Hit]:
     limit, resumable = step.value("walltime", None), step.value("resumable", None)
     if limit is not UNKNOWN and limit is not None:
         if not (isinstance(limit, str) and _TIME.match(limit)):
             yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: "
                       f"walltime={limit!r} must be minutes or hours as text, like '90m', '12h' or '720'.")
+        elif not 0 < parse_minutes(limit) <= LONGEST_MINUTES:    # the run form would refuse its default: compose's sentence
+            yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: {_time_sentence(step, 'walltime', limit)}")
     if resumable is UNKNOWN or resumable is None or resumable is False:
         return
     ok = resumable is True or (isinstance(resumable, str) and _TIME.match(resumable)
@@ -325,6 +335,8 @@ def _every_arguments(ctx, step) -> Iterable[Hit]:
         valid = (m and int(m.group(1)) != 0) or (zero_ok and not isinstance(v, bool) and str(v).strip() == "0")
         if not valid:
             yield Hit(ctx.file, ctx.span(step.node(key)), f"{_step_label(step)}: {key}={v!r} must be {what}.")
+        elif key == "checkpoint_every" and m and not 0 < int(m.group(1)) * (60 if m.group(2) == "h" else 1) <= LONGEST_MINUTES:
+            yield Hit(ctx.file, ctx.span(step.node(key)), f"{_step_label(step)}: {_time_sentence(step, 'checkpoint-every', v)}")
 
 
 @rule("L-E07", "StepDeclaration", ERROR,

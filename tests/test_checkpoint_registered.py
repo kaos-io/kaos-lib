@@ -300,7 +300,7 @@ def test_the_platform_folder_receives_the_checkpoints_and_is_where_a_continuatio
 
 # ------------------------------------------------------------- the run form's interval (step context)
 
-def test_the_interval_of_the_run_form_is_the_default_and_an_explicit_one_wins(tmp_path, clean, monkeypatch):
+def test_the_interval_of_the_run_form_wins_over_the_one_passed_to_register(tmp_path, clean, monkeypatch):
     monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"version": 1, "checkpoint_every": 20}))
     m = Model(1)
     checkpoint.register(save=m.save, load=m.load)
@@ -310,7 +310,20 @@ def test_the_interval_of_the_run_form_is_the_default_and_an_explicit_one_wins(tm
     assert checkpoint.tick() is True          # 20 minutes, from the context
     checkpoint.register(save=m.save, load=m.load, checkpoint_every=5)
     clean.now += 6 * 60
-    assert checkpoint.tick() is True          # the step's own value wins
+    assert checkpoint.tick() is False         # the form's 20 minutes win over the code's 5
+    clean.now += 14 * 60
+    assert checkpoint.tick() is True
+
+
+def test_without_a_form_value_the_value_passed_to_register_and_off_still_work(tmp_path, clean, monkeypatch):
+    monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"version": 1}))
+    m = Model(1)
+    checkpoint.register(save=m.save, load=m.load, checkpoint_every=5)
+    clean.now += 6 * 60
+    assert checkpoint.tick() is True
+    checkpoint.register(save=m.save, load=m.load, checkpoint_every=False)
+    clean.now += 3600
+    assert checkpoint.tick() is False         # off, with no form value to say otherwise
 
 
 def test_without_an_interval_in_the_context_the_adaptive_default_stays(tmp_path, clean, monkeypatch):

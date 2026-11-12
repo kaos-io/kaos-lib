@@ -64,6 +64,7 @@ POD_PATCH_NAMES = ("pod_spec_patch", "podSpecPatch")
 COMPUTE_CLASS_KEYS = ("platform.kubecore.io/compute-class",)
 
 # Thresholds (owner review, OQ-13).
+LONGEST_MINUTES = 30 * 24 * 60        # the longest time limit or checkpoint interval the run form accepts: 30 days
 LONG_GPU_STEP_MINUTES = 4 * 60        # L-W01: the HPC (Slurm) default limit
 SHORT_LIMIT_MINUTES = 2 * 60          # L-I02: a limit under this may be shortened by the platform
 
