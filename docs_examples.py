@@ -565,7 +565,7 @@ def kind_mistakes(tmp: pathlib.Path) -> None:
 
 
 def flow_gpus(tmp: pathlib.Path) -> None:
-    """The step of the page "One GPU or four": the app lints, and the sizes it picks follow the count it is told
+    """The step of the page "GPUs on HPC (Slurm)": the app lints, and the sizes it picks follow the count it is told
     (torch is the step's own package, so the decision is a function the test calls without it)."""
     app = flow_app("gpus", tmp)
     step_module = load(app, "train")

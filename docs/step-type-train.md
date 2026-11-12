@@ -72,4 +72,4 @@ the model with `needs=[train]` and `step.input("model")`.
 ## Related
 
 [Step types](step-types.md) · [Long jobs](long-jobs.md) · [Train, checkpoint and resume](flow-training.md) ·
-[Bigger machines](bigger-machines.md) · [HPC (Slurm)](hpc.md) · [One GPU or four on HPC (Slurm)](one-or-four-gpus.md) · [Your contract with the platform](contract.md)
+[Bigger machines](bigger-machines.md) · [HPC (Slurm)](hpc.md) · [GPUs on HPC (Slurm)](gpus-on-hpc.md) · [Your contract with the platform](contract.md)

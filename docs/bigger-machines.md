@@ -44,6 +44,6 @@ Linux is one, and a CPU-only build never uses the GPU. `kaosctl lint` warns (`L-
 no CUDA support.
 
 A GPU step that sits idle ends as idle, so the GPU stops costing money ([the limits](contract.md#the-limits)).
-Several steps of one project may share a node on HPC ([page 9](hpc.md)); [One GPU or four on HPC (Slurm)](one-or-four-gpus.md) shows the code that is right with either.
+Several steps of one project may share a node on HPC ([page 9](hpc.md)); [GPUs on HPC (Slurm)](gpus-on-hpc.md) shows the code that is right with either.
 
 Next: [Long jobs](long-jobs.md).

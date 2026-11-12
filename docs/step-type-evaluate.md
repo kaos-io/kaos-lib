@@ -62,4 +62,4 @@ On the platform's own machines or on HPC (Slurm).
 ## Related
 
 [Step types](step-types.md) · [Conditions and skipping](conditions-and-skipping.md) · [See your results](see-your-results.md) ·
-[One GPU or four on HPC (Slurm)](one-or-four-gpus.md) · [Your contract with the platform](contract.md)
+[GPUs on HPC (Slurm)](gpus-on-hpc.md) · [Your contract with the platform](contract.md)

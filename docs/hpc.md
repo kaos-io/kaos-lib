@@ -30,7 +30,7 @@ puts beside the job before it starts, and `step.input()` returns that copy. The 
 minutes or hours. Outputs, result and MLflow use the same calls as anywhere. The step code never names a place.
 
 Several steps of one project on one class may share a node: each gets its own GPU and its share of the CPUs and the
-memory. Compute only on the GPU the step is given. [One GPU or four on HPC (Slurm)](one-or-four-gpus.md) shows how a step
+memory. Compute only on the GPU the step is given. [GPUs on HPC (Slurm)](gpus-on-hpc.md) shows how a step
 reads what it got.
 
 ## When the limit is reached

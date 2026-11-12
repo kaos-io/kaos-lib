@@ -139,7 +139,7 @@ nav:
       - Test your steps: test-your-steps.md
       - See your results: see-your-results.md
       - Add packages to a step: add-packages.md
-      - One GPU or four on HPC (Slurm): one-or-four-gpus.md
+      - GPUs on HPC (Slurm): gpus-on-hpc.md
       - Bring data in: bring-data-in.md
       - Share a dataset: share-a-dataset.md
       - Make a dataset layout: make-a-layout.md

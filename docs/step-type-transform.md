@@ -66,4 +66,4 @@ the dataset `dataset-<app>-filtered`. The steps after it read that version with 
 ## Related
 
 [Step types](step-types.md) · [Produce a dataset](produce-a-dataset.md) · [What a run writes](data-writes.md) ·
-[One GPU or four on HPC (Slurm)](one-or-four-gpus.md) · [Your contract with the platform](contract.md)
+[GPUs on HPC (Slurm)](gpus-on-hpc.md) · [Your contract with the platform](contract.md)
