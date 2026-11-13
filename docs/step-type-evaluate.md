@@ -57,7 +57,7 @@ On the platform's own machines or on HPC (Slurm).
 | a dataset or a model in `produces=` | `kaosctl lint`: `L-E07`, `Step 'score': an evaluate step writes reports only, so it may not produce a dataset or a model. Use kind="transform" for a step that makes a dataset, kind="train" for one that makes a model.` The platform's check says the same with a small `s` |
 | reading the model without `needs=` | `'model' is not an input of step 'evaluate'. Its inputs are: none. Add it to inputs=[...] in pipeline.py.` Name the step that makes it in `needs=` |
 | the step before it was skipped | `step 'train' was skipped (reason), so it left no result, and 'evaluate' needs it.` Read it with `optional=True`: [Conditions and skipping](conditions-and-skipping.md#what-a-step-that-needs-a-skipped-step-sees) |
-| a `when=` on a value `evaluate` never set | `step 'evaluate' gave no value 'passed' (it was skipped, did not run, or never set it): a when= on a step's value needs the value` and the run stops |
+| a `when=` on a value `evaluate` never set | `step 'evaluate' ran but gave no value 'passed' (a typo in the name, or the value was never set with step.result(passed=...))` and the run stops. If `evaluate` was skipped, the condition is false and the step that asked is skipped |
 
 ## Related
 
