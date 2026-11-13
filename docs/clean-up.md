@@ -26,7 +26,7 @@ Work folders, checkpoint copies and datasets on the site count against your proj
 
 | What | When |
 |---|---|
-| The record of a finished run | 30 days after it ends |
+| The record of a finished run | 35 days after it ends |
 | The pods of a finished run, succeeded or failed, and with them the logs of its steps | 7 days after it ends. Read the log of a step within a week |
 | Work folders of failed, cancelled and idle steps; their checkpoint copies; their job output files | kept 14 days so you can look at them, then removed at the next weekly cleanup (**every Sunday at 03:17 UTC**) |
 | Checkpoint copies of a step that has been abandoned for 7 days | when the next job of your project starts on the site. On the platform's own machines, copies of a run that never finished are removed after 7 days |
