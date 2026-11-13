@@ -49,6 +49,9 @@ def add_commands(sub: argparse._SubParsersAction) -> None:
     sp.add_argument("--input", action="append", default=[], metavar="NAME=FOLDER|REPO@REF",
                     help="what the step gets for the input NAME (a name in its inputs=): a folder on this machine, "
                          "or a small sample of a dataset version (needs `kaosctl login`). Repeat for more")
+    sp.add_argument("--matrix-index", type=int, metavar="N",
+                    help="for a step with matrix= in pipeline.py: run item N, the Nth combination of its values (the "
+                         "first name changing slowest, counting from 0). A step with matrix= needs it")
     sp.add_argument("--upstream", action="append", default=[], metavar="STEP=JSON|@FILE",
                     help="the result of a step this one needs (default: that step's last local run; without one "
                          "the step is treated as not run)")

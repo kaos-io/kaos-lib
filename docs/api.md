@@ -2,6 +2,9 @@
 
 Generated from the docstrings on every build. The guide shows how the calls fit together: [Reference](reference.md).
 
+After a step with `matrix=`, `step.upstream(name)` is a list of `UpstreamItem`, `step.input(name, item=N)` reads one
+item's output, and `Step.matrix` says which item a step is ([Sweeps](sweeps.md#pick-the-best)).
+
 ::: kaos_lib.step
 
 ::: kaos_lib.testing

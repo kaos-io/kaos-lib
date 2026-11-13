@@ -24,7 +24,9 @@ artifact. A step never reads another dataset: reading one by name in code is ref
 | `upstream_skipped` | step name to the reason that step gave to `step.skip()` | `step.skipped("prepare")`, `step.upstream("prepare", optional=True)` |
 | `upstream_writes` | step name to `{output name: folder}`, or `{output name: {"folder": ..., "type": "model" or "artifact" or "dataset", "commit": ...}}` | `step.input("clean")` |
 | `upstream_reads` | step name to `{input name: "repository@version"}` or `{"repo": ..., "ref": ..., "commit": ...}` | `step.upstream("prepare").reads` |
-| `produces` | list of `("model" or "artifact" or "dataset", name)`, the outputs the step declares | `step.output("clean")` |
+| `upstream_matrix` | the name of a step with `matrix=` to the list of its items, in index order: `{"matrix": {"lr": 0.01}, "values": {...}, "writes": {...}, "reads": {...}, "status": "ok" or "failed" or "skipped", "reason": "..."}`, every part optional | `step.upstream("train")`, `step.input("model", item=0)` |
+| `matrix`, `matrix_index`, `matrix_of` | the values of the step's own item (`{"lr": 0.01}`), its number from 0, and the number of items (default: the number plus one) | `step.start().params["lr"]`, `step.start().matrix` |
+| `produces` | list of `("model" or "artifact" or "dataset", name)`, the outputs the step declares | `step.output("clean")`; `run.output("model", item=2)` for an item |
 
 It yields a run: `run.result` (what the step handed on, or `None`) and `run.output(name)` (the folder it saved).
 
@@ -37,7 +39,7 @@ every output: `name`, `type`, `repo`, `commit`.
 ## `pipeline.py`
 
 `from kubecore.authoring import artifact, dataset, model, pipeline, step` gives `pipeline(name)` and
-`step(name, *, kind, reads, inputs, needs, produces, gpu, when, walltime, resumable, checkpoint_every, idle_timeout)`.
+`step(name, *, kind, reads, inputs, needs, produces, gpu, when, walltime, resumable, checkpoint_every, idle_timeout, matrix, matrix_allow_failed)`.
 
 | keyword | meaning | the platform refuses |
 |---|---|---|
@@ -53,6 +55,8 @@ every output: `name`, `type`, `repo`, `commit`.
 | `resumable=` | `True` (stop signal 10 minutes before the limit), a lead time `"20m"`, or `False` | a wrong form |
 | `checkpoint_every=` | how often the platform copies the checkpoint your step saved: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every` (a `resumable=True` step has the field too, with ten minutes as the default), and the form value wins over `register(checkpoint_every=...)` in code ([the table](long-jobs.md#the-time-limit)). On HPC (Slurm) copies are at least five minutes apart | a wrong form |
 | `idle_timeout=` | minutes without GPU use and log lines before a GPU step ends as idle: `"40m"`, `40`, `0` for never; the default is in [the limits](contract.md#the-limits) | a wrong form |
+| `matrix=` | values to try, `{"lr": [0.01, 0.001], "batch": [16, 32]}`: the step runs once for each combination, at most 32; it reads a value as `params["lr"]`, and the step after it gets a list ([Sweeps](sweeps.md)). It is the default of the run-form field `<step>-matrix` | not a dictionary of non-empty lists; a name that is not `[a-z][a-z0-9_]*` or is also a section in `reads=`; a value that is not a number, a boolean or a short text; more than 32 combinations; the kinds `ingest`, `publish`, `control`; a dataset in `produces=`; a whole number beyond 2^53; more than 4 things in `inputs=` and `produces=` together; a step that needs a step with `matrix=`, two of them, or more than 4 steps in all when one has `matrix=`; a `when=` that reads a value of a step with `matrix=`. The limits are in [Sweeps](sweeps.md#limits) |
+| `matrix_allow_failed=` | `True` on a step with `matrix=`: the step after it runs when some items failed and sees which ([Sweeps](sweeps.md#pick-the-best)) | not `True` or `False`; without `matrix=` |
 
 Refused at render, as well: `outputs=`, `hpc_time_limit=` and `disk=`; a step that produces a dataset and is pinned to
 a Slurm class; a `plan` or `pipeline-version` in `config/`; a step definition over 24 KiB; an app name over the limit;

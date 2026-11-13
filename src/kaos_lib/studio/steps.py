@@ -33,6 +33,7 @@ class StepInfo:
     kind: str = ""                                # kind=, "" when it is missing or not a literal
     inputs: list = field(default_factory=list)    # inputs=: the config values that hold a dataset reference
     produces: list = field(default_factory=list)  # produces=: (type, name) for model(...), artifact(...), dataset(...)
+    matrix: object = None                         # matrix=: {axis: [values]}, None when absent, UNKNOWN when not literal
 
     @property
     def path(self) -> pathlib.Path:
@@ -71,7 +72,8 @@ class _Step:
 def step(name, **kw):
     steps.append({"name": name, "kind": kw.get("kind") or "", "reads": list(kw.get("reads") or []),
                   "inputs": list(kw.get("inputs") or []), "needs": [n.name for n in (kw.get("needs") or [])],
-                  "gpu": bool(kw.get("gpu")), "produces": [[p.type, p.name] for p in (kw.get("produces") or [])]})
+                  "gpu": bool(kw.get("gpu")), "produces": [[p.type, p.name] for p in (kw.get("produces") or [])],
+                  "matrix": kw.get("matrix")})
     return _Step(name)
 def _produced(kind):
     return lambda name, **kw: types.SimpleNamespace(type=kind, name=name)
@@ -101,7 +103,8 @@ def _recorded_steps(root: pathlib.Path) -> list:
     except ValueError:
         return []
     return [StepInfo(f["name"], folder_of(f["name"]), root, list(f["needs"]), list(f["reads"]), bool(f["gpu"]),
-                     kind=f["kind"], inputs=list(f["inputs"]), produces=[tuple(p) for p in f["produces"]])
+                     kind=f["kind"], inputs=list(f["inputs"]), produces=[tuple(p) for p in f["produces"]],
+                     matrix=f.get("matrix"))
             for f in found if isinstance(f.get("name"), str)]
 
 
@@ -122,11 +125,13 @@ def _pipeline_steps(root: pathlib.Path) -> list:
             continue
         needs = [by_var[n.id].name for n in _names(s.node("needs")) if n.id in by_var]
         reads, inputs, kind = s.value("reads", []), s.value("inputs", []), s.value("kind", "")
+        matrix = s.value("matrix", None)
         out.append(StepInfo(s.name, folder_of(s.name), root, needs,
                             list(reads) if isinstance(reads, (list, tuple)) else [], s.is_gpu is True,
                             kind=kind if isinstance(kind, str) else "",
                             inputs=list(inputs) if isinstance(inputs, (list, tuple)) else [],
-                            produces=_produces(s.node("produces"))))
+                            produces=_produces(s.node("produces")),
+                            matrix=matrix if isinstance(matrix, dict) or matrix is UNKNOWN else None))
     return out
 
 

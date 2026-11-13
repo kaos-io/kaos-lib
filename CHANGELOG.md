@@ -17,6 +17,20 @@ template.** Nothing in kaos-lib converts an old app.
 - The final task of a run says the truth in every outcome (what it promoted, what another run moved, what it did not try, and
   whether trying again helps), and no pod starts for it when no `promote-<name>` is `true`. A run that overlaps another
   promoting run on the same dataset is refused whole at the end; its versions stay readable by their exact version.
+- Sweeps with one keyword: `step("train", kind="train", matrix={"lr": [0.01, 0.001], "batch": [16, 32]}, ...)` runs the step once
+  for each combination (at most 32). Each run reads its values like any setting, `step.params["lr"]` (`Step.matrix` says
+  which run it is), and saves its own model or artifact under `<name>/<experiment>/<run>/<index>/` as one version with the
+  run's number and values on it. The step after it gets a plain list: `step.upstream("train")` has one `UpstreamItem` for each
+  run, in order (`index`, `matrix`, `status` `ok` / `failed` / `skipped`, `values`, `reads`, `writes`, `reason`), and
+  `step.input("model", item=N)` reads one run's output. The values an item hands on cost at most the smaller of 8 KiB and 16 KiB divided
+  by the number of items (what it read and wrote does not count). One failed item fails the step; `matrix_allow_failed=True` lets the
+  step after it run and see which failed (`L-W08` warns when a dataset is written after it). `<step>-parallel` defaults to 4. A whole
+  number beyond 2^53 in `matrix=` is refused: write it as text. `kaosctl step run <step> --matrix-index N` runs one combination on your machine;
+  `testing.running(matrix=..., matrix_index=..., upstream_matrix=...)` tests a step and the step after it. Lint rule set 2.5.0:
+  `L-E06` reports what the render refuses in `matrix=` (shape, names, values, more than 32 combinations, kinds that run once,
+  a dataset in `produces=`, a matrix step that needs a matrix step, a `when=` on a matrix step's value), and `kaosctl lint --graph`
+  gives a step with `matrix=` one node with its `matrix_items`. The page Sweeps is rewritten for it and replaces the loop inside
+  one step.
 - Conditions and skipping. `when=` can test a value an earlier step handed on: `when="evaluate.passed == true"`
   (`<step>.<value>`, the step must be in `needs=`; a missing value stops the run with a message that names the step and the
   value). `kaos_lib.step.skip("reason")` ends a step as skipped: exit code 0, a skipped result with the reason, nothing

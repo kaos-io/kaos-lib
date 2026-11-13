@@ -7,7 +7,7 @@ rule-set version bump, never a literal buried in a rule.
 # The rule-set version: every report carries it, the PR gate and `kaosctl lint` must agree on it. Bump the major
 # for a rule removed or a level raised, the minor for a rule added or a message-only change that needs a note,
 # the patch for a fix that changes no finding on valid input.
-RULESET_VERSION = "2.4.0"
+RULESET_VERSION = "2.5.0"
 
 # Where a rule's page lives. The site is a plain public bucket, so every link names its .html file.
 DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
@@ -24,7 +24,7 @@ STEPS_DIR = "steps"
 
 # What the library's step() accepts, in order (positional arguments map onto it).
 STEP_PARAMS = ("name", "kind", "reads", "inputs", "needs", "produces", "gpu", "when", "walltime",
-               "resumable", "checkpoint_every", "idle_timeout")
+               "resumable", "checkpoint_every", "idle_timeout", "matrix", "matrix_allow_failed")
 # Arguments step() no longer takes, with what to write instead (the sentences the engine's render says).
 REMOVED_STEP_PARAMS = {
     "outputs": "outputs= is gone. Declare what the step writes with produces=[...] and hand it on with "
@@ -44,6 +44,18 @@ MIN_DATASET_NAME = 3                 # characters of a dataset name (dataset-<ap
 NAME_MAX = 40                        # characters of a step name, an input name and a produces name
 MAX_READABLE = 16                    # datasets a step can read by name: its inputs and what its needed steps produce
 MAX_NEEDS = 10                       # steps in one step's needs=: each may hand on a result of up to 8 KiB
+# matrix= of a step: the engine's limits (kubecore/run_settings.py), the same numbers and patterns.
+MATRIX_MAX_ITEMS = 32                # combinations a step with matrix= runs
+MATRIX_AXIS_PATTERN = r"^[a-z][a-z0-9_]*$"      # a name of matrix=, at most NAME_MAX characters
+MATRIX_AXIS_MAX = 40
+MATRIX_TEXT_PATTERN = r"^[A-Za-z0-9 ._+/:=@,()\[\]#%^~*-]{1,64}\Z"   # a text value of matrix=
+MATRIX_REFUSED_KINDS = ("ingest", "publish", "control")   # these run once: no matrix=
+MATRIX_INT_LIMIT = 2 ** 53           # a whole number in matrix= may not be larger: write it as text
+MATRIX_MAX_LEDGER = 4                # what a matrix step may read and write together (inputs= plus produces=)
+MATRIX_ENTRY_CAP = 56 * 1024         # the whole entry of a matrix step in the context of the step after it
+MATRIX_MIN_BASE = 16 * 1024          # what a step that needs a matrix step keeps for the rest of its context
+CONTEXT_CAP = 96 * 1024              # a step's context, and the 8 KiB of each result a step needs
+RESULT_CAP = 8 * 1024
 # What step code used before the step contract: finding one means the app was made before it.
 OLD_ENTRY_ARGUMENT = "--params"
 OLD_ENTRY_VARIABLES = ("KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME", "CHECKPOINT_BUCKET", "CHECKPOINT_PREFIX",

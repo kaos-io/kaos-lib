@@ -74,6 +74,7 @@ prove the pipeline is right.
 | warning | [L-W05 DeclaredResumableDidNotResume](lint/L-W05.md) | a step declared resumable restarted from zero on the platform |
 | warning | [L-W06 TrainTimeLimitNotResumable](lint/L-W06.md) | a training step with a time limit that is not resumable |
 | warning | [L-W07 DatasetProducerStaysOnCluster](lint/L-W07.md) | a GPU step that produces a dataset runs on the cluster, not on HPC |
+| warning | [L-W08 AllowedFailureReachesDataset](lint/L-W08.md) | `matrix_allow_failed=True` on a step that is followed by a step that writes a dataset |
 | error | [L-D01 MissingKaosLibArg](lint/L-D01.md) | a step uses kaos-lib but its Dockerfile has no `ARG KAOS_LIB_PACKAGE` |
 | error | [L-D02 KaosLibNotInstalled](lint/L-D02.md) | the step imports kaos_lib but nothing installs `${KAOS_LIB_PACKAGE}` |
 | error | [L-D03 WrongArchitecture](lint/L-D03.md) | a `FROM --platform=` other than linux/amd64 |

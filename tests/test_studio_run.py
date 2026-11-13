@@ -398,3 +398,101 @@ def test_the_environment_is_keyed_by_the_real_step_folder_so_a_link_puts_nothing
     assert pyenv.step_env(repo / "steps/dataset_loading") != pyenv.step_env(real)
     assert cli.main(["step", "run", "data-summary", str(link)]) == 0
     assert not list(repo.rglob(".venv"))
+
+
+# ---------------------------------------------------------------------------------------------------- matrix=
+MATRIX_PIPELINE = """from kubecore.authoring import artifact, model, pipeline, step
+
+with pipeline("p") as p:
+    train = step("train", kind="train", matrix={"lr": [0.01, 0.001], "batch": [16, 32, 64]}, produces=[model("model")])
+    step("pick-best", kind="evaluate", needs=[train], produces=[artifact("winner")])
+"""
+TRAIN_ENTRY = '''import json
+from kaos_lib import step
+
+ctx = step.start()
+(step.output("model") / "w.json").write_text(json.dumps([ctx.params["lr"], ctx.params["batch"], ctx.matrix.index, ctx.matrix.of]))
+step.result(score=ctx.params["lr"] * ctx.params["batch"])
+'''
+PICK_ENTRY = '''from kaos_lib import step
+
+step.start()
+items = step.upstream("train")
+print("items", [(i.index, i.status, i.values.get("score")) for i in items])
+best = max((i for i in items if i.status == "ok"), key=lambda i: i.values["score"])
+print("best", best.index, best.matrix, (step.input("model", item=best.index) / "w.json").read_text())
+(step.output("winner") / "w.txt").write_text(str(best.index))
+step.result(best=best.index)
+'''
+
+
+@pytest.fixture
+def matrix_repo(repo):
+    (repo / "pipeline.py").write_text(MATRIX_PIPELINE)
+    for name, entry in (("train", TRAIN_ENTRY), ("pick_best", PICK_ENTRY)):
+        folder = repo / "steps" / name
+        (folder / "app").mkdir(parents=True, exist_ok=True)
+        (folder / "app/__init__.py").write_text("")
+        (folder / "Dockerfile").write_text("FROM python:3.12\n")
+        (folder / "app/entry.py").write_text(entry)
+        fake_venv(folder)
+    return repo
+
+
+def test_the_items_of_a_matrix_are_every_combination_the_first_name_changing_slowest():
+    assert run.combinations({"lr": [1, 2], "batch": ["a", "b", "c"]}) == [
+        {"lr": 1, "batch": "a"}, {"lr": 1, "batch": "b"}, {"lr": 1, "batch": "c"},
+        {"lr": 2, "batch": "a"}, {"lr": 2, "batch": "b"}, {"lr": 2, "batch": "c"}]
+
+
+def test_a_matrix_step_needs_an_index_and_the_message_says_how_many_items_there_are(matrix_repo, capsys):
+    assert cli.main(["step", "run", "train", str(matrix_repo)]) == 1
+    err = capsys.readouterr().err
+    assert "step 'train' has matrix=: it runs once for each of its 6 combinations" in err
+    assert "--matrix-index N, N from 0 to 5, for example kaosctl step run train --matrix-index 0" in err
+
+
+def test_an_index_outside_the_items_is_refused(matrix_repo, capsys):
+    assert cli.main(["step", "run", "train", str(matrix_repo), "--matrix-index", "6"]) == 1
+    assert "--matrix-index 6: step 'train' has 6 combinations, numbered 0 to 5" in capsys.readouterr().err
+    assert cli.main(["step", "run", "train", str(matrix_repo), "--matrix-index", "-1"]) == 1
+
+
+def test_an_index_on_a_step_without_matrix_is_refused(matrix_repo, capsys):
+    assert cli.main(["step", "run", "pick-best", str(matrix_repo), "--matrix-index", "0"]) == 1
+    assert "step 'pick-best' has no matrix= in pipeline.py, so --matrix-index does not apply" in capsys.readouterr().err
+
+
+def test_a_matrix_that_is_not_written_out_is_refused(matrix_repo, capsys):
+    text = MATRIX_PIPELINE.replace('{"lr": [0.01, 0.001], "batch": [16, 32, 64]}', "GRID")
+    (matrix_repo / "pipeline.py").write_text("GRID = {'lr': [1]}\n" + text)
+    assert cli.main(["step", "run", "train", str(matrix_repo), "--matrix-index", "0"]) == 1
+    assert "cannot read matrix= in pipeline.py, because it is not written out as values" in capsys.readouterr().err
+
+
+def test_an_item_runs_with_its_values_as_settings_and_keeps_its_own_output_and_result(matrix_repo, capsys):
+    assert cli.main(["step", "run", "train", str(matrix_repo), "--matrix-index", "4"]) == 0
+    out = capsys.readouterr().out
+    assert "Running train item 4 of 6 {'lr': 0.001, 'batch': 32}" in out
+    assert json.loads((matrix_repo / ".kaos/local/staged/model.4/w.json").read_text()) == [0.001, 32, 4, 6]
+    assert json.loads((matrix_repo / ".kaos/local/results/train.4.json").read_text())["values"] == {"score": 0.032}
+    assert not (matrix_repo / ".kaos/local/results/train.json").exists()
+
+
+def test_the_next_step_gets_the_list_of_the_items_run_here_and_the_others_as_failed(matrix_repo, capsys):
+    for index in ("1", "4"):
+        assert cli.main(["step", "run", "train", str(matrix_repo), "--matrix-index", index]) == 0
+    capsys.readouterr()
+    assert cli.main(["step", "run", "pick-best", str(matrix_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "upstream train: 2 of its 6 items from their last local runs" in out
+    assert "items [(0, 'failed', None), (1, 'ok', 0.32), (2, 'failed', None), (3, 'failed', None), (4, 'ok', 0.032)," in out
+    assert "best 1 {'lr': 0.01, 'batch': 32} [0.01, 32, 1, 6]" in out
+
+
+def test_a_matrix_step_that_ran_no_item_here_is_seen_as_not_run(matrix_repo, capsys):
+    (matrix_repo / "steps/pick_best/app/entry.py").write_text(
+        "from kaos_lib import step\nstep.start()\nprint('absent', step.upstream('train', optional=True))\n(step.output('winner') / 'w').write_text('x')\nstep.result()\n")
+    assert cli.main(["step", "run", "pick-best", str(matrix_repo)]) == 0
+    out = capsys.readouterr().out
+    assert "no item ran here successfully" in out and "kaosctl step run train --matrix-index N" in out and "absent None" in out

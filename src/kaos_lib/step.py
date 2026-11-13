@@ -9,6 +9,7 @@ A step is ``python -m app.entry`` with no arguments. The platform gives it one v
     data = step.input("raw")         # a folder holding the dataset version the run pinned for the input "raw"
     out = step.output("report")      # a folder to write into; saved when result() is called
     prev = step.upstream("prepare")  # an earlier step's result: prev.values, prev.reads, prev.writes
+    runs = step.upstream("train")    # after a step with matrix=: a list with one entry for each item (see Upstream item)
     step.result(rows=1200)           # save the outputs and hand the result on: the last call of the step
     step.skip("not good enough")     # or: end the step as skipped, with the reason; nothing is saved
 
@@ -41,6 +42,10 @@ ENV = runtime.STEP_CONTEXT_ENV
 VERSION = 1                         # of the context and of the result
 CONTEXT_CAP = 96 * 1024             # the most a context may cost (lock.cost)
 RESULT_CAP = 8 * 1024               # the most a result may cost
+MATRIX_VALUES_CAP = 16 * 1024       # the most the ``values`` of all items of a matrix step may cost together
+MATRIX_INT_LIMIT = 2 ** 53             # a whole number in an item's result may not be larger (the next step gets it as a float)
+MATRIX_MAX_ITEMS = 32               # the most items (combinations) a matrix step runs
+MATRIX_STATUSES = ("ok", "failed", "skipped")
 SKIP_REASON_MAX = 300               # characters of the reason of step.skip()
 KINDS = ("ingest", "transform", "train", "evaluate", "publish", "control")
 WORK = "/work"                      # the step's working folder
@@ -77,6 +82,29 @@ class Upstream:
 
 
 @dataclass(frozen=True)
+class UpstreamItem:
+    """One item of an earlier step that has ``matrix=``: ``step.upstream("train")`` is a list of these, one for each
+    combination, in index order. ``values``, ``reads`` and ``writes`` are what the item handed on and are empty
+    unless ``status`` is "ok"; ``reason`` is what a skipped item gave to ``step.skip()``."""
+    step: str
+    index: int
+    matrix: dict            # the item's combination: {"lr": 0.01, "batch": 16}
+    status: str             # "ok", "failed" (it handed back no result) or "skipped"
+    values: dict = field(default_factory=dict)
+    reads: tuple = ()
+    writes: tuple = ()
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class Matrix:
+    """Which item of its ``matrix=`` this run of the step is: ``index`` of ``of``, and the item's ``values``."""
+    index: int
+    of: int
+    values: dict
+
+
+@dataclass(frozen=True)
 class Step:
     """The step context: where the step runs and what the run pinned for it."""
     run: str
@@ -88,8 +116,10 @@ class Step:
     params: dict
     ledger: lock.DataLock = field(compare=False, repr=False, default_factory=lock.DataLock)
     produces: tuple = ()
-    upstream: dict = field(default_factory=dict)    # step name -> Upstream, or None when that step left no result
+    upstream: dict = field(default_factory=dict)    # step name -> Upstream (a list of UpstreamItem after a step with
+                                                    # matrix=), or None when that step left no result
     skipped: dict = field(default_factory=dict)     # step name -> the reason it gave to step.skip(); "" when it did not run
+    matrix: Optional[Matrix] = None                 # set when the step has matrix=; its values are also in params
 
 
 # --------------------------------------------------------------------------------------------------- the context
@@ -114,8 +144,10 @@ def _result_of(name: str, entry) -> tuple:
         if not isinstance(reason, str) or not reason:
             _fail(f"{where} is skipped and has no reason ({_found(reason)}).")
         return None, reason
+    if entry.get("status") == "matrix":
+        return _items_of(name, entry), ""
     if entry.get("status") != "ok":
-        _fail(f"{where} has status {entry.get('status')!r}; a result is 'ok', 'skipped' or 'absent'.")
+        _fail(f"{where} has status {entry.get('status')!r}; a result is 'ok', 'skipped', 'matrix' or 'absent'.")
     if not isinstance(entry.get("values"), dict):
         _fail(f"{where} has no values ({_found(entry.get('values'))}).")
     try:
@@ -124,6 +156,61 @@ def _result_of(name: str, entry) -> tuple:
     except LockError as exc:
         _fail(str(exc))
     return Upstream(name, entry["values"], tuple(part.reads), tuple(part.writes)), ""
+
+
+def _scalar(value) -> bool:
+    return isinstance(value, (str, bool, int, float))
+
+
+def _items_of(name: str, entry: dict) -> list:
+    """The entries of a step that has ``matrix=``: one ``UpstreamItem`` for each item, in index order."""
+    where = f"the step context: upstream.{name}"
+    items = entry.get("items")
+    if not isinstance(items, list) or not 1 <= len(items) <= MATRIX_MAX_ITEMS:
+        _fail(f"{where} has no items ({_found(items)}); a step with matrix= has 1 to {MATRIX_MAX_ITEMS}.")
+    out = []
+    for i, item in enumerate(items):
+        here = f"{where}.items[{i}]"
+        if not isinstance(item, dict) or item.get("index") != i or isinstance(item.get("index"), bool):
+            _fail(f"{here} must be the item with index {i}: the items are in index order ({_found(item)}).")
+        if not isinstance(item.get("values"), dict):
+            _fail(f"{here} has no matrix values ({_found(item.get('values'))}).")
+        status = item.get("status")
+        if status not in MATRIX_STATUSES:
+            _fail(f"{here} has status {status!r}; an item is {', '.join(MATRIX_STATUSES)}.")
+        if status == "skipped":
+            if not isinstance(item.get("reason"), str) or not item["reason"]:
+                _fail(f"{here} is skipped and has no reason ({_found(item.get('reason'))}).")
+            out.append(UpstreamItem(name, i, item["values"], status, reason=item["reason"]))
+        elif status == "failed":
+            out.append(UpstreamItem(name, i, item["values"], status))
+        else:
+            got, _ = _result_of(f"{name}.items[{i}].result", item.get("result"))
+            if got is None:
+                _fail(f"{here}.result must be an 'ok' result ({_found(item.get('result'))}).")
+            out.append(UpstreamItem(name, i, item["values"], status, got.values, got.reads, got.writes))
+    return out
+
+
+def _matrix_of(entry, params: dict) -> Optional[Matrix]:
+    """The ``matrix`` field of the context, checked; None when the step has no ``matrix=``."""
+    if entry is None:
+        return None
+    where = "the step context: matrix"
+    if not isinstance(entry, dict):
+        _fail(f"{where} is not an object ({_found(entry)}).")
+    index, of, values = entry.get("index"), entry.get("of"), entry.get("values")
+    if isinstance(of, bool) or not isinstance(of, int) or not 1 <= of <= MATRIX_MAX_ITEMS:
+        _fail(f"{where} has of {of!r}; a step with matrix= has 1 to {MATRIX_MAX_ITEMS} items.")
+    if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < of:
+        _fail(f"{where} has index {index!r}; it is a whole number from 0 to {of - 1}.")
+    if not isinstance(values, dict) or not values or not all(isinstance(k, str) and _scalar(v) for k, v in values.items()):
+        _fail(f"{where} has values that are not names with a number, a boolean or a text ({_found(values)}).")
+    for axis in values:
+        if axis in params:
+            _fail(f"the name {axis!r} of matrix= is also a setting the step is given (params[{axis!r}]). Rename one "
+                  f"of them: the step reads both as step.params[{axis!r}].")
+    return Matrix(index, of, values)
 
 
 def _produces(entries) -> tuple:
@@ -179,10 +266,17 @@ def parse(text: str) -> Step:
     if not isinstance(data.get("upstream"), dict):
         _fail(f"the step context has no upstream ({_found(data.get('upstream'))}).")
     results = {name: _result_of(name, entry) for name, entry in data["upstream"].items()}
+    matrix = _matrix_of(data.get("matrix"), data["params"])
+    params = {**data["params"], **matrix.values} if matrix else data["params"]
+    produces = _produces(data.get("produces"))
+    if matrix and any(p.type == "dataset" for p in produces):
+        _fail(f"step '{data['step']}' has matrix= and produces a dataset: a dataset has one writer and one version for "
+              "each run. Produce a model or an artifact from the step with matrix=, and let the step after it write "
+              "the dataset.")
     return Step(data["run"], data["app"], data["project"], data["step"], data["kind"], data["experiment"],
-                data["params"], ledger, _produces(data.get("produces")),
+                params, ledger, produces,
                 {name: found for name, (found, _) in results.items()},
-                {name: reason for name, (found, reason) in results.items() if found is None})
+                {name: reason for name, (found, reason) in results.items() if found is None}, matrix)
 
 
 # ------------------------------------------------------------------------------------------------ the running step
@@ -225,13 +319,13 @@ def _need() -> _Running:
 def _pinned(step: Step) -> lock.DataLock:
     """What the step may read: the inputs the run pinned, and the datasets the steps before it wrote."""
     made = [lock.Read(w.repo, w.commit, w.commit, None, w.name)
-            for up in step.upstream.values() if up for w in up.writes if w.type == "dataset"]
+            for up in step.upstream.values() if isinstance(up, Upstream) for w in up.writes if w.type == "dataset"]
     return lock.DataLock(step.ledger.reads + made)
 
 
 def _one_meaning(step: Step) -> None:
     """A name is an input or an output of a step, never both: the folder of an output would replace the input."""
-    inputs = {r.name for r in step.ledger.reads} | {w.name for up in step.upstream.values() if up for w in up.writes}
+    inputs = {r.name for r in step.ledger.reads} | {w.name for _, _, w in _entries(step)}
     for produce in step.produces:
         if produce.name in inputs:
             _fail(f"step '{step.step}' writes the output '{produce.name}' and also reads an input named "
@@ -282,15 +376,20 @@ def _names(items) -> str:
     return ", ".join(sorted(set(items))) or "none"
 
 
-def _upstream_write(step: Step, name: str):
-    for up in step.upstream.values():
-        for write in (up.writes if up else ()):
-            if write.name == name:
-                return write
-    return None
+def _entries(step: Step):
+    """``(step name, item index or None, write)`` for everything the steps before this one wrote."""
+    for name, up in step.upstream.items():
+        if isinstance(up, Upstream):
+            for write in up.writes:
+                yield name, None, write
+        elif up:
+            for item in up:
+                for write in item.writes:
+                    yield name, item.index, write
 
 
-def input(name: str, optional: bool = False, writable: bool = False) -> Optional[pathlib.Path]:  # noqa: A001
+def input(name: str, optional: bool = False, writable: bool = False,  # noqa: A001
+          item: Optional[int] = None) -> Optional[pathlib.Path]:
     """The folder holding the input ``name``: a dataset the run pinned (``inputs=``), or a dataset, model or
     artifact a step in ``needs=`` wrote. Downloaded once, or the copy staged beside an HPC (Slurm) job. Read-only.
 
@@ -299,29 +398,66 @@ def input(name: str, optional: bool = False, writable: bool = False) -> Optional
 
     When the name is not there because a needed step did not run, this raises, naming the name and the steps;
     with ``optional=True`` it returns None instead.
+
+    A model or an artifact of a step that has ``matrix=`` is written once for each item: ``item=2`` is the one of
+    item 2 (``step.upstream(name)`` lists the items). ``item=`` is for those outputs only.
     """
-    found = _find(name, optional)
+    found = _find(name, optional, item)
     if found is None or not writable:
         return found
     run = _need()
-    if name not in run.copies:      # a real copy: a tool may rewrite a file, so no link may reach the staged one
-        run.copies[name] = _fresh(_work(WORK) / "kaos" / "inputs" / name, f"input '{name}'")
-        shutil.copytree(found, run.copies[name], symlinks=True, dirs_exist_ok=True)
-    return run.copies[name]
+    key = name if item is None else f"{name}.{item}"
+    if key not in run.copies:      # a real copy: a tool may rewrite a file, so no link may reach the staged one
+        run.copies[key] = _fresh(_work(WORK) / "kaos" / "inputs" / key, f"input '{name}'")
+        shutil.copytree(found, run.copies[key], symlinks=True, dirs_exist_ok=True)
+    return run.copies[key]
 
 
-def _find(name: str, optional: bool) -> Optional[pathlib.Path]:
+def _of_item(step: Step, name: str, item: int, matches: list):
+    """The write of ``name`` by item ``item`` of a step with ``matrix=``, or a refusal that says why there is none."""
+    producer = matches[0][0]
+    if isinstance(item, bool) or not isinstance(item, int):
+        _fail(f"item= of input('{name}') is {item!r}; it is the index of an item, a whole number from 0.")
+    items = step.upstream[producer]
+    if not 0 <= item < len(items):
+        _fail(f"step '{producer}' has the items 0 to {len(items) - 1}; there is no item {item}. Use "
+              f"step.upstream('{producer}') to see them.")
+    for _, index, write in matches:
+        if index == item:
+            return write
+    _fail(f"item {item} of step '{producer}' has status {items[item].status!r}, so it wrote no '{name}'. "
+          f"Choose an item whose status is 'ok' (step.upstream('{producer}') lists them).")
+
+
+def _find(name: str, optional: bool, item: Optional[int] = None) -> Optional[pathlib.Path]:
     from . import datasets
     run = _need()
     step = run.step
     read = _pinned(step).named(name)
-    write = None if read else _upstream_write(step, name)
+    matches = [] if read else [m for m in _entries(step) if m[2].name == name]
+    fanned = [m for m in matches if m[1] is not None]
+    if item is not None and read is not None:
+        _fail(f"input('{name}', item={item}): '{name}' is a dataset input of step '{step.step}', not the output of a "
+              f"step with matrix=. Remove item=.")
+    if item is not None and matches and not fanned:
+        _fail(f"input('{name}', item={item}): '{name}' is written by step '{matches[0][0]}', which has no matrix=. "
+              f"Remove item=.")
+    if fanned and item is None:
+        producer = fanned[0][0]
+        _fail(f"input '{name}' of step '{step.step}' is written by each of the {len(step.upstream[producer])} items of "
+              f"step '{producer}'. Say which: step.input('{name}', item=N), N from 0. step.upstream('{producer}') "
+              "lists the items and what each handed on.")
+    write = _of_item(step, name, item, fanned) if fanned else (matches[0][2] if matches else None)
     if read is None and write is None:
         absent = [s for s, up in step.upstream.items() if up is None]     # did not run, or skipped itself
         if absent and optional:
             return None
-        known = [r.name for r in _pinned(step).reads] + [w.name for up in step.upstream.values() if up
-                                                         for w in up.writes]
+        if item is not None:
+            lists = [s for s, up in step.upstream.items() if isinstance(up, list)]
+            _fail(f"input('{name}', item={item}): no step in needs= wrote '{name}' for an item"
+                  + (f"; the steps with matrix= are {_names(lists)}, and none of their items wrote it." if lists
+                     else ", and none of the steps this one needs has matrix=. Remove item=."))
+        known = [r.name for r in _pinned(step).reads] + [w.name for _, _, w in _entries(step)]
         if absent:
             _fail(f"input '{name}' of step '{step.step}' is not there, and {_names(absent)} did not run or was skipped: "
                   f"a step that did not run produced nothing. Use input('{name}', optional=True) if this step can run "
@@ -331,14 +467,16 @@ def _find(name: str, optional: bool) -> Optional[pathlib.Path]:
     try:
         if read is not None:
             return _dataset(run, datasets, name, read)
-        return _artifact(run, name, write)
+        return _artifact(run, name, write, item)
     except NotFoundError:
         entry = read or write
         _fail(f"input '{name}': commit {entry.commit} of {entry.repo} does not exist any more.")
-    except EmptyDataset:
+    except EmptyDataset as exc:
+        if read is None:
+            _fail(str(exc))
         _fail(f"input '{name}': {read.repo} holds no files at the version this run read ({read.ref}). Push data to "
-              f"it with `kaosctl dataset push <folder> {read.repo}`, or choose another dataset for '{name}' on the "
-              "run form.")
+              f"it with `kaosctl dataset push <folder> {read.repo}`, or choose another dataset for '{name}' on "
+              "the run form.")
 
 
 def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Path:
@@ -356,14 +494,20 @@ def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Pat
     return entry if entry.is_dir() else entry.parent
 
 
-def _artifact(run: _Running, name: str, write: lock.Write) -> pathlib.Path:
-    """A model or an artifact of this run: ``<name>/<experiment>/<run>/`` of its repository, at the written commit."""
+def _item_prefix(prefix: str, index: Optional[int]) -> str:
+    """Where an output lives in its repository: ``prefix``, and below it the item's index for a step with ``matrix=``."""
+    return prefix if index is None else f"{prefix}{index}/"
+
+
+def _artifact(run: _Running, name: str, write: lock.Write, item: Optional[int] = None) -> pathlib.Path:
+    """A model or an artifact of this run: ``<name>/<experiment>/<run>/`` of its repository (``.../<index>/`` for an
+    item of a step with ``matrix=``), at the written commit."""
     from .outputs import run_prefix
     step = run.step
     staged = local.staged_dir(write.commit, repo=write.repo)
     if staged:
         return staged
-    prefix = run_prefix(step.experiment, step.run, name)
+    prefix = _item_prefix(run_prefix(step.experiment, step.run, name), item)
     target = local.cache_dir(write.repo, write.commit, prefix)
     if not local.marker_matches(target, write.repo, write.commit, prefix):
         local.fetch(run.client, write.repo, write.commit, [prefix], target, prefix, strip=prefix,
@@ -371,8 +515,11 @@ def _artifact(run: _Running, name: str, write: lock.Write) -> pathlib.Path:
     return target
 
 
-def upstream(step: str, optional: bool = False) -> Optional[Upstream]:
-    """The result of the earlier step ``step`` (a step named in ``needs=``).
+def upstream(step: str, optional: bool = False):
+    """The result of the earlier step ``step`` (a step named in ``needs=``): an ``Upstream`` with ``values``,
+    ``reads`` and ``writes``; after a step with ``matrix=``, a list with one ``UpstreamItem`` for each item, in
+    index order (``index``, ``matrix``, ``status``, ``values``, ``reads``, ``writes``, ``reason``). A failed item
+    is in the list with the status "failed".
 
     A step that did not run (its ``when=`` was false) or ended itself with ``step.skip()`` left no result: that
     raises, naming it (and the reason it gave). With ``optional=True`` it returns None instead, for a step that can
@@ -465,12 +612,14 @@ def _problems(run: _Running, produce: Produce) -> list:
         if found else []
 
 
-def _keep_locally(produce: Produce, folder: pathlib.Path, root: pathlib.Path) -> str:
-    """A local run (``kaosctl step run``) uploads nothing: the output is kept in ``root/<name>``, marked as a whole
-    copy so that the next local step finds it as its input. The commit is a hash of the content."""
+def _keep_locally(produce: Produce, folder: pathlib.Path, root: pathlib.Path,
+                  item: Optional[int] = None) -> str:
+    """A local run (``kaosctl step run``) uploads nothing: the output is kept in ``root/<name>`` (``root/<name>.<index>``
+    for an item of a step with ``matrix=``), marked as a whole copy so that the next local step finds it as its input.
+    The commit is a hash of the content."""
     from .transfer import fingerprint
     commit = fingerprint(folder)
-    target = root / produce.name
+    target = root / (produce.name if item is None else f"{produce.name}.{item}")
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(folder, target)
     local.staged_marker(target).write_text(json.dumps(
@@ -481,8 +630,12 @@ def _keep_locally(produce: Produce, folder: pathlib.Path, root: pathlib.Path) ->
 def _seal(run: _Running, produce: Produce) -> writer.Sealed:
     from .outputs import run_prefix
     step, dataset = run.step, produce.type == "dataset"
+    item = step.matrix.index if step.matrix else None
     meta = {"kaos.run": step.run, "kaos.app": step.app, "kaos.step": step.step,
             **{f"kaos.read.{r.name}": r.commit for r in lock.current().reads}}
+    if step.matrix:       # the version of this item says which item it is: index and every value
+        meta.update({"kaos.matrix.index": item, **{f"kaos.matrix.{axis}": str(v).lower() if isinstance(v, bool) else v
+                                            for axis, v in step.matrix.values.items()}})
     if not dataset:       # what the model panel and the outputs repository have always had on a commit
         meta.update(app=step.app, experiment=step.experiment, run=step.run, kind=produce.name)
         frameworks = sys.modules.get("kaos_lib.frameworks")      # only a step that used MLflow has a run
@@ -491,10 +644,10 @@ def _seal(run: _Running, produce: Produce) -> writer.Sealed:
             meta["mlflow_run_id"] = mlflow_run
     return writer.seal(
         run.client, produce.repo, run.outputs[produce.name], name=produce.name,
-        prefix="" if dataset else run_prefix(step.experiment, step.run, produce.name),
-        branch=writer.run_branch(step.run, step.step, produce.name),
+        prefix="" if dataset else _item_prefix(run_prefix(step.experiment, step.run, produce.name), item),
+        branch=writer.run_branch(step.run, step.step, produce.name if item is None else f"{produce.name}-{item}"),
         tag_prefix=writer.keep_prefix(step.run, step.step) if dataset else None,
-        message=f"{produce.name}: {step.experiment}/{step.run}", meta=meta)
+        message=f"{produce.name}: {step.experiment}/{step.run}" + ("" if item is None else f"/{item}"), meta=meta)
 
 
 def _save(run: _Running) -> list:
@@ -505,7 +658,8 @@ def _save(run: _Running) -> list:
     under its run-unique path; nothing refers to it before this step's result does."""
     if os.environ.get(LOCAL_WORK_ENV):
         root = pathlib.Path(os.environ[local.STAGED_ENV])
-        return [lock.Write(p.name, p.type, p.repo, _keep_locally(p, run.outputs[p.name], root))
+        item = run.step.matrix.index if run.step.matrix else None
+        return [lock.Write(p.name, p.type, p.repo, _keep_locally(p, run.outputs[p.name], root, item))
                 for p in run.step.produces]
     sealed, writes, repo = [], [], ""
     try:
@@ -536,6 +690,36 @@ def _result(values: dict, writes: list) -> dict:
             "reads": [r.as_dict() for r in lock.current().reads], "writes": [w.as_dict() for w in writes]}
 
 
+def _max_item_values(items: int) -> int:
+    """What the ``values`` of one item's result may cost: its share of ``MATRIX_VALUES_CAP``, never more than a
+    result."""
+    return min(RESULT_CAP, MATRIX_VALUES_CAP // max(items, 1))
+
+
+def _exact(key: str, value) -> None:
+    """A whole number of an item's result that the next step would get changed: the workflow system writes the
+    results of a step's items as floats, which keep a whole number exactly up to 2 to the power 53."""
+    if isinstance(value, bool):
+        return
+    if isinstance(value, int) and abs(value) > MATRIX_INT_LIMIT:
+        _fail(f"result value '{key}' is the number {value}, which is beyond {MATRIX_INT_LIMIT} (2 to the power 53): the "
+              f"step after a step with matrix= would get it changed. Write it as text, for example \"{value}\".")
+    for part in (value.values() if isinstance(value, dict) else value if isinstance(value, (list, tuple)) else ()):
+        _exact(key, part)
+
+
+def _values_sized(values: dict, matrix: Matrix) -> None:
+    """The ``values`` of an item of a step with ``matrix=`` may cost only its share of ``MATRIX_VALUES_CAP``."""
+    cap, cost = _max_item_values(matrix.of), lock.cost(lock.wire(values))
+    if cost > cap:
+        sizes = {k: lock.cost(lock.wire(v)) for k, v in values.items()}
+        big = max(sizes, key=sizes.get)
+        _fail(f"the values of this result cost {cost}; the limit for one item is {cap}. The {matrix.of} items of a step "
+              f"with matrix= share {MATRIX_VALUES_CAP} for their values: the smaller of {RESULT_CAP} and "
+              f"{MATRIX_VALUES_CAP} divided by {matrix.of}. The largest value is '{big}' ({sizes[big]}). Hand on a few "
+              "small values: log metrics to MLflow, or write the rest into an artifact with step.output().")
+
+
 def _sized(result: dict) -> str:
     text = lock.wire(result)
     if lock.cost(text) > RESULT_CAP:
@@ -563,6 +747,10 @@ def result(**values) -> None:
         except (TypeError, ValueError):
             _fail(f"result value '{key}' is a {type(value).__name__}; values are text, numbers, booleans, "
                   "lists and objects.")
+    if run.step.matrix:
+        for key, value in values.items():
+            _exact(key, value)
+        _values_sized(values, run.step.matrix)
     produces = run.step.produces
     problems = [p for produce in produces for p in _problems(run, produce)]
     if problems:

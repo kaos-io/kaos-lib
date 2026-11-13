@@ -1,4 +1,4 @@
-"""The warning rules (L-W01 .. L-W06): things that usually go wrong later, at run time or in review.
+"""The warning rules (L-W01 .. L-W08): things that usually go wrong later, at run time or in review.
 
 Why: warnings never fail the `pipeline-lint` status. They are advice, so each one is narrow, says what to do, and
 the heuristic ones (L-W04) say they are heuristics.
@@ -12,6 +12,7 @@ from .constants import LONG_GPU_STEP_MINUTES
 from .model import WARNING
 from .pipeline_reader import UNKNOWN
 from .registry import (DECLARED, NOT_VERIFIED, OFF, UNKNOWN_STATE, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule, step_label)
+from .rules_errors import _needed_steps, _produced_types
 
 
 @rule("L-W01", "LongGpuStepNotResumable", WARNING,
@@ -126,3 +127,29 @@ def dataset_producer_stays_on_cluster(ctx: LintContext) -> Iterable[Hit]:
             yield Hit(ctx.file, ctx.span(step.node("produces")),
                       f"{step_label(step)} asks for a GPU and produces a dataset. A step that produces a dataset runs "
                       f"on the cluster only: the run form offers it no HPC (Slurm) class.")
+
+
+@rule("L-W08", "AllowedFailureReachesDataset", WARNING,
+      "Remove matrix_allow_failed=True from the step, or make the step that writes the dataset read "
+      "step.upstream(...) and call step.skip(reason) when too few items are ok.")
+def allowed_failure_reaches_dataset(ctx: LintContext) -> Iterable[Hit]:
+    """A step with matrix_allow_failed=True, followed (needs=, directly or through other steps) by a step that
+    produces a dataset."""
+    steps = [s for s in ctx.pipeline.steps if isinstance(s.name, str) and not s.opaque]
+    needs = {s.name: _needed_steps(ctx, s) for s in steps}
+    for step in steps:
+        if step.value("matrix_allow_failed", None) is not True:
+            continue
+        after, grew = {step.name}, True
+        while grew:
+            more = {n for n, ns in needs.items() if ns & after} - after
+            after |= more
+            grew = bool(more)
+        writers = [s.name for s in steps if s.name in after and s.name != step.name
+                   and "dataset" in (_produced_types(s) or ())]
+        if writers:
+            named = ", ".join(repr(w) for w in writers)
+            yield Hit(ctx.file, ctx.span(step.node("matrix_allow_failed")),
+                      f"{step_label(step)} says matrix_allow_failed=True, and a step after it writes a dataset "
+                      f"({named}). A failed training would still let the dataset be written and, if it is promoted, "
+                      "become the latest one, because you said failed items are acceptable.")

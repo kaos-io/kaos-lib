@@ -1,3 +1,2 @@
 train:
   epochs: 3
-  learning_rates: "0.1,0.01,0.001" # a setting is text or a number: write a list as text

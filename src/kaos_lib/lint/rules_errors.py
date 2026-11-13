@@ -13,7 +13,7 @@ from .constants import (LONGEST_MINUTES, COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDEN
                         OLD_APP_NOTICE, OLD_ENTRY_ARGUMENT, PIPELINE_FILE, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
                         STEPS_DIR, TIME_PATTERN)
-from . import when_text
+from . import matrix, when_text
 from .model import ERROR, Span
 from .pipeline_reader import UNKNOWN, literal
 from .project_reader import platform_group, step_folder
@@ -221,6 +221,9 @@ def refused_argument(ctx: LintContext) -> Iterable[Hit]:
         yield from _time_arguments(ctx, step)
         yield from _when_argument(ctx, step)
         yield from _every_arguments(ctx, step)
+        yield from _matrix_argument(ctx, step)
+        yield from _matrix_needs_argument(ctx, step)
+        yield from _allow_failed_argument(ctx, step)
 
 
 def _unknown_arguments(ctx, step) -> Iterable[Hit]:
@@ -242,6 +245,58 @@ def _unknown_arguments(ctx, step) -> Iterable[Hit]:
                   "keyword, so this render fails.", "Write it as a keyword, for example kind='train'.")
     if not step.opaque and "name" not in step.args:
         yield Hit(ctx.file, ctx.span(step.call), "step() is called without a name.", "Give the step a name.")
+
+
+def _matrix_steps(ctx) -> set:
+    """The names of the steps that have ``matrix=`` (a value that is not a literal counts: it is a matrix)."""
+    return {s.name for s in ctx.pipeline.steps if isinstance(s.name, str) and "matrix" in s.args
+            and s.value("matrix", None) is not None}
+
+
+def _matrix_argument(ctx, step) -> Iterable[Hit]:
+    if "matrix" not in step.args:
+        return
+    value = step.value("matrix", None)
+    if value is UNKNOWN:
+        return
+    types = _produced_types(step)
+    needs = any(n in _matrix_steps(ctx) for n in _needed_steps(ctx, step))
+    for message, fix in matrix.problems(_step_label(step), value, step.value("kind", None), step.value("reads", None),
+                                        types, needs, _things(step)):
+        yield Hit(ctx.file, ctx.span(step.node("matrix")), message, fix)
+
+
+def _things(step):
+    """How many entries inputs= and produces= hold together, or None when a list cannot be read statically."""
+    count = 0
+    for name in ("inputs", "produces"):
+        node = step.node(name)
+        if node is None:
+            continue
+        if not isinstance(node, (ast.List, ast.Tuple)):
+            return None
+        count += len(node.elts)
+    return count
+
+
+def _matrix_needs_argument(ctx, step) -> Iterable[Hit]:
+    node = step.node("needs")
+    if not isinstance(node, (ast.List, ast.Tuple)):
+        return
+    fanned = [n for n in sorted(_needed_steps(ctx, step)) if n in _matrix_steps(ctx)]
+    for message, fix in matrix.needs_problems(_step_label(step), len(node.elts), fanned):
+        yield Hit(ctx.file, ctx.span(node), message, fix)
+
+
+def _allow_failed_argument(ctx, step) -> Iterable[Hit]:
+    if "matrix_allow_failed" not in step.args:
+        return
+    value = step.value("matrix_allow_failed", None)
+    if value is UNKNOWN:
+        return
+    has_matrix = "matrix" in step.args and step.value("matrix", None) is not None
+    for message, fix in matrix.allow_failed_problems(_step_label(step), value, has_matrix):
+        yield Hit(ctx.file, ctx.span(step.node("matrix_allow_failed")), message, fix)
 
 
 def _needed_steps(ctx, step) -> set:
@@ -274,6 +329,11 @@ def _when_argument(ctx, step) -> Iterable[Hit]:
     declared = {s.name for s in ctx.pipeline.steps if isinstance(s.name, str)}
     for field in named:
         head, dot, key = field.partition(".")
+        if dot and head in needed and head in _matrix_steps(ctx):
+            yield Hit(ctx.file, node, matrix.when_reads_value(label, head),
+                      "Read a field of the run form, or read the values in the step after it, from the list "
+                      f"step.upstream('{head}') gives.")
+            return
         if dot and head in needed:
             if not when_text.VALUE_KEY.match(key):
                 yield Hit(ctx.file, node, f"{label}: when= names the value {key!r} of step {head!r}, which is not a "
