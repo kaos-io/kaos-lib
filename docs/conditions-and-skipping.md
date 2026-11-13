@@ -80,15 +80,20 @@ pipeline is built, with what to write instead: a number written another way than
 `True` or `NULL` that is not in lowercase, an integer above 9007199254740992 (a result holds a number as a double), and a
 text with a line break or a tab. A value that is `null` counts as missing.
 
+A value of a step that was skipped makes the condition false.
+
 If you need a number comparison, compare in the step. Let `evaluate` hand on `passed=score >= 0.9`, and test
 `evaluate.passed`.
 
-## A value that is not there stops the run
+## A value that was never set stops the run
 
-`when="evaluate.passed == true"` needs the value. If `evaluate` was skipped, did not run, or never set `passed`, the
-condition is not quietly false. The step shows an error that names the step and the value:
-`step 'evaluate' gave no value 'passed' (it was skipped, did not run, or never set it)`. The run stops there. Make the
-step always set the value, or test a form field instead.
+`when="evaluate.passed == true"` needs the value. If `evaluate` ran well but its result has no `passed` (a typo in the
+name, or the value was never set), the condition is not quietly false. The step shows an error that names the step and the
+value: `step 'evaluate' ran but gave no value 'passed' (a typo in the name, or the value was never set with step.result(passed=...))`.
+The run stops there. A value set to `null` counts as not set. Make the step always set the value, or test a form field
+instead.
+
+A step that was skipped is different: see [below](#what-a-step-that-needs-a-skipped-step-sees).
 
 ## What a step that needs a skipped step sees
 
@@ -101,6 +106,9 @@ run.** They find it as a step that left no result:
 - `step.skipped("publish")` gives the reason the step gave to `step.skip()`. It gives `""` when the step did not run at all
   (its `when=` was false), and `None` when the step ran and left a result.
 - `step.input("name", optional=True)` gives `None` for an output of a step that left none.
+
+A `when=` on the value of a skipped step is false, for `==` and for `!=` alike: the step that asked is skipped, not failed,
+and the run goes on.
 
 A skipped step makes no files. A dataset it would have made gets no new version, and
 [the run does not move `latest`](flow-datasets.md#move-latest) for it.
@@ -125,7 +133,7 @@ skipped. Give `upstream_skipped={"publish": "the reason"}` to `testing.running`,
 |---|---|---|
 | `when= reads a value of step 'evaluate', which this step does not need` | `evaluate` is not in `needs=` | add it to `needs=` |
 | `when='score > 0.5' is not a condition the platform can read` | only `==` and `!=` exist | compare in the step and test a `passed` value |
-| `step 'evaluate' gave no value 'passed' ...` | `evaluate` was skipped, did not run, or never set the value | set the value in every case, or test a form field |
+| `step 'evaluate' ran but gave no value 'passed' (a typo in the name, or the value was never set with step.result(passed=...))` | the step ran, but its result has no such value | fix the name, or set the value in every case |
 | `when= compares evaluate.rows with '.5', which cannot be matched reliably: ...` | the text looks like a number but is not written the way JSON writes numbers | write `0.5` (the message says what to write) |
 | `step.skip() needs the reason, as text` | the reason is empty | write why: `step.skip("nothing to publish")` |
 
