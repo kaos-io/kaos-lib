@@ -1,6 +1,7 @@
 """In-memory lakeFS for tests: a requests transport adapter, so the real client code runs unchanged."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import itertools
@@ -35,6 +36,11 @@ class FakeLakeFS(BaseAdapter):
         self.kaos: dict = {}         # "/kaos/v1/..." -> (status, JSON body or raw bytes); others: 404 HTML
         self.deny = None             # an HTTP status every /api/v1 call answers: 401 is a credential this server does
                                      # not know, 403 and "refused" (kaos-lake's 401 for a policy) are rights
+        self.valid_auth = None       # a set of Authorization headers this server accepts on /api/v1; None: any
+        self.refuse_repos = set()    # repositories every /api/v1 call on which is refused (not shared): 401, "insufficient permissions"
+        self.denied = 0              # /api/v1 requests refused because their key was not in valid_auth
+        self.hook = None             # called with (fake, request) before each /api/v1 request is answered
+        self.posted: list = []       # (path, JSON body) of every POST to "/kaos/v1/..."
         self.writes: list = []       # (kind, repo, branch, path) for object uploads/deletes
         self.upload_answers: list = []   # statuses the next uploads answer instead of storing the object
         self.storage_prefix = "gs://bucket/lakefs"   # None: kaos-lake publishes no prefix
@@ -72,6 +78,17 @@ class FakeLakeFS(BaseAdapter):
 
     def tree(self, repo, ref):
         return self._view(repo, ref)
+
+    def serve_peer_key(self, access_key="KAOSXPEERAAAAAAAAAA", secret="peer-secret"):
+        """Answer ``POST /kaos/v1/shared-credentials`` as the own lakeFS of an app does; returns the
+        ``Authorization`` header a request signed with that key carries."""
+        self.kaos["/kaos/v1/shared-credentials"] = (200, {"access_key_id": access_key, "secret_access_key": secret,
+                                                          "expiration": "2099-01-01T00:00:00Z"})
+        return "Basic " + base64.b64encode(f"{access_key}:{secret}".encode()).decode()
+
+    def exchanges(self):
+        """The JSON bodies of the requests for a peer key this lakeFS got."""
+        return [body for path, body in self.posted if path == "/kaos/v1/shared-credentials"]
 
     def client(self, bearer="t", credential=None):
         """A real client (real session code, so real auth headers) whose every request reaches this fake."""
@@ -112,14 +129,25 @@ class FakeLakeFS(BaseAdapter):
         self.calls.append((request.method, path))
         self.auth.append(request.headers.get("Authorization"))
         try:
+            if not path.startswith("/kaos/"):
+                if self.hook:
+                    self.hook(self, request)
+                if self.valid_auth is not None and request.headers.get("Authorization") not in self.valid_auth:
+                    self.denied += 1
+                    return self._response(request, 401, {"message": "error authenticating request"})
             if self.deny and not path.startswith("/kaos/"):
                 raise PermissionError
+            if path.startswith("/repositories/") and path.split("/")[2] in self.refuse_repos:
+                return self._response(request, 401, {"message": "insufficient permissions"})
             status, body = self._route(request, path, q)
         except PermissionError:
             status = 401 if self.deny == "refused" else self.deny
             body = {"message": "error authenticating request" if self.deny == 401 else "insufficient permissions"}
         except KeyError:
             status, body = 404, {"message": "not found"}
+        return self._response(request, status, body)
+
+    def _response(self, request, status, body):
         resp = requests.Response()
         resp.status_code = status
         resp.url = request.url
@@ -138,7 +166,10 @@ class FakeLakeFS(BaseAdapter):
                 return 404, {}
             return 200, {"storage_namespace_prefix": self.storage_prefix, "templates": self.templates}
         if path.startswith("/kaos/"):
-            return self.kaos.get(path, (404, b"<html><body>404 page not found</body></html>"))
+            if req.method == "POST":
+                self.posted.append((path, json.loads(req.body) if req.body else None))
+            answer = self.kaos.get(path, (404, b"<html><body>404 page not found</body></html>"))
+            return answer(req) if callable(answer) else answer
         m, body = req.method, (json.loads(req.body) if req.body and not _is_multipart(req) else {})
         parts = [unquote(p) for p in path.strip("/").split("/")]
         if parts == ["repositories"]:

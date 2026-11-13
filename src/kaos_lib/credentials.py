@@ -8,11 +8,13 @@ Order (first hit wins):
 The session cache is ~/.config/kubecore-ml/lakefs-session.json (0600), the file
 the earlier ``kubecore-dataset`` CLI wrote, so an existing login keeps working.
 
-Another project's lakeFS (shared datasets) gets ``resolve_peer`` instead: a bearer token only,
-never the own project's access key.
+Another project's lakeFS (shared datasets) never gets the own project's access key. An app (the credential
+is an access key) asks its own lakeFS for a key of the same app in the owner's lakeFS (``peer_key``), which reads
+what is shared with the project and nothing else. A person or a job with a bearer token uses ``resolve_peer``.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import pathlib
@@ -22,7 +24,7 @@ from typing import Optional
 
 from . import oidc
 from .config import oidc_settings
-from .errors import AuthError
+from .errors import AuthError, ConfigError, LakeFSError
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,8 @@ class Credential:
     token: Optional[str] = None
     access_key: Optional[str] = None
     secret_key: Optional[str] = None
+    #: When the key stops working (seconds since the epoch), if the server said; None: not known.
+    expires: Optional[float] = None
 
     @property
     def kind(self) -> str:
@@ -82,27 +86,75 @@ def resolve(base_url: str) -> Credential:
 
 
 def resolve_peer(own_base_url: str) -> Credential:
-    """The credential for ANOTHER project's lakeFS: always a bearer token, never the access key.
+    """The credential of a person or a job for ANOTHER project's lakeFS: always a bearer token, never the access key.
 
     Order (first hit wins):
       1. LAKEFS_BEARER_TOKEN
-      2. a Zitadel token minted from ZITADEL_MACHINE_KEY_FILE + ZITADEL_DOMAIN + ZITADEL_MLFLOW_PROJECT_ID
-         (pipeline steps; needs the ``kaos-lib[zitadel]`` extra)
-      3. the cached browser-login session of the own lakeFS at ``own_base_url`` (laptop)
+      2. the cached browser-login session of the own lakeFS at ``own_base_url`` (laptop)
+
+    An app does not come here: ``LakeFS.for_owner`` asks the own lakeFS for the app's key (``peer_key``).
     """
     token = os.environ.get("LAKEFS_BEARER_TOKEN")
     if token:
         return Credential(token=token)
-    from . import zitadel
-    if os.environ.get(zitadel.KEY_FILE_ENV):
-        return Credential(token=zitadel.mint_from_env())
     cred = load_session(own_base_url)
     if cred is None:
         raise AuthError(
-            "cannot read another project's datasets: no token. Run `kaosctl login`, or set LAKEFS_BEARER_TOKEN "
-            f"or {zitadel.KEY_FILE_ENV} (with {zitadel.DOMAIN_ENV} and {zitadel.PROJECT_ENV}). "
+            "cannot read another project's datasets: no token. Run `kaosctl login`, or set LAKEFS_BEARER_TOKEN. "
             "LAKEFS_ACCESS_KEY is never sent to another project.")
     return cred
+
+
+SHARED_CREDENTIALS_PATH = "/kaos/v1/shared-credentials"
+
+
+class NotShared(AuthError):
+    """The owner shares no dataset with this project (any more)."""
+
+
+def peer_key(session, own_base_url: str, owner: str, timeout: int = 30) -> Credential:
+    """The access key of this app in the lakeFS of project ``owner``, from the own lakeFS (``session`` is the app's).
+
+    The own lakeFS knows which app asks, from the key the request is signed with, and asks the owner's lakeFS for a
+    key of that app. The key reads exactly the datasets ``owner`` shares with this project, never writes, and
+    expires (about an hour). The project's own key never reaches the owner.
+    """
+    url = own_base_url.rstrip("/") + SHARED_CREDENTIALS_PATH
+    resp = session.post(url, json={"owner": owner}, timeout=timeout, allow_redirects=False)
+    too_old = ConfigError(f"the lakeFS at {own_base_url} is too old for datasets shared with apps "
+                          f"(it does not serve {SHARED_CREDENTIALS_PATH}). Ask the platform team to update kaos-lake.")
+    if resp.status_code in (301, 302, 303, 307, 308, 401):
+        raise AuthError(f"lakeFS rejected the credential (a key for project {owner}'s datasets). Run `kaosctl login` again.")
+    if resp.status_code == 403:
+        raise NotShared(f"not shared with your project: {_message(resp)}. Ask project {owner} to share the dataset with your "
+                        "project. Only an app of your project reads it this way: a person signs in with `kaosctl login`, "
+                        "a job carries LAKEFS_BEARER_TOKEN.")
+    if resp.status_code in (404, 405, 501):
+        raise too_old
+    if resp.status_code != 200:
+        raise LakeFSError(f"asking for a key of project {owner} failed: HTTP {resp.status_code} {_message(resp)}",
+                          resp.status_code)
+    try:
+        body = resp.json()
+        key, secret = body["access_key_id"], body["secret_access_key"]
+    except (ValueError, KeyError, TypeError):
+        raise too_old from None   # an old lakeFS answers unknown paths with its web UI
+    return Credential(access_key=key, secret_key=secret, expires=_epoch(body.get("expiration")))
+
+
+def _epoch(text) -> Optional[float]:
+    """An RFC 3339 time as seconds since the epoch; None when it is not one."""
+    try:
+        return datetime.datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _message(resp) -> str:
+    try:
+        return str(resp.json().get("message") or "")[:300]
+    except (ValueError, AttributeError):
+        return (resp.text or "")[:300]
 
 
 def browser_login(base_url: str, start: Optional[str] = None) -> Credential:

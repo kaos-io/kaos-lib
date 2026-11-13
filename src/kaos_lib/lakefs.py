@@ -2,12 +2,15 @@
 
 Authentication comes from ``credentials.resolve``: a bearer token, or an
 access-key pair sent as Basic auth. ``for_owner`` returns a client for another
-project's lakeFS that carries only a bearer token (``credentials.resolve_peer``).
+project's lakeFS that never carries this project's access key: an app's own key there
+(``credentials.peer_key``), or a person's or job's bearer token (``credentials.resolve_peer``).
 HTTP failures become ``LakeFSError`` subclasses whose messages tell the user what to do next.
 """
 from __future__ import annotations
 
 import pathlib
+import threading
+import time
 from typing import Iterator, Optional
 from urllib.parse import quote
 
@@ -17,9 +20,24 @@ from urllib3.util.retry import Retry
 
 from . import credentials
 from .config import resolve_endpoint
-from .errors import AuthError, LakeFSError, NotFoundError, PermissionDenied
+from .errors import AuthError, KaosLibError, LakeFSError, NotFoundError, PermissionDenied
 
 USER_AGENT = "kaos-lib/0.5"
+
+
+RENEW_BEFORE = 120   # seconds: a key of another project's lakeFS is replaced this long before it ends
+RENEW_GAP = 10       # seconds: after one request for a new key, no other, whatever is refused meanwhile
+_REFUSED = (301, 302, 303, 307, 308, 401, 403)
+
+
+def _repo_of(path: str) -> Optional[str]:
+    """The repository a ``/repositories/<repo>/...`` path names."""
+    parts = path.strip("/").split("/")
+    return parts[1] if len(parts) > 1 and parts[0] == "repositories" else None
+
+
+def _now() -> float:
+    return time.time()
 
 
 def _q(value: str) -> str:
@@ -63,8 +81,15 @@ class LakeFS:
         self.timeout = timeout
         self.concurrency = concurrency
         self.owner = owner
+        self.credential = credential
         self.session = session or _session(credential, concurrency * 2)
         self._peer_clients: dict = {}
+        # A client for another project's lakeFS as an app holds a key that ends: _refresh asks for a new one.
+        self._refresh = None
+        self._generation = 0
+        self._renewing = threading.Lock()
+        self._served: set = set()          # repositories of the owner this client has read successfully
+        self._attempted = float("-inf")
         self._templates: Optional[dict] = None
 
     @classmethod
@@ -77,8 +102,10 @@ class LakeFS:
         """A client for the lakeFS of project ``owner`` (this client when ``owner`` is the own project).
 
         The address comes from the own lakeFS's peers (``/kaos/v1/peers``): the platform-network endpoint when
-        this client's base is such an address (``.svc``), else the public URL. The credential is a
-        bearer token (``credentials.resolve_peer``), never this project's access key.
+        this client's base is such an address (``.svc``), else the public URL. An app (this client's credential is an
+        access key) asks its own lakeFS for a key of the same app in the owner's, which reads what the owner shares
+        with the project and nothing else (``credentials.peer_key``). Otherwise the credential is a bearer token
+        (``credentials.resolve_peer``). This project's access key is never sent to the owner.
         """
         from . import peers
         if self.owner:
@@ -88,8 +115,14 @@ class LakeFS:
         if owner == peers.load(self).project:
             return self
         base = peers.base_for(self.base_url, peers.peer(self, owner))
-        client = LakeFS(base, credentials.resolve_peer(self.base_url), timeout=self.timeout,
+        if self.credential.access_key:
+            cred = credentials.peer_key(self.session, self.base_url, owner, self.timeout)
+        else:
+            cred = credentials.resolve_peer(self.base_url)
+        client = LakeFS(base, cred, timeout=self.timeout,
                         concurrency=self.concurrency, owner=owner)
+        if self.credential.access_key:
+            client._refresh = lambda: credentials.peer_key(self.session, self.base_url, owner, self.timeout)
         self._peer_clients[owner] = client
         return client
 
@@ -97,10 +130,55 @@ class LakeFS:
     def _call(self, method: str, path: str, ok=(200, 201, 204), what: str = "", **kw):
         kw.setdefault("timeout", self.timeout)
         kw.setdefault("allow_redirects", method == "GET")
+        what = what or f"{method} {path}"
+        repo = _repo_of(path)
+        generation = self._fresh_key()
         resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
+        if self._refresh and resp.status_code in _REFUSED:
+            # The key may have ended, or the share may be gone: ask for a new key once and try once more.
+            resp.close()
+            self._renew(generation, what, repo)
+            resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
+            if resp.status_code in _REFUSED and repo in self._served:
+                raise self._withdrawn(what)     # read before, refused now with a new key: the share is gone
         if resp.status_code in ok:
+            if repo:
+                self._served.add(repo)
             return resp
-        raise self._error(resp, what or f"{method} {path}")
+        raise self._error(resp, what)
+
+    # -- the key of an app in another project's lakeFS -------------------
+    def _fresh_key(self) -> int:
+        """Replace a key that is about to end; returns the generation of the key the next request carries."""
+        generation = self._generation
+        exp = self.credential.expires
+        if self._refresh and exp is not None and _now() >= exp - RENEW_BEFORE:
+            try:
+                self._renew(generation, "the next request", None)
+            except (KaosLibError, requests.RequestException):
+                pass    # the key may still work: this request goes with it; only a refusal makes a renewal required
+            generation = self._generation
+        return generation
+
+    def _renew(self, seen: int, what: str, repo: Optional[str]) -> None:
+        """Get a new key, unless another thread already did since ``seen`` (so N threads cost one request)."""
+        with self._renewing:
+            if self._generation != seen or _now() - self._attempted < RENEW_GAP:
+                return      # another thread just did; or a key that was just asked for is refused too: that is no expiry
+            self._attempted = _now()
+            try:
+                cred = self._refresh()
+            except credentials.NotShared:
+                if repo in self._served:
+                    raise self._withdrawn(what) from None
+                raise
+            self.credential = cred
+            self.session.auth = (cred.access_key, cred.secret_key)
+            self._generation += 1
+
+    def _withdrawn(self, what: str) -> AuthError:
+        return AuthError(f"the share was withdrawn: project {self.owner} no longer shares this dataset with your project "
+                         f"({what}). Ask {self.owner} to share it again; nothing in your step needs to change.")
 
     def _error(self, resp: requests.Response, what: str) -> LakeFSError:
         status, detail = resp.status_code, (resp.text or "")[:300]

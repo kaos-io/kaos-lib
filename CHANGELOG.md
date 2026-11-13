@@ -100,6 +100,11 @@ template.** Nothing in kaos-lib converts an old app.
   is created.
 
 ### Changed
+- A step reads a dataset another project shares as the app itself, not with the project's key (PRD novelcore/kaos#1911 D-44).
+  Nothing in an app changes: `<project>/dataset-<name>@<version>` reads as before. The key it gets there reads only the
+  datasets shared with your project, never writes, and lasts about an hour. When the owner stops sharing a dataset, the next
+  read of it is refused. `credentials.resolve_peer` no longer mints a token from the project's key; it is the chain of a
+  person (`kaosctl login`) or a job that carries `LAKEFS_BEARER_TOKEN`.
 - The merge that moves `latest` records which version it promoted (`kaos.promoted` on that commit), so the platform
   knows a promoted version and never expires it.
 - A step that makes a dataset uploads only the files that differ from `latest` and from the newest version an earlier run
