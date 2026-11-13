@@ -20,7 +20,7 @@ from urllib3.util.retry import Retry
 
 from . import credentials
 from .config import resolve_endpoint
-from .errors import AuthError, LakeFSError, NotFoundError, PermissionDenied
+from .errors import AuthError, KaosLibError, LakeFSError, NotFoundError, PermissionDenied
 
 USER_AGENT = "kaos-lib/0.5"
 
@@ -28,6 +28,12 @@ USER_AGENT = "kaos-lib/0.5"
 RENEW_BEFORE = 120   # seconds: a key of another project's lakeFS is replaced this long before it ends
 RENEW_GAP = 10       # seconds: after one request for a new key, no other, whatever is refused meanwhile
 _REFUSED = (301, 302, 303, 307, 308, 401, 403)
+
+
+def _repo_of(path: str) -> Optional[str]:
+    """The repository a ``/repositories/<repo>/...`` path names."""
+    parts = path.strip("/").split("/")
+    return parts[1] if len(parts) > 1 and parts[0] == "repositories" else None
 
 
 def _now() -> float:
@@ -82,7 +88,7 @@ class LakeFS:
         self._refresh = None
         self._generation = 0
         self._renewing = threading.Lock()
-        self._served = False
+        self._served: set = set()          # repositories of the owner this client has read successfully
         self._attempted = float("-inf")
         self._templates: Optional[dict] = None
 
@@ -125,17 +131,19 @@ class LakeFS:
         kw.setdefault("timeout", self.timeout)
         kw.setdefault("allow_redirects", method == "GET")
         what = what or f"{method} {path}"
+        repo = _repo_of(path)
         generation = self._fresh_key()
         resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
         if self._refresh and resp.status_code in _REFUSED:
             # The key may have ended, or the share may be gone: ask for a new key once and try once more.
             resp.close()
-            self._renew(generation, what)
+            self._renew(generation, what, repo)
             resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
-            if resp.status_code in _REFUSED and self._served:
-                raise self._withdrawn(what)
+            if resp.status_code in _REFUSED and repo in self._served:
+                raise self._withdrawn(what)     # read before, refused now with a new key: the share is gone
         if resp.status_code in ok:
-            self._served = True
+            if repo:
+                self._served.add(repo)
             return resp
         raise self._error(resp, what)
 
@@ -145,11 +153,14 @@ class LakeFS:
         generation = self._generation
         exp = self.credential.expires
         if self._refresh and exp is not None and _now() >= exp - RENEW_BEFORE:
-            self._renew(generation, "the next request")
+            try:
+                self._renew(generation, "the next request", None)
+            except (KaosLibError, requests.RequestException):
+                pass    # the key may still work: this request goes with it; only a refusal makes a renewal required
             generation = self._generation
         return generation
 
-    def _renew(self, seen: int, what: str) -> None:
+    def _renew(self, seen: int, what: str, repo: Optional[str]) -> None:
         """Get a new key, unless another thread already did since ``seen`` (so N threads cost one request)."""
         with self._renewing:
             if self._generation != seen or _now() - self._attempted < RENEW_GAP:
@@ -158,7 +169,9 @@ class LakeFS:
             try:
                 cred = self._refresh()
             except credentials.NotShared:
-                raise self._withdrawn(what) from None
+                if repo in self._served:
+                    raise self._withdrawn(what) from None
+                raise
             self.credential = cred
             self.session.auth = (cred.access_key, cred.secret_key)
             self._generation += 1

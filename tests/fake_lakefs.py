@@ -37,6 +37,7 @@ class FakeLakeFS(BaseAdapter):
         self.deny = None             # an HTTP status every /api/v1 call answers: 401 is a credential this server does
                                      # not know, 403 and "refused" (kaos-lake's 401 for a policy) are rights
         self.valid_auth = None       # a set of Authorization headers this server accepts on /api/v1; None: any
+        self.refuse_repos = set()    # repositories every /api/v1 call on which is refused (not shared): 401, "insufficient permissions"
         self.denied = 0              # /api/v1 requests refused because their key was not in valid_auth
         self.hook = None             # called with (fake, request) before each /api/v1 request is answered
         self.posted: list = []       # (path, JSON body) of every POST to "/kaos/v1/..."
@@ -136,6 +137,8 @@ class FakeLakeFS(BaseAdapter):
                     return self._response(request, 401, {"message": "error authenticating request"})
             if self.deny and not path.startswith("/kaos/"):
                 raise PermissionError
+            if path.startswith("/repositories/") and path.split("/")[2] in self.refuse_repos:
+                return self._response(request, 401, {"message": "insufficient permissions"})
             status, body = self._route(request, path, q)
         except PermissionError:
             status = 401 if self.deny == "refused" else self.deny

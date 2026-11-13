@@ -26,10 +26,13 @@ class Issuer:
 
     def __init__(self, owner, ttls=(3600,)):
         self.owner, self.ttls, self.n = owner, list(ttls), 0
+        self.fail = None          # a status the own lakeFS answers instead of a key, while set
         owner.valid_auth = set()
         self.lock = threading.Lock()
 
     def __call__(self, request):
+        if self.fail:
+            return self.fail, {"message": "bad gateway"}
         with self.lock:
             self.n += 1
             key, secret = f"KAOSX{self.n:015d}", f"secret-{self.n}"
@@ -49,6 +52,8 @@ def world(mesh, monkeypatch, tmp_path):
     own.kaos["/kaos/v1/peers"] = (200, PEERS)
     owner.add_repo("dataset-raw", files=dict(FILES))
     owner.tag("dataset-raw", "v1")
+    owner.add_repo("dataset-other", files={"x": b"1"})
+    owner.tag("dataset-other", "v1")
     mesh.update({OWN_BASE: own, A_ENDPOINT: owner})
     issuer = Issuer(owner)
     own.kaos["/kaos/v1/shared-credentials"] = issuer
@@ -152,3 +157,42 @@ def test_a_person_with_a_token_has_no_key_to_replace(world, monkeypatch):
     with pytest.raises(AuthError):
         datasets.materialize(REF, client=app(1))
     assert own.exchanges() == []
+
+
+def test_a_dataset_never_shared_is_not_called_withdrawn_after_another_was_read(world):
+    own, owner, issuer = world
+    owner.refuse_repos.add("dataset-other")
+    client = app(1)
+    datasets.materialize(REF, client=client)                  # a read that worked
+    with pytest.raises(AuthError, match="not shared with your project") as err:
+        datasets.materialize(datasets.DatasetRef.parse("a/dataset-other@v1"), client=client)
+    assert "withdrawn" not in str(err.value)
+    # ... while the one that was read is called withdrawn once it is refused
+    owner.refuse_repos.add("dataset-raw")
+    with pytest.raises(AuthError, match="the share was withdrawn"):
+        client.for_owner("a").repository("dataset-raw")
+
+
+def test_a_failed_renewal_before_the_end_does_not_stop_a_request(world, monkeypatch):
+    own, owner, issuer = world
+    offset = [0]
+    monkeypatch.setattr(lakefs, "_now", lambda: time.time() + offset[0])
+    client = app(1)
+    peer = client.for_owner("a")
+    offset[0] = 3550                                           # 50 s before the key's end
+    issuer.fail = 502                                          # our own data store cannot answer
+    assert peer.repository("dataset-raw")["id"] == "dataset-raw"          # the key still works: the request does
+    assert len(own.exchanges()) == 2 and owner.denied == 0     # one try to renew, no error
+    peer.repository("dataset-raw")
+    assert len(own.exchanges()) == 2, "no second try within the gap"
+    issuer.fail = None
+    offset[0] += lakefs.RENEW_GAP + 1                          # later, it tries again and gets a key
+    peer.repository("dataset-raw")
+    assert len(own.exchanges()) == 3 and issuer.n == 2 and owner.denied == 0
+    # a refusal still forces a renewal even when the last try failed lately
+    issuer.fail = 502
+    offset[0] += 3600
+    owner.valid_auth.clear()
+    owner.valid_auth.add("Basic " + base64.b64encode(b"KAOSX000000000000000X:x").decode())
+    with pytest.raises(Exception):
+        peer.repository("dataset-raw")                         # refused; renewal fails: the error is reported
