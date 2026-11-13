@@ -36,6 +36,9 @@ class FakeLakeFS(BaseAdapter):
         self.kaos: dict = {}         # "/kaos/v1/..." -> (status, JSON body or raw bytes); others: 404 HTML
         self.deny = None             # an HTTP status every /api/v1 call answers: 401 is a credential this server does
                                      # not know, 403 and "refused" (kaos-lake's 401 for a policy) are rights
+        self.valid_auth = None       # a set of Authorization headers this server accepts on /api/v1; None: any
+        self.denied = 0              # /api/v1 requests refused because their key was not in valid_auth
+        self.hook = None             # called with (fake, request) before each /api/v1 request is answered
         self.posted: list = []       # (path, JSON body) of every POST to "/kaos/v1/..."
         self.writes: list = []       # (kind, repo, branch, path) for object uploads/deletes
         self.upload_answers: list = []   # statuses the next uploads answer instead of storing the object
@@ -125,6 +128,12 @@ class FakeLakeFS(BaseAdapter):
         self.calls.append((request.method, path))
         self.auth.append(request.headers.get("Authorization"))
         try:
+            if not path.startswith("/kaos/"):
+                if self.hook:
+                    self.hook(self, request)
+                if self.valid_auth is not None and request.headers.get("Authorization") not in self.valid_auth:
+                    self.denied += 1
+                    return self._response(request, 401, {"message": "error authenticating request"})
             if self.deny and not path.startswith("/kaos/"):
                 raise PermissionError
             status, body = self._route(request, path, q)
@@ -133,6 +142,9 @@ class FakeLakeFS(BaseAdapter):
             body = {"message": "error authenticating request" if self.deny == 401 else "insufficient permissions"}
         except KeyError:
             status, body = 404, {"message": "not found"}
+        return self._response(request, status, body)
+
+    def _response(self, request, status, body):
         resp = requests.Response()
         resp.status_code = status
         resp.url = request.url
@@ -153,7 +165,8 @@ class FakeLakeFS(BaseAdapter):
         if path.startswith("/kaos/"):
             if req.method == "POST":
                 self.posted.append((path, json.loads(req.body) if req.body else None))
-            return self.kaos.get(path, (404, b"<html><body>404 page not found</body></html>"))
+            answer = self.kaos.get(path, (404, b"<html><body>404 page not found</body></html>"))
+            return answer(req) if callable(answer) else answer
         m, body = req.method, (json.loads(req.body) if req.body and not _is_multipart(req) else {})
         parts = [unquote(p) for p in path.strip("/").split("/")]
         if parts == ["repositories"]:

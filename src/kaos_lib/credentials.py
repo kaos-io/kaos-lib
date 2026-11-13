@@ -14,6 +14,7 @@ what is shared with the project and nothing else. A person or a job with a beare
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import pathlib
@@ -32,6 +33,8 @@ class Credential:
     token: Optional[str] = None
     access_key: Optional[str] = None
     secret_key: Optional[str] = None
+    #: When the key stops working (seconds since the epoch), if the server said; None: not known.
+    expires: Optional[float] = None
 
     @property
     def kind(self) -> str:
@@ -105,6 +108,10 @@ def resolve_peer(own_base_url: str) -> Credential:
 SHARED_CREDENTIALS_PATH = "/kaos/v1/shared-credentials"
 
 
+class NotShared(AuthError):
+    """The owner shares no dataset with this project (any more)."""
+
+
 def peer_key(session, own_base_url: str, owner: str, timeout: int = 30) -> Credential:
     """The access key of this app in the lakeFS of project ``owner``, from the own lakeFS (``session`` is the app's).
 
@@ -119,8 +126,9 @@ def peer_key(session, own_base_url: str, owner: str, timeout: int = 30) -> Crede
     if resp.status_code in (301, 302, 303, 307, 308, 401):
         raise AuthError(f"lakeFS rejected the credential (a key for project {owner}'s datasets). Run `kaosctl login` again.")
     if resp.status_code == 403:
-        raise AuthError(f"not shared with your project: {_message(resp)}. Ask project {owner} to share the dataset with your "
-                        "project; only an app of your project reads it this way.")
+        raise NotShared(f"not shared with your project: {_message(resp)}. Ask project {owner} to share the dataset with your "
+                        "project. Only an app of your project reads it this way: a person signs in with `kaosctl login`, "
+                        "a job carries LAKEFS_BEARER_TOKEN.")
     if resp.status_code in (404, 405, 501):
         raise too_old
     if resp.status_code != 200:
@@ -131,7 +139,15 @@ def peer_key(session, own_base_url: str, owner: str, timeout: int = 30) -> Crede
         key, secret = body["access_key_id"], body["secret_access_key"]
     except (ValueError, KeyError, TypeError):
         raise too_old from None   # an old lakeFS answers unknown paths with its web UI
-    return Credential(access_key=key, secret_key=secret)
+    return Credential(access_key=key, secret_key=secret, expires=_epoch(body.get("expiration")))
+
+
+def _epoch(text) -> Optional[float]:
+    """An RFC 3339 time as seconds since the epoch; None when it is not one."""
+    try:
+        return datetime.datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 def _message(resp) -> str:

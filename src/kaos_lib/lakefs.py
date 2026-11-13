@@ -9,6 +9,8 @@ HTTP failures become ``LakeFSError`` subclasses whose messages tell the user wha
 from __future__ import annotations
 
 import pathlib
+import threading
+import time
 from typing import Iterator, Optional
 from urllib.parse import quote
 
@@ -21,6 +23,15 @@ from .config import resolve_endpoint
 from .errors import AuthError, LakeFSError, NotFoundError, PermissionDenied
 
 USER_AGENT = "kaos-lib/0.5"
+
+
+RENEW_BEFORE = 120   # seconds: a key of another project's lakeFS is replaced this long before it ends
+RENEW_GAP = 10       # seconds: after one request for a new key, no other, whatever is refused meanwhile
+_REFUSED = (301, 302, 303, 307, 308, 401, 403)
+
+
+def _now() -> float:
+    return time.time()
 
 
 def _q(value: str) -> str:
@@ -67,6 +78,12 @@ class LakeFS:
         self.credential = credential
         self.session = session or _session(credential, concurrency * 2)
         self._peer_clients: dict = {}
+        # A client for another project's lakeFS as an app holds a key that ends: _refresh asks for a new one.
+        self._refresh = None
+        self._generation = 0
+        self._renewing = threading.Lock()
+        self._served = False
+        self._attempted = float("-inf")
         self._templates: Optional[dict] = None
 
     @classmethod
@@ -98,6 +115,8 @@ class LakeFS:
             cred = credentials.resolve_peer(self.base_url)
         client = LakeFS(base, cred, timeout=self.timeout,
                         concurrency=self.concurrency, owner=owner)
+        if self.credential.access_key:
+            client._refresh = lambda: credentials.peer_key(self.session, self.base_url, owner, self.timeout)
         self._peer_clients[owner] = client
         return client
 
@@ -105,10 +124,48 @@ class LakeFS:
     def _call(self, method: str, path: str, ok=(200, 201, 204), what: str = "", **kw):
         kw.setdefault("timeout", self.timeout)
         kw.setdefault("allow_redirects", method == "GET")
+        what = what or f"{method} {path}"
+        generation = self._fresh_key()
         resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
+        if self._refresh and resp.status_code in _REFUSED:
+            # The key may have ended, or the share may be gone: ask for a new key once and try once more.
+            resp.close()
+            self._renew(generation, what)
+            resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
+            if resp.status_code in _REFUSED and self._served:
+                raise self._withdrawn(what)
         if resp.status_code in ok:
+            self._served = True
             return resp
-        raise self._error(resp, what or f"{method} {path}")
+        raise self._error(resp, what)
+
+    # -- the key of an app in another project's lakeFS -------------------
+    def _fresh_key(self) -> int:
+        """Replace a key that is about to end; returns the generation of the key the next request carries."""
+        generation = self._generation
+        exp = self.credential.expires
+        if self._refresh and exp is not None and _now() >= exp - RENEW_BEFORE:
+            self._renew(generation, "the next request")
+            generation = self._generation
+        return generation
+
+    def _renew(self, seen: int, what: str) -> None:
+        """Get a new key, unless another thread already did since ``seen`` (so N threads cost one request)."""
+        with self._renewing:
+            if self._generation != seen or _now() - self._attempted < RENEW_GAP:
+                return      # another thread just did; or a key that was just asked for is refused too: that is no expiry
+            self._attempted = _now()
+            try:
+                cred = self._refresh()
+            except credentials.NotShared:
+                raise self._withdrawn(what) from None
+            self.credential = cred
+            self.session.auth = (cred.access_key, cred.secret_key)
+            self._generation += 1
+
+    def _withdrawn(self, what: str) -> AuthError:
+        return AuthError(f"the share was withdrawn: project {self.owner} no longer shares this dataset with your project "
+                         f"({what}). Ask {self.owner} to share it again; nothing in your step needs to change.")
 
     def _error(self, resp: requests.Response, what: str) -> LakeFSError:
         status, detail = resp.status_code, (resp.text or "")[:300]
