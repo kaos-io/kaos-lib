@@ -6,21 +6,9 @@ Terse and complete. The generated pages: [Commands](generated/cli.md), [Python A
 
 Every failure is a `kaos_lib.errors.StepError`; the step fails and hands no result on.
 
-| call | returns | fails when |
-|---|---|---|
-| `start()` | the step: `run`, `app`, `project`, `step`, `kind`, `experiment`, `params`, `produces` | outside a run: `ERROR: this is not a pipeline step`; a context that cannot be read: `ERROR: the step context ...` (one line, exit code 1) |
-| `input(name, optional=False, writable=False)` | a folder (`pathlib.Path`), read-only | `'<name>' is not an input of step '<step>'. Its inputs are: ...`; `input '<name>' of step '<step>' is not there, and <x> did not run`; `input '<name>': commit ... does not exist any more`; `input '<name>': <dataset> holds no files at the version this run read`. `optional=True` returns `None` for a step that did not run. `writable=True` returns a private full copy |
-| `upstream(step, optional=False)` | `Upstream`: `values`, `reads`, `writes` | `step '<x>' is not upstream of '<step>'`; `step '<x>' did not run, so it left no result` or `step '<x>' was skipped (<reason>), so it left no result`. `optional=True` returns `None` |
-| `skipped(step)` | the reason the earlier step gave to `skip()`; `""` when it did not run; `None` when it ran and left a result | `step '<x>' is not upstream of '<step>'` |
-| `skip(reason)` | nothing: writes a skipped result, saves no output and ends the step with exit code 0. The steps that need it still run | `step.skip() needs the reason, as text`; `the reason of step.skip() has N characters; the limit is 300`; `step.result() or step.skip() was already called` |
-| `output(name)` | an empty folder, emptied the first time it is asked for in an attempt | `'<name>' is not produced by step '<step>'. It produces: ...`; the folder is a link |
-| `workdir()` | a scratch folder, emptied at each attempt, never saved | |
-| `check(name, layout=None, min_files=1)` | nothing; checked inside `result()` | `output '<name>' failed its check:` |
-| `result(**values)` | nothing; saves every output, then writes the result. Call it once, last | `output '<name>' was not written`; `output '<name>' is empty`; `output '<name>' holds a file in .kaos/`; `result value '<key>' is a <type>`; names starting with `kaos-`; `the result costs ...; the limit is 8192`; `step.result() was already called`; `this app may not write <repository>` |
-
-Other failures: a call before `start()` is `call step.start() first`; a step that ends without `result()` fails with
-`step '<step>' ended without step.result()`, whatever its exit code; a step that has an input and an output of one name
-fails in `start()`.
+The calls, what each gives you, what you must do and what happens if you do not are in
+[What a step receives and must return](contract.md#what-a-step-receives-and-must-return). The signatures are on the
+[cheat sheet](cheat-sheet.md#the-step-api-from-kaos_lib-import-step) and the [Python API](api.md).
 
 `step.input(name)` takes `name` from `inputs=`, or from `produces=` of a step in `needs=`: a dataset, a model or an
 artifact. A step never reads another dataset: reading one by name in code is refused.
@@ -53,45 +41,28 @@ every output: `name`, `type`, `repo`, `commit`.
 
 | keyword | meaning | the platform refuses |
 |---|---|---|
-| `name` | lowercase letters, digits, hyphens | a name over the limit or one that is kept ([the limits](must-and-can.md#the-limits)); a name starting with `kaos-`; a repeated name |
-| `kind=` | `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`. Required. Each kind has a contract: [Step kinds](step-kinds.md) | a missing or unknown kind; a step that breaks its kind's contract |
+| `name` | lowercase letters, digits, hyphens | a name over the limit or one that is kept ([the limits](contract.md#the-limits)); a name starting with `kaos-`; a repeated name |
+| `kind=` | `ingest`, `transform`, `train`, `evaluate`, `publish` or `control`. Required. Each kind has a contract: [Step types](step-types.md) | a missing or unknown kind; a step that breaks its kind's contract |
 | `reads=` | sections of `config/` the step gets in `params` | a section that is not in `config/` |
 | `inputs=` | top-level `config/` values (text) that hold a dataset reference | a name that is not in `config/` or not text; a name that starts with `kaos-`; `control` steps |
 | `needs=` | earlier steps (the variables) | more steps than the limit; a step defined below; an input and a needed output of one name; two needed steps producing one name; more readable datasets than the limit |
-| `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; a kind that may not produce what is listed ([Step kinds](step-kinds.md)) |
-| `gpu=True` | one GPU | |
+| `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; a type that may not produce what is listed ([Step types](step-types.md)) |
+| `gpu=True` | the step is offered the GPU classes. On the platform's own machines it gets the GPU of its class; on HPC (Slurm) it gets one GPU when node sharing is on, and the whole node's GPUs when it is off ([GPUs on HPC (Slurm)](gpus-on-hpc.md)) | |
 | `when="..."` | a name compared with a text, written `"<name> == text"` or with `!=`. The name is a field of the run form (`"mode != off"`) or a value of a step in `needs=` (`"evaluate.passed == true"`: the keyword of that step's `step.result(passed=...)`). Join comparisons with `and` / `or` (`and` first, no parentheses, no `<` or `>`); a text with spaces is quoted. A value that is not there stops the run ([Conditions and skipping](conditions-and-skipping.md)) | a `when=` that is not written that way; a field the run form does not have; a value of a step that is not in `needs=` |
-| `walltime=` | the longest the step may run, wherever it runs: `"90m"`, `"12h"`, `"720"` (minutes). It is the default of the run-form field `<step>-walltime`; without it that default is [the limit](must-and-can.md#the-limits) | a wrong form |
+| `walltime=` | the longest the step may run, wherever it runs: `"90m"`, `"12h"`, `"720"` (minutes). It is the default of the run-form field `<step>-walltime`; without it that default is [the limit](contract.md#the-limits) | a wrong form |
 | `resumable=` | `True` (stop signal 10 minutes before the limit), a lead time `"20m"`, or `False` | a wrong form |
-| `checkpoint_every=` | how often the platform copies the checkpoint folder: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every` (a `resumable=True` step has the field too, with ten minutes as the default), and the form value wins over `register(checkpoint_every=...)` in code ([the table](long-jobs.md#the-time-limit)) | a wrong form |
-| `idle_timeout=` | minutes without GPU use and log lines before a GPU step ends as idle: `"40m"`, `40`, `0` for never; the default is in [the limits](must-and-can.md#the-limits) | a wrong form |
+| `checkpoint_every=` | how often the platform copies the checkpoint your step saved: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every` (a `resumable=True` step has the field too, with ten minutes as the default), and the form value wins over `register(checkpoint_every=...)` in code ([the table](long-jobs.md#the-time-limit)). On HPC (Slurm) copies are at least five minutes apart | a wrong form |
+| `idle_timeout=` | minutes without GPU use and log lines before a GPU step ends as idle: `"40m"`, `40`, `0` for never; the default is in [the limits](contract.md#the-limits) | a wrong form |
 
 Refused at render, as well: `outputs=`, `hpc_time_limit=` and `disk=`; a step that produces a dataset and is pinned to
 a Slurm class; a `plan` or `pipeline-version` in `config/`; a step definition over 24 KiB; an app name over the limit;
 a copy of the platform's pipeline code in the app; the `platform` group in `config/config.yaml`. An app from before the current pipelines
 is created again from the template.
 
-## What `produces=` makes
+## What `produces=` makes, and dataset references
 
-| declared as | what it is | where it is kept |
-|---|---|---|
-| `artifact("name")` | files of one run: a report, plots, a table | the repository `outputs-<app>`, under `<name>/<experiment>/<run>/` |
-| `model("name")` | files of one run: weights | the same place |
-| `dataset("name")` | a version of a dataset | the dataset `dataset-<app>-<name>` ([page 6](produce-a-dataset.md)) |
-
-## Dataset references
-
-| form | meaning |
-|---|---|
-| `dataset-<name>` | the same as `@latest` |
-| `dataset-<name>@v1` | a named version |
-| `dataset-<name>@latest` | the version the name `latest` points to ([Datasets, versions and hashes](datasets-versions-hashes.md#what-a-version-is)) |
-| `dataset-<name>@<commit>` | a commit |
-| `dataset-<app>-<name>` | a dataset the app `<app>` produces with `dataset("<name>")` |
-| `<owner>/dataset-<name>@<version>` | a dataset another project shares with yours (read-only) |
-
-`kaosctl dataset pull` also takes `<repository>@<branch or tag>`. `latest` of a produced dataset moves only when the run
-asks ([Move `latest`](flow-datasets.md#move-latest)).
+What a step makes and where it is kept are in [What a step writes](data-writes.md#what-a-step-writes). The forms of an
+address, such as `dataset-<name>@v1`, are in [Names and addresses](data-contract.md#names-and-addresses).
 
 ## Run tools
 
@@ -160,9 +131,9 @@ addresses and tokens the platform gives a running step are not passed, even if y
 
 | the step ended because | with a checkpoint | without one |
 |---|---|---|
-| its machine was lost (reclaimed, failed, drained) | continues from the newest good copy | runs again from the start, as often as the limit allows ([the limits](must-and-can.md#the-limits)) |
+| its machine was lost (reclaimed, failed, drained) | continues from the newest good copy | runs again from the start, as often as the limit allows ([the limits](contract.md#the-limits)) |
 | the time limit was reached, on the platform's own machines or on HPC ([Long jobs](long-jobs.md#the-time-limit)) | continues in a new run | ends |
-| a GPU step showed no GPU use and no new log line for the idle time ([the limits](must-and-can.md#the-limits)) | ends as idle, and is not run again | ends as idle |
+| a GPU step showed no GPU use and no new log line for the idle time ([the limits](contract.md#the-limits)) | ends as idle, and is not run again | ends as idle |
 | your code failed (non-zero exit) | ends as failed | ends as failed |
 
 A copy is used only after the platform verified it.

@@ -34,7 +34,7 @@ To make two runs comparable, pin the version of every dataset they read:
 --8<-- "examples/flows/rerun/config/config.yaml"
 ```
 
-The run records the exact version each step read ([Datasets, versions and hashes](datasets-versions-hashes.md#what-a-run-records)).
+The run records the exact version each step read ([What a run reads](data-reads.md#what-a-run-records)).
 
 ## What is not available
 

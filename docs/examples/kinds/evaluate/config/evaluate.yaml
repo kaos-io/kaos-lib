@@ -1,0 +1,2 @@
+evaluate:
+  threshold: 0.5 # the score a model needs to pass

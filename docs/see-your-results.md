@@ -37,7 +37,7 @@ the line. Without it the step fails with `kaos_lib.mlflow needs the mlflow extra
 ([When something goes wrong](when-something-goes-wrong.md#datasets-and-commands)).
 
 A step that uses MLflow also leaves the list of the dataset versions it read on its MLflow run:
-[Which data made this model?](datasets-versions-hashes.md#which-data-made-this-model)
+[Which data made this model?](data-reads.md#which-data-made-this-model)
 
 ## The files of a run
 

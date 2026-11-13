@@ -21,7 +21,7 @@ The first step ends with the values. The second names the first in `needs=` and 
 ```
 
 **The run records** the values in the result of the first step. A value is text, a number, a boolean, a list or an
-object. The whole result has a size limit ([the limits](must-and-can.md#the-limits)): bigger things go in a file
+object. The whole result has a size limit ([the limits](contract.md#the-limits)): bigger things go in a file
 ([next scenario](#files-to-the-next-step)) or in MLflow ([See your results](see-your-results.md)).
 
 ## Files to the next step
@@ -91,7 +91,7 @@ leave itself out while it runs, with `step.skip("the reason")`, and `when=` can 
 **You want** one step to gather the work of several others, for example to keep the better of two models.
 
 `needs=[small, large]` gives `pick-best` the result of both, and lets it read the model each one made. A step may need
-at most ten steps ([limits](must-and-can.md#the-limits)).
+at most ten steps ([limits](contract.md#the-limits)).
 
 ```python title="pipeline.py"
 --8<-- "examples/flows/fan-in/pipeline.py"

@@ -1,0 +1,3 @@
+train:
+  epochs: 3 # how many passes over the data
+  batch_per_gpu: 64 # the batch each GPU gets; the step multiplies it by the number of GPUs

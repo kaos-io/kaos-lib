@@ -24,5 +24,5 @@ guide is built.
 | read a dataset that another project shares | [Share a dataset](share-a-dataset.md) |
 | log metrics and find the files and models of a run | [See your results](see-your-results.md) |
 
-For the ideas behind them, read [Principles](principles.md) and
-[Datasets, versions and hashes](datasets-versions-hashes.md).
+For the rules behind them, read [Your contract with the platform](contract.md) and
+[The data contract](data-contract.md).

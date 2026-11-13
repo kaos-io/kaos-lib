@@ -17,7 +17,7 @@ You have one input. `prepare` reads a dataset, and `pipeline.py` and `config/dat
 `step.input("dataset")` returns a folder that holds the files of the dataset.
 
 - `inputs=["dataset"]` names a top-level value of `config/` that holds a dataset reference, `dataset-<name>` with a
-  version (the [forms of a reference](reference.md#dataset-references)).
+  version (the [forms of a reference](data-contract.md#names-and-addresses)).
 - `step.input("dataset")` takes the name and nothing else. There is no version in code, so there is no way to read a
   different version from the one the run chose.
 
@@ -25,7 +25,7 @@ You have one input. `prepare` reads a dataset, and `pipeline.py` and `config/dat
 
 The field `dataset` on the run form lists your project's datasets and their versions. You pick one when you submit.
 The platform fixes the choice to one exact version before the first step starts, and every step reads that version
-([when a version is fixed](datasets-versions-hashes.md#fixed-when-the-run-starts)).
+([when a version is fixed](data-reads.md#fixed-when-the-run-starts)).
 
 ```bash
 kaosctl dataset list
@@ -34,7 +34,7 @@ kaosctl dataset release dataset-default
 ```
 
 `list` shows the datasets you can read, `versions` the versions of one, and `release` gives the version `latest` points
-to the next version number ([what a version is](datasets-versions-hashes.md#what-a-version-is)).
+to the next version number ([what a version is](data-contract.md#what-a-version-is)).
 
 ## Add a second input
 
@@ -63,7 +63,7 @@ dataset for each, submit, and read the log:
 [hello-world] hello (my-experiment-v1): 2 files (12 bytes) in clean, 3 in the reference, 1 dropped by prepare
 ```
 
-The rules for reading are in [What you must and what you can](must-and-can.md#you-must), and what you see when a
+The rules for reading are in [Your contract with the platform](contract.md#what-you-write), and what you see when a
 dataset is empty is in [When something goes wrong](when-something-goes-wrong.md#a-run-fails). A dataset another project shares with yours is read in the same
 field ([Share a dataset](share-a-dataset.md)).
 

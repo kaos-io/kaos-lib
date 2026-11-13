@@ -210,7 +210,7 @@ def test_a_train_step_that_declares_checkpoint_every_is_not_told_it_is_not_resum
 
 def test_a_step_built_in_a_loop_is_named_by_its_line_not_by_a_python_object(tmp_path):
     out = messages(tmp_path, '    for i in range(2):\n        step(f"t-{i}", kind="evaluate", gpu=True)\n', rule="L-I01")
-    assert out and all("The step built at line 5 declares no time limit" in m and "object" not in m for m in out), out
+    assert out and all("The step built at line 5 has its time limit chosen on the run form" in m and "object" not in m for m in out), out
 
 
 @pytest.mark.parametrize("when,expect", [

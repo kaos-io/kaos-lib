@@ -23,7 +23,7 @@ the command.
 | `this app may not write dataset-...: only what the step declares in produces=[...] in pipeline.py can be written.` | the step wrote a dataset another app declares, or one it did not declare | declare it in `produces=`, or write a dataset of your own |
 | `dataset-... does not exist. The platform creates the dataset or the outputs of an app when its pipeline declares them in produces=[...]; it is there shortly after that change is merged.` | the first run started before the platform made the dataset | run again shortly: it is made soon after the change that declares it is merged |
 | `kaos-promote FAILED: Promoted by this run: ... Not promoted, because another run promoted the dataset first: dataset 'clean' (dataset-...) ... Another run moved a dataset, so trying this task again cannot finish it: start a new run to promote clean.` | another run moved `latest` of the dataset while this one was running | start a new run to promote the datasets the message names. Every version of this run is kept and can be read by its exact version |
-| `kaos-promote FAILED: Promoted by this run: ... Dataset 'x' (...) could not be promoted: ... The data store did not answer as needed: try again.` | the data store failed between two moves of `latest` | the platform tries again by itself; a dataset this run moved is recognised. If it still fails, start a new run ([what is left](flow-datasets.md#if-the-end-of-the-run-is-cut-short)) |
+| `kaos-promote FAILED: Promoted by this run: ... Dataset 'x' (...) could not be promoted: ... The data store did not answer as needed: try again.` | the data store failed between two moves of `latest` | the platform tries again by itself; a dataset this run moved is recognised. If it still fails, start a new run ([what is left](data-writes.md#if-the-end-of-the-run-is-cut-short)) |
 | `lakeFS rejected the credential this step was given, or it has expired. The app cannot fix this: report it to the platform team with the run's name` | the step's sign-in was refused | report it with the run's name; your code cannot fix it |
 | `KAOS: this GPU step cannot reach the NVIDIA driver (libcuda.so.1 not found: ...); the image or node is not set up for GPU` | the GPU machine the step got has no usable driver | pick a class that has a GPU; if it has one, tell your platform contact |
 | `ERROR: this is not a pipeline step: KAOS_STEP_CONTEXT is not set. Run the step with: kaosctl step run <step>` | you started `entry.py` by hand | use `kaosctl step run`, or [a test](test-your-steps.md) |
@@ -38,51 +38,11 @@ the command.
 | `output 'x': 0 file(s) to upload, 0 to delete, 0 unchanged since the last version of dataset-..., 201 reused from an earlier run (copied, not uploaded).` | the files are the ones an earlier run sealed and did not move `latest` to: they were copied, not uploaded again. The run still has its own version |
 | `output 'x': 1 of the 201 file(s) could not be copied and were uploaded.` | a file of an earlier run could not be copied, so this step uploaded it. Nothing to do |
 
-## The pipeline is refused
+## A pipeline or a run is refused
 
-`kaosctl lint` reports these before you push; the platform reports them when it builds the pipeline. Each lint rule has
-a page: [Lint checks](lint.md).
-
-| you see | it means | do this |
-|---|---|---|
-| `step 'x': outputs= is gone. Declare what the step writes with produces=[...] and hand it on with step.result().` | `outputs=` is gone | declare what a step makes in `produces=`, and hand values on with `step.result(...)` |
-| `step 'x': hpc_time_limit= is gone. Use walltime=, for example walltime="12h".` | `hpc_time_limit=` is gone | write `walltime="12h"` |
-| `step 'x': disk= is gone. The step gets the disk of the machine class it runs on.` | a step is not told its disk | pick a bigger class on the run form |
-| `L-E06 ... when='...' is not a condition the platform can read. A condition compares one name with a text, with == or != and nothing else`, or `... names 'x', which is not a field of the run form` | `when=` is not written as a name, `==` or `!=`, and a text, or the field is not on the run form | write `when="mode != off"` with the name of a setting as the run form shows it, or `when="evaluate.passed == true"` with a value of a step in `needs=`: [Conditions and skipping](conditions-and-skipping.md) |
-| `L-E06 ... when= reads a value of step 'x', which this step does not need` | the step `x` is not in `needs=` | add it to `needs=` |
-| `step 'x' gave no value 'v' (it was skipped, did not run, or never set it)` | a `when=` on `x.v` found no value | set the value in every case, or test a form field |
-| `L-E06 ... when= is written with plain names, not with {{...}}` | `when=` still has the `{{workflow.parameters.<field>}}` form | write the field's name instead |
-| `L-E07 ... Step 'x' has no folder steps/x_y/. The folder of a step is steps/ plus the step's name with every hyphen written as an underscore` (also the render, and `kaosctl step run`, which used to end with `exited with code 127`) | the step's folder is missing or written with a hyphen | create `steps/<name with underscores>/` with a `Dockerfile` and `app/entry.py`: [Your first step](first-step.md#the-name-of-a-step-and-its-folder) |
-| `L-E07 ... 'clean' is both an input (inputs=) and one of its own outputs (produces=)` (also the render) | a step reads and writes one name | rename the config value, for example `previous-clean`, or the produced name |
-| `L-E07 ... the dataset name 'x' is too short. A dataset name has 3 to 40 characters` | `dataset("x")` | give it a longer name |
-| `L-E07 ... Step 'x' has no kind=, which every step declares: one of ingest, transform, train, evaluate, publish, control.` | a step has no `kind=` | add the kind that says what the step does. The sentence "This app was made before the current pipelines" follows only when no step has a kind |
-| `L-E05 ... needs 'x', which is defined after it` | a step is defined below the step that needs it | move the line of `x` above |
-| `L-E05 ... reads the config section 'x', which does not exist in config/` | `reads=` names a section that is not there | fix the name, or add the section to `config/` |
-| `L-E07 ... the dataset 'x' is already produced by step 'y'. A dataset has one writer.` | two steps make the same dataset | keep one writer |
-
-## Refused when the pipeline is built
-
-A step that does not keep to the contract of its kind ([Step kinds](step-kinds.md)) is refused with one sentence:
-
-| you see | do this |
-|---|---|
-| `step 'x': an ingest step brings data in, so it produces a dataset. Add produces=[dataset("name")].` | add the dataset, or choose the kind of the work the step does |
-| `step 'x': a transform step turns data into something. Add produces=[...] with a dataset, a model or an artifact.` | add what it makes |
-| `step 'x': a train step produces a model. Add produces=[model("name")], or give the step the kind of the work it does (ingest, transform, evaluate, publish, control).` | add the model, or change the kind |
-| `step 'x': an evaluate step writes reports only, so it may not produce a dataset or a model. Use kind="transform" for a step that makes a dataset, kind="train" for one that makes a model.` | change the kind, or write an artifact |
-| `step 'x': a publish step delivers a result and produces nothing here. Remove produces=, or give the step the kind of the work it does.` | remove `produces=` |
-| `step 'x': a control step steers the run and handles no data, so it takes no inputs= and no produces=.` | remove them, or give the step the kind of the work it does |
-
-## When a run is refused before it starts
-
-| you see | it means | do this |
-|---|---|---|
-| `x-walltime is '1d'. Write minutes or hours, for example 90, 90m or 12h: at least one minute, no other unit.` | the time limit of step `x` on the run form is not minutes or hours | write `90`, `90m` or `12h` in the field |
-| `x-walltime is 15 minutes, which is not longer than the 20 minutes before its limit that the step is told to save (resumable= in pipeline.py). Give the step more time.` | the limit is shorter than the time the step needs to save | raise the field, or lower the lead in `resumable=` |
-| `x-checkpoint-every is 'often'. Write minutes or hours, ...` | the checkpoint interval is not minutes or hours | write `10m` or `1h` |
-| `promote-clean is 'maybe'. Choose true or false.` | the choice of a dataset to promote is not `true` or `false` | choose one of the two |
-| `'plan.promote' is no longer read. Tick the field promote-<dataset> of the run form, one for each dataset a step produces.` | the advanced config of the run still holds `plan:` | remove it and set the field `promote-<name>` to `true` |
-| `step 'x' cannot run on class 'gpu-t4': it is a GPU machine and the step does not declare gpu=True. Add gpu=True to the step in pipeline.py to run it on a GPU machine.` | the run asked for a class the step is not offered | pick a class the form offers, or add `gpu=True` |
+`kaosctl lint` reports these before you push; the platform reports them when it builds the pipeline or starts the run.
+The sentences, with what each means and what to do, are in
+[What the platform refuses](contract.md#what-the-platform-refuses). Each lint rule has a page: [Lint checks](lint.md).
 
 ## On the run form
 

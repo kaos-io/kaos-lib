@@ -18,10 +18,10 @@ start, do something, hand back a result.
 The platform runs the step as `python -m app.entry`, with no arguments. Your code reads no environment variable:
 `step.start()` gives you everything.
 
-## The kind of a step
+## The type of a step
 
-Every step in `pipeline.py` says what it does with `kind=`: `ingest`, `transform`, `train`, `evaluate`, `publish` or
-`control`. Each kind has a contract, for example a `train` step produces a model: [Step kinds](step-kinds.md) has them
+Every step in `pipeline.py` says what it does with its type, `kind=`: `ingest`, `transform`, `train`, `evaluate`, `publish` or
+`control`. Each type has a contract, for example a `train` step produces a model: [Step types](step-types.md) has them
 all, with an example of each.
 
 ## The name of a step and its folder
@@ -34,12 +34,8 @@ A step's name in `pipeline.py` is also its folder: `steps/` plus the name **with
 | `step("prepare", ...)` | `steps/prepare/` |
 | `step("model-eval", ...)` | `steps/model_eval/` |
 
-Some names are not available for a step: `main`, a name that starts with `kaos-`, and a name that
-ends with `-hpc` (the platform names the variant of a step that runs on HPC that way). The render refuses them with a
-message that lists the rule.
-
-The folder holds the `Dockerfile` and `app/entry.py`. A folder with the hyphen, `steps/model-eval/`, is not found. When the
-folder is missing, `kaosctl lint`, the render of `pipeline.py` and `kaosctl step run` all name the folder to create.
+The folder holds the `Dockerfile` and `app/entry.py`. The names a step may not take, and what is refused when the folder
+is missing, are in [Your contract with the platform](contract.md#the-step-name-and-its-folder).
 
 ## Change the step
 

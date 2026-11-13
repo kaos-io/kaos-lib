@@ -20,18 +20,18 @@ same check on every pull request, and an error fails it. Warnings and infos neve
 
 ## Project facts
 
-Some checks need facts about your project: its compute classes and the longest run of its Slurm site. On a pull
+Some checks need facts about your project: its compute classes and the longest run of its HPC (Slurm) site. On a pull
 request they come from your project. Locally, a check that lacks them is listed as `skipped`: never as passed.
 
 | option | does |
 |---|---|
-| (none) | built-in facts: the longest run and the continuations of [the limits](must-and-can.md#the-limits), no list of classes |
+| (none) | built-in facts: the longest run and the continuations of [the limits](contract.md#the-limits), no list of classes |
 | `--context FILE` | reads the facts from your project's context file |
 | `--catalogue FILE`, `--catalogue none` | reads them from a catalogue file, or skips every check that needs one |
 | `--export-catalogue FILE` | with `--context`, writes the catalogue and stops |
 
 Whether a step can continue after an interruption is judged in this order: what `pipeline.py` says (`resumable=`), what the
-platform recorded for the step on the Slurm site, what the step's code shows (`kaos_lib.checkpoint`, a hooked framework),
+platform recorded for the step on the HPC (Slurm) site, what the step's code shows (`kaos_lib.checkpoint`, a hooked framework),
 and otherwise nothing: a check that needs to know stays silent rather than guess.
 
 ## Options
@@ -82,7 +82,7 @@ prove the pipeline is right.
 | warning | [L-D06 HugeLayers](lint/L-D06.md) | `COPY . .`, baked-in data, pip without `--no-cache-dir`, apt without cleanup |
 | info | [L-D07 RootUser](lint/L-D07.md) | the image runs as root |
 | warning | [L-D08 NoCudaForGpuStep](lint/L-D08.md) | a GPU step whose image shows no CUDA support, or whose plain base sets no NVIDIA driver path |
-| info | [L-I01 NodeSharing](lint/L-I01.md) | a GPU step with no limit cannot share a node |
+| info | [L-I01 NodeSharing](lint/L-I01.md) | where the time limit of a GPU step is chosen, and why a limit close to what it needs shares a node more often |
 | info | [L-I02 LearnedLimits](lint/L-I02.md) | a short limit may be shortened further |
 | info | [L-I04 StepsBuiltInALoop](lint/L-I04.md) | steps built in a loop were not read by the checks |
 | info | [L-I03 Schedules](lint/L-I03.md) | skipped in every report: a pipeline cannot declare a schedule |
