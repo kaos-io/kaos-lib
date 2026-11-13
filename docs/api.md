@@ -23,6 +23,8 @@ item's output, and `Step.matrix` says which item a step is ([Sweeps](sweeps.md#p
 
 ::: kaos_lib.outputs
 
+::: kaos_lib.record
+
 ::: kaos_lib.lock
 
 ::: kaos_lib.errors

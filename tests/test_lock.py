@@ -328,3 +328,22 @@ def test_real_mlflow_round_trip(tmp_path, monkeypatch):
     assert tags["kaos_lib.data.dataset-default.commit"] == "c0042"
     assert tags["kaos_lib.data.dataset-x.owner"] == "a"
     assert lock.load(run.info.run_id, client).reads == lock.current().reads
+
+
+def test_a_write_may_carry_the_path_of_the_run_it_was_taken_from():
+    entry = {"name": "model", "type": "model", "repo": "outputs-myapp", "commit": "c" * 64, "path": "model/exp/run-1/"}
+    write = lock.parse_write(entry, "w")
+    assert write.path == "model/exp/run-1/" and write.as_dict() == entry
+    assert list(write.as_dict()) == ["name", "type", "repo", "commit", "path"]
+    assert lock.DataLock.parse({"version": 2, "reads": [], "writes": [entry]}).to_dict()["writes"] == [entry]
+
+
+def test_a_write_without_a_path_has_none_and_writes_none():
+    entry = {"name": "model", "type": "model", "repo": "outputs-myapp", "commit": "c" * 64}
+    write = lock.parse_write(entry, "w")
+    assert write.path is None and write.as_dict() == entry and "path" not in write.as_dict()
+
+
+def test_the_path_of_a_write_must_be_text():
+    with pytest.raises(LockError, match=r"w.path must be text"):
+        lock.parse_write({"name": "m", "type": "model", "repo": "outputs-a", "commit": "c" * 64, "path": 3}, "w")

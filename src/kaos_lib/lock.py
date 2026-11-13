@@ -7,7 +7,7 @@ shape travels in three places: the step context (what the platform pinned for th
 
     {"version": 2,
      "reads":  [{"name", "repo", "owner", "ref", "commit"}, ...],
-     "writes": [{"name", "type", "repo", "commit"}, ...]}
+     "writes": [{"name", "type", "repo", "commit"[, "path"]}, ...]}
 
 On an MLflow run a step leaves its own part as the artifact ``ledger/<step>.json`` and the tags
 ``kaos_lib.data.<repo>.commit`` (``write_step``). ``load(run_id)`` reads a run's ledger back: the union of its
@@ -112,17 +112,25 @@ class Read:
 
 @dataclass(frozen=True)
 class Write:
-    """One write: the model, artifact or dataset ``name`` is held by ``commit`` of ``repo``."""
+    """One write: the model, artifact or dataset ``name`` is held by ``commit`` of ``repo``.
+
+    ``path`` is where a model or an artifact lives in its repository when it was written by an earlier run, whose
+    result a run that starts from a later step took as it was; absent, it is ``<name>/<experiment>/<run>/`` of the
+    run that reads it. A step never writes ``path``: the platform sets it on a result it hands on from an earlier run.
+    """
     name: str
     type: str
     repo: str
     commit: str
     line: Optional[str] = None
+    path: Optional[str] = None
 
     def as_dict(self) -> dict:
         out = {"name": self.name, "type": self.type, "repo": self.repo, "commit": self.commit}
         if self.line:
             out["line"] = self.line
+        if self.path:
+            out["path"] = self.path
         return out
 
 
@@ -151,7 +159,10 @@ def parse_write(entry, where: str) -> Write:
     _text(entry, ("name", "type", "repo", "commit"), where)
     if entry["type"] not in WRITE_TYPES:
         raise LockError(f"{where}.type is {entry['type']!r}; it is one of {', '.join(WRITE_TYPES)}.")
-    return Write(entry["name"], entry["type"], entry["repo"], entry["commit"], entry.get("line") or None)
+    if entry.get("path") is not None and not isinstance(entry["path"], str):
+        raise LockError(f"{where}.path must be text.")
+    return Write(entry["name"], entry["type"], entry["repo"], entry["commit"], entry.get("line") or None,
+                 entry.get("path") or None)
 
 
 class DataLock:
