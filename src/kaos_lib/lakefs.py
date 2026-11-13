@@ -2,7 +2,8 @@
 
 Authentication comes from ``credentials.resolve``: a bearer token, or an
 access-key pair sent as Basic auth. ``for_owner`` returns a client for another
-project's lakeFS that carries only a bearer token (``credentials.resolve_peer``).
+project's lakeFS that never carries this project's access key: an app's own key there
+(``credentials.peer_key``), or a person's or job's bearer token (``credentials.resolve_peer``).
 HTTP failures become ``LakeFSError`` subclasses whose messages tell the user what to do next.
 """
 from __future__ import annotations
@@ -63,6 +64,7 @@ class LakeFS:
         self.timeout = timeout
         self.concurrency = concurrency
         self.owner = owner
+        self.credential = credential
         self.session = session or _session(credential, concurrency * 2)
         self._peer_clients: dict = {}
         self._templates: Optional[dict] = None
@@ -77,8 +79,10 @@ class LakeFS:
         """A client for the lakeFS of project ``owner`` (this client when ``owner`` is the own project).
 
         The address comes from the own lakeFS's peers (``/kaos/v1/peers``): the platform-network endpoint when
-        this client's base is such an address (``.svc``), else the public URL. The credential is a
-        bearer token (``credentials.resolve_peer``), never this project's access key.
+        this client's base is such an address (``.svc``), else the public URL. An app (this client's credential is an
+        access key) asks its own lakeFS for a key of the same app in the owner's, which reads what the owner shares
+        with the project and nothing else (``credentials.peer_key``). Otherwise the credential is a bearer token
+        (``credentials.resolve_peer``). This project's access key is never sent to the owner.
         """
         from . import peers
         if self.owner:
@@ -88,7 +92,11 @@ class LakeFS:
         if owner == peers.load(self).project:
             return self
         base = peers.base_for(self.base_url, peers.peer(self, owner))
-        client = LakeFS(base, credentials.resolve_peer(self.base_url), timeout=self.timeout,
+        if self.credential.access_key:
+            cred = credentials.peer_key(self.session, self.base_url, owner, self.timeout)
+        else:
+            cred = credentials.resolve_peer(self.base_url)
+        client = LakeFS(base, cred, timeout=self.timeout,
                         concurrency=self.concurrency, owner=owner)
         self._peer_clients[owner] = client
         return client

@@ -24,3 +24,11 @@ the run reads one exact version.
 
 A shared dataset is read-only. `kaosctl dataset push`, `release` and `create` on it are refused, and the message names
 the owner: ask the owner to change it. Only the project that owns a dataset writes it.
+
+## What the step reads it as
+
+A step reads a shared dataset as its own app: nothing in the app asks for a key or a token for it, and the code is the same
+as for a dataset of your project. The owner's data store gives your app read access to the datasets shared with your project and
+to nothing else of the owner's, and the access lasts about an hour. When the owner stops sharing a dataset, the next read of it
+is refused with a message that names the owner. Every app of your project can read what is shared with the project; the
+other projects' apps cannot.

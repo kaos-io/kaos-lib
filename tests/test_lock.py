@@ -31,10 +31,11 @@ def advance(fake, repo, files):
 
 
 @pytest.fixture
-def lakes(mesh, monkeypatch, zitadel_env, tmp_path):
+def lakes(mesh, monkeypatch, tmp_path):
     """Project b (own: dataset-default, dataset-raw) and project a (shares dataset-x), as a pipeline step of b."""
     own, owner = FakeLakeFS(OWN_BASE), FakeLakeFS(A_ENDPOINT)
     own.kaos["/kaos/v1/peers"] = (200, PEERS)
+    own.serve_peer_key()
     own.add_repo("dataset-default", metadata=YOLO, files=tree_of(write_dataset(tmp_path / "d")))
     own.add_repo("dataset-raw", files={"a.txt": b"one"})
     owner.add_repo("dataset-x", metadata=YOLO, files=tree_of(write_dataset(tmp_path / "x", images=("s",))))

@@ -192,8 +192,6 @@ def test_missing_extra_is_a_clear_error(zitadel_env, monkeypatch):
     monkeypatch.setitem(sys.modules, "jwt", None)          # `import jwt` now raises ImportError
     with pytest.raises(AuthError, match=r"pip install 'kaos-lib\[zitadel\]'"):
         zitadel.mint_from_env()
-    with pytest.raises(AuthError, match=r"kaos-lib\[zitadel\]"):
-        credentials.resolve_peer(OWN)
     assert zitadel_env.requests == []
 
 
@@ -211,17 +209,20 @@ def test_importing_the_package_does_not_need_the_extra(monkeypatch):
 
 
 # ------------------------------------------------------------------ resolve_peer chain
-def test_chain_bearer_env_comes_first(zitadel_env, monkeypatch):
+def test_chain_bearer_env_comes_first(monkeypatch):
     credentials.save_session(OWN, "session-token")
     monkeypatch.setenv("LAKEFS_BEARER_TOKEN", "env-token")
     assert credentials.resolve_peer(OWN) == credentials.Credential(token="env-token")
-    assert zitadel_env.requests == []                   # no mint when a bearer is given
 
 
-def test_chain_machine_key_mint_before_session(zitadel_env):
+
+
+def test_chain_has_no_machine_key_step(zitadel_env):
+    """The project's machine key is not a credential for another project's lakeFS: an app asks its own lakeFS for a key
+    of its own (LakeFS.for_owner), and the chain here is only for a person or a job with a token."""
     credentials.save_session(OWN, "session-token")
-    assert credentials.resolve_peer(OWN) == credentials.Credential(token="minted-token")
-    assert len(zitadel_env.requests) == 1
+    assert credentials.resolve_peer(OWN) == credentials.Credential(token="session-token")
+    assert zitadel_env.requests == []
 
 
 def test_chain_browser_session_last():
@@ -245,16 +246,4 @@ def test_chain_never_uses_the_access_key(monkeypatch):
     assert "kaosctl login" in str(err.value)
 
 
-def test_chain_access_key_does_not_shadow_the_other_steps(zitadel_env, monkeypatch):
-    monkeypatch.setenv("LAKEFS_ACCESS_KEY", "AK-B")
-    monkeypatch.setenv("LAKEFS_SECRET_KEY", "SK-B")
-    cred = credentials.resolve_peer(OWN)
-    assert (cred.token, cred.access_key, cred.secret_key) == ("minted-token", None, None)
-    assert credentials.resolve(OWN).access_key == "AK-B"     # the own lakeFS keeps using the key
 
-
-def test_chain_a_broken_machine_key_is_an_error_not_a_fallback(zitadel_env, tmp_path, monkeypatch):
-    credentials.save_session(OWN, "session-token")
-    monkeypatch.setenv("ZITADEL_MACHINE_KEY_FILE", str(tmp_path / "absent.json"))
-    with pytest.raises(AuthError, match="cannot read the Zitadel machine key"):
-        credentials.resolve_peer(OWN)

@@ -1,4 +1,6 @@
 """peers: the own lakeFS's /kaos/v1/peers, address choice, unknown owners, old servers, the per-process cache."""
+import base64
+
 import pytest
 
 from fake_lakefs import FakeLakeFS
@@ -161,9 +163,49 @@ def test_a_peer_client_cannot_hop_to_another_peer(own, monkeypatch):
         own.client().for_owner("a").for_owner("c")
 
 
-def test_for_owner_never_carries_the_access_key(own, monkeypatch):
-    monkeypatch.setenv("LAKEFS_ACCESS_KEY", "AK-B")
-    monkeypatch.setenv("LAKEFS_SECRET_KEY", "SK-B")
-    own_client = LakeFS(OWN_SVC, credentials.resolve(OWN_SVC), session=own.client().session)
-    with pytest.raises(AuthError, match="LAKEFS_ACCESS_KEY is never sent to another project"):
-        own_client.for_owner("a")
+APP = credentials.Credential(access_key="AK-B", secret_key="SK-B")
+
+
+def test_for_owner_of_an_app_asks_its_own_lakefs_for_a_key_of_the_same_app(own):
+    peer_auth = own.serve_peer_key()
+    c = own.client(credential=APP).for_owner("a")
+    assert (c.base_url, c.owner) == (A_ENDPOINT, "a")
+    assert c.session.auth == ("KAOSXPEERAAAAAAAAAA", "peer-secret") and "Authorization" not in c.session.headers
+    assert own.exchanges() == [{"owner": "a"}]
+    assert ("POST", "/kaos/v1/shared-credentials") in own.calls
+    assert own.auth[-1] == "Basic " + base64.b64encode(b"AK-B:SK-B").decode(), "the own lakeFS knows the app by its key"
+    assert peer_auth.startswith("Basic ")
+
+
+def test_for_owner_of_an_app_is_cached_per_owner(own):
+    own.serve_peer_key()
+    c = own.client(credential=APP)
+    assert c.for_owner("a") is c.for_owner("a") and len(own.exchanges()) == 1
+    c.for_owner("c")
+    assert len(own.exchanges()) == 2
+
+
+def test_for_owner_of_an_app_sends_no_machine_key_and_no_bearer(own, monkeypatch, tmp_path):
+    own.serve_peer_key()
+    monkeypatch.setenv("LAKEFS_BEARER_TOKEN", "b-token")                 # a bearer in the environment is not an app's
+    monkeypatch.setenv("ZITADEL_MACHINE_KEY_FILE", str(tmp_path / "absent.json"))
+    c = own.client(credential=APP).for_owner("a")
+    assert c.session.auth == ("KAOSXPEERAAAAAAAAAA", "peer-secret")
+
+
+@pytest.mark.parametrize("status,error,fragment", [
+    (403, AuthError, "a shares no dataset with your project"),
+    (401, AuthError, "rejected the credential"),
+    (404, ConfigError, "too old for datasets shared with apps"),
+    (405, ConfigError, "too old"),
+    (500, LakeFSError, "HTTP 500"),
+])
+def test_for_owner_of_an_app_names_why_no_key_came(own, status, error, fragment):
+    own.kaos["/kaos/v1/shared-credentials"] = (status, {"message": "a shares no dataset with your project"})
+    with pytest.raises(error, match=fragment):
+        own.client(credential=APP).for_owner("a")
+
+
+def test_for_owner_of_an_app_cannot_read_the_own_project_as_a_peer(own):
+    c = own.client(credential=APP)
+    assert c.for_owner("b") is c and own.exchanges() == []

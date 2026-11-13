@@ -28,6 +28,7 @@ def lakes(mesh, tmp_path):
     """b (own) and a (owner) both hold a dataset-x at the SAME commit id, with different bytes."""
     own, owner = FakeLakeFS(OWN_BASE), FakeLakeFS(A_ENDPOINT)
     own.kaos["/kaos/v1/peers"] = (200, PEERS)
+    own.peer_auth = own.serve_peer_key()                                # what a's lakeFS then sees from b's app
     own.add_repo("dataset-x", metadata=YOLO, files=tree_of(write_dataset(tmp_path / "own-x", images=("own",))))
     owner.add_repo("dataset-x", metadata=YOLO, files=tree_of(write_dataset(tmp_path / "a-x", images=("shared",))))
     owner.add_repo("dataset-raw", files={"a.txt": b"from a", "sub/b.txt": b"B"})
@@ -40,12 +41,12 @@ def lakes(mesh, tmp_path):
 
 
 @pytest.fixture
-def step_env(monkeypatch, zitadel_env):
-    """A pipeline step of project b: own endpoint, own app key, machine key for peers."""
+def step_env(monkeypatch):
+    """A pipeline step of project b: own endpoint and the own app's key. No project key: the owner's lakeFS is read with
+    a key of the same app, which the own lakeFS gets for it."""
     monkeypatch.setenv("LAKEFS_ENDPOINT", OWN_BASE)
     monkeypatch.setenv("LAKEFS_ACCESS_KEY", "AK-B")
     monkeypatch.setenv("LAKEFS_SECRET_KEY", "SK-B")
-    return zitadel_env
 
 
 def object_gets(fake):
@@ -100,20 +101,31 @@ def test_a_shared_copy_in_an_explicit_dest_is_not_taken_for_the_own_one(lakes, s
     assert object_gets(own)
 
 
-def test_the_owner_sees_only_bearer_tokens_never_the_access_key(lakes, step_env):
+def test_the_owner_sees_only_the_key_it_gave_never_the_own_access_key(lakes, step_env):
     own, owner = lakes
     datasets.materialize(SHARED)
-    assert owner.auth and set(owner.auth) == {"Bearer minted-token"}
+    assert owner.auth and set(owner.auth) == {own.peer_auth}
     basic = "Basic " + base64.b64encode(b"AK-B:SK-B").decode()
     assert own.auth and set(own.auth) == {basic}                     # the own lakeFS keeps the app key
-    assert not any("AK-B" in a or basic.split()[1] in a for a in owner.auth)
+    assert not any(basic.split()[1] in a for a in owner.auth)
+    assert own.exchanges() == [{"owner": "a"}]                        # the own lakeFS knows the app; no name is sent
 
 
-def test_one_mint_per_client(lakes, step_env):
+def test_one_exchange_per_client(lakes, step_env):
+    own, _ = lakes
     c = LakeFS.connect()
     datasets.materialize(SHARED, client=c)
     datasets.materialize(datasets.DatasetRef.parse("a/dataset-raw@v1"), client=c)
-    assert len(step_env.requests) == 1
+    assert len(own.exchanges()) == 1
+
+
+def test_no_project_key_is_used_even_when_one_is_present(lakes, step_env, monkeypatch, tmp_path):
+    own, owner = lakes
+    monkeypatch.setenv("ZITADEL_MACHINE_KEY_FILE", str(tmp_path / "project-key.json"))   # absent: reading it would fail
+    monkeypatch.setenv("ZITADEL_DOMAIN", "zitadel.test")
+    monkeypatch.setenv("ZITADEL_MLFLOW_PROJECT_ID", "321")
+    datasets.materialize(SHARED)
+    assert set(owner.auth) == {own.peer_auth}
 
 
 def test_owner_endpoint_in_cluster_url_outside(lakes, step_env):
@@ -122,7 +134,9 @@ def test_owner_endpoint_in_cluster_url_outside(lakes, step_env):
     assert {c[1] for c in owner.calls}                               # reached through the in-cluster endpoint
     outside = FakeLakeFS("https://lakefs-b.example")
     outside.kaos["/kaos/v1/peers"] = (200, PEERS)
-    assert datasets.source(SHARED, outside.client())[1].base_url == A_URL
+    outside.serve_peer_key()
+    app = credentials.Credential(access_key="AK-B", secret_key="SK-B")
+    assert datasets.source(SHARED, outside.client(credential=app))[1].base_url == A_URL
 
 
 def test_raw_shared_dataset_and_prefix(lakes, step_env, tmp_path):
@@ -164,7 +178,7 @@ def test_owner_that_is_the_own_project_reads_the_own_lakefs(lakes, step_env, tmp
     path = datasets.materialize(datasets.DatasetRef.parse("b/dataset-x@v1"))
     assert path.parent == tmp_path / "cache" / "dataset-x" / own.head("dataset-x")     # normalised: no owner
     assert (path.parent / "images/train/own.jpg").is_file() and not object_gets(owner)
-    assert step_env.requests == []                                  # and no token minted
+    assert own.exchanges() == []                                    # and no key asked for
 
 
 def test_unknown_owner(lakes, step_env):
@@ -180,12 +194,24 @@ def test_too_old_own_lakefs(lakes, step_env):
     assert datasets.materialize(OWN_REF).is_file()                   # own datasets still work
 
 
-def test_no_peer_credential_is_a_clear_error(lakes, monkeypatch):
-    monkeypatch.setenv("LAKEFS_ENDPOINT", OWN_BASE)
-    monkeypatch.setenv("LAKEFS_ACCESS_KEY", "AK-B")
-    monkeypatch.setenv("LAKEFS_SECRET_KEY", "SK-B")
-    _, owner = lakes
-    with pytest.raises(AuthError, match="LAKEFS_ACCESS_KEY is never sent to another project"):
+@pytest.mark.parametrize("status,error,fragment", [
+    (403, AuthError, "a shares no dataset with your project"),
+    (401, AuthError, "rejected the credential"),
+    (404, ConfigError, "too old for datasets shared with apps"),
+    (502, Exception, "HTTP 502"),
+])
+def test_a_peer_key_that_cannot_be_had_is_a_clear_error(lakes, step_env, status, error, fragment):
+    own, owner = lakes
+    own.kaos["/kaos/v1/shared-credentials"] = (status, {"message": "a shares no dataset with your project"})
+    with pytest.raises(error, match=fragment):
+        datasets.materialize(SHARED)
+    assert owner.calls == []                                         # nothing was sent to the owner without a key
+
+
+def test_an_answer_without_a_key_is_an_old_lakefs(lakes, step_env):
+    own, owner = lakes
+    own.kaos["/kaos/v1/shared-credentials"] = (200, b"<html><body>lakeFS</body></html>")
+    with pytest.raises(ConfigError, match="too old"):
         datasets.materialize(SHARED)
     assert owner.calls == []
 
@@ -269,11 +295,11 @@ def test_versions_own_vs_owner(tagged, step_env):
     assert datasets.versions("dataset-x") == ["v1"]
 
 
-def test_versions_of_a_shared_dataset_send_only_bearer_to_the_owner(tagged, step_env):
+def test_versions_of_a_shared_dataset_send_only_the_peer_key_to_the_owner(tagged, step_env):
     own, owner = tagged
     datasets.versions("a/dataset-x")
     assert ("GET", "/repositories/dataset-x/tags") in owner.calls
-    assert owner.auth and set(owner.auth) == {"Bearer minted-token"}
+    assert owner.auth and set(owner.auth) == {own.peer_auth}
     assert not any(c[1].startswith("/repositories") for c in own.calls)       # own lakeFS: only /kaos/v1/peers
     assert set(own.auth) == {"Basic " + base64.b64encode(b"AK-B:SK-B").decode()}
 
