@@ -13,7 +13,7 @@ template.** Nothing in kaos-lib converts an old app.
 - Start a run from a step: the run form's `reuse-from-run` and `start-from-step` (PRD novelcore/kaos#1911, novelcore/kaos#2080). The steps
   before the step are not run again; the new run takes the earlier run's results and outputs. Every step that ends
   (`step.result()`, `step.skip()`) now saves the exact result it handed on as `kaos-runs/<run>/<step>.json` of the app's
-  `outputs-<app>` (`kaos_lib.record`; best effort: a failure is a warning in the step's log and the step still succeeds; not
+  `outputs-<app>` (`kaos_lib.record`; it says whose it is, the app, run, instance and step, around the exact result; best effort: a failure is a warning in the step's log and the step still succeeds; not
   for an item of a step with `matrix=` and not in a local run). A write in a result may carry `path`, the folder of the run
   that wrote a model or an artifact (`kaos_lib.lock.Write.path`), and `step.input(name)` reads it from there. A step image with
   an older kaos-lib cannot read a model of an earlier run and fails with a message that names the folder it did not find. The page

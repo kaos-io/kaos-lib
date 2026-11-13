@@ -799,11 +799,14 @@ def record_text(lake, name):
 def test_the_result_a_step_hands_on_is_kept_exactly_as_a_record_of_the_run(monkeypatch, lake):
     from kaos_lib import record
     client = lake.client()
-    begin(monkeypatch, lake.context("context-one-upstream"), client)
+    context = lake.context("context-one-upstream")
+    begin(monkeypatch, context, client)
     step.input("labels")
     fill("model")
     step.result(accuracy=0.93)
-    assert record.read(client, "hera-demo", "hera-demo-x7k2p", "train") == json.loads(result_file().read_text())
+    kept = record.read(client, "hera-demo", "hera-demo-x7k2p", "train")
+    assert kept == {"version": 1, "app": "hera-demo", "run": "hera-demo-x7k2p", "instance": context["instance"],
+                    "step": "train", "result": json.loads(result_file().read_text())}
     assert record_text(lake, "train") is not None, "the file is on main of the outputs repository"
 
 
@@ -814,7 +817,7 @@ def test_a_skipped_step_keeps_its_skipped_result_as_its_record(monkeypatch, lake
     with pytest.raises(SystemExit) as stop:
         step.skip(fixture("result-skipped")["reason"])
     assert stop.value.code == 0
-    assert record.read(client, "hera-demo", "hera-demo-x7k2p", "prepare") == fixture("result-skipped")
+    assert record.read(client, "hera-demo", "hera-demo-x7k2p", "prepare")["result"] == fixture("result-skipped")
 
 
 def test_a_record_that_cannot_be_saved_is_a_warning_and_the_step_still_succeeds(monkeypatch, lake, capsys):
@@ -824,7 +827,8 @@ def test_a_record_that_cannot_be_saved_is_a_warning_and_the_step_still_succeeds(
     step.result(rows=3)
     err = capsys.readouterr().err
     assert err.startswith("WARNING: the result of step 'prepare' could not be saved for a later run to reuse "
-                          "(RuntimeError: the lake is busy). The step succeeded.")
+                          "(RuntimeError: the lake is busy). The step succeeded. This run cannot be reused from a later step: its result for this "
+                          "step is not saved.")
     assert json.loads(result_file().read_text())["values"] == {"rows": 3}
     assert record_text(lake, "prepare") is None
 
@@ -894,3 +898,29 @@ def test_a_result_taken_from_an_earlier_run_carries_the_path_of_its_model(monkey
     assert [w.as_dict() for w in train.writes] == fixture("result-reused")["writes"]
     assert train.writes[0].path == "model/baseline/hera-demo-x7k2p/"
     assert step.skipped("export") == ""
+
+
+def test_the_context_says_which_run_instance_it_is_and_the_record_carries_it(monkeypatch, lake):
+    from kaos_lib import record
+    client = lake.client()
+    context = lake.context("context-one-upstream")
+    assert context["instance"] == "0b7f6c1e-1111-2222-3333-444455556666"
+    assert begin(monkeypatch, context, client).instance == context["instance"]
+    step.input("labels")
+    fill("model")
+    step.result(accuracy=0.93)
+    assert record.read(client, "hera-demo", "hera-demo-x7k2p", "train")["instance"] == context["instance"]
+
+
+def test_the_record_of_the_fixture_is_the_envelope_of_the_contract(monkeypatch, lake):
+    from kaos_lib import record
+    client = lake.client()
+    begin(monkeypatch, changed("context-no-upstream", produces=[]), client)
+    step.result()
+    kept = record.read(client, "hera-demo", "hera-demo-x7k2p", "prepare")
+    assert list(kept) == list(fixture("record-train")) and kept["result"] == json.loads(result_file().read_text())
+
+
+def test_an_instance_that_is_not_text_is_refused(capsys, monkeypatch):
+    err = refused(capsys, monkeypatch, changed("context-no-upstream", instance=3))
+    assert "the step context has an instance that is not text" in err
