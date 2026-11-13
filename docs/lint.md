@@ -48,7 +48,7 @@ and otherwise nothing: a check that needs to know stays silent rather than guess
 | `--graph` | prints the steps and what each needs as JSON and stops |
 
 The report is JSON: `ruleset_version`, `catalogue`, `summary`, `findings` (`rule`, `name`, `level`, `file`, `range`,
-`message`, `fix`, `doc`) and `skipped`. The KAOS extension for VS Code shows the findings as you type: `kaosctl vscode install`.
+`message`, `fix`, `doc`) and `skipped`. The KAOS extension for VS Code shows the findings as you type: `kaosctl vscode install` ([Use the editor extension](editor-extension.md)).
 
 A value built at run time (a loop, a call) cannot be judged, so the check stays silent about it. A clean report does not
 prove the pipeline is right.

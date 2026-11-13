@@ -8,7 +8,8 @@ def main() -> None:
     ctx = step.start()
     epochs = ctx.params["train"]["epochs"]
     tracking.mlflow()  # signs the step in and points `mlflow` at the project's server; fails here without a credential
-    mlflow.set_experiment(ctx.experiment)
+    # The project's MLflow takes only the names `<app>` or `<app>.<something>`: the app's name goes first.
+    mlflow.set_experiment(ctx.app if ctx.experiment == ctx.app else f"{ctx.app}.{ctx.experiment}")
     with mlflow.start_run(run_name=ctx.run):
         mlflow.log_param("epochs", epochs)
         for epoch in range(1, epochs + 1):
