@@ -137,6 +137,7 @@ nav:
       - Several pipelines: several-pipelines.md
       - Re-running: rerun.md
       - Test your steps: test-your-steps.md
+      - Use the editor extension: editor-extension.md
       - See your results: see-your-results.md
       - Add packages to a step: add-packages.md
       - GPUs on HPC (Slurm): gpus-on-hpc.md

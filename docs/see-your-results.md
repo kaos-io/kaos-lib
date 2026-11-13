@@ -31,7 +31,8 @@ you call `mlflow` as you always do. It fails at once, before the step has done a
 --8<-- "examples/flows/metrics/steps/train/app/entry.py"
 ```
 
-The run is in the experiment named by `ctx.experiment`, with the name of the run, `ctx.run`. The loss is logged once for
+The run is in the MLflow experiment `<app>.<experiment>`, with the name of the run, `ctx.run`. The project's MLflow takes
+only names that start with your app's name, so the step puts `ctx.app` in front of the experiment setting. The loss is logged once for
 each epoch, so MLflow draws it as a curve. The step's image needs the MLflow client: [Add packages](add-packages.md) shows
 the line. Without it the step fails with `kaos_lib.mlflow needs the mlflow extra`
 ([When something goes wrong](when-something-goes-wrong.md#datasets-and-commands)).
@@ -42,8 +43,10 @@ A step that uses MLflow also leaves the list of the dataset versions it read on 
 ## The files of a run
 
 The files of every artifact and model of an app are kept in one place, named `outputs-<app>` after your app, in a folder
-for each run: `<name>/<experiment>/<run>/`. `<name>` is the name in `produces=`, here `model`, and the run's name is on
-the run page and in `ctx.run`. Download a run's model:
+for each run: `<name>/<experiment>/<run>/`. `<name>` is the name in `produces=`, here `model`, `<experiment>` is the
+experiment setting as you wrote it (for example `my-experiment-v1`), and the run's name is on the run page and in
+`ctx.run`. In MLflow the same experiment is called `<app>.<experiment>`, and a model you register is called
+`<app>.<name>` in the same way. Download a run's model:
 
 ```bash
 kaosctl dataset pull outputs-<app>@main ./results --prefix model/my-experiment-v1/<run>/

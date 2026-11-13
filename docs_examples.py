@@ -315,7 +315,7 @@ def flow_metrics(tmp: pathlib.Path) -> dict:
         result, run = run_step(app, tmp / "run", "train", "train", [("model", "model")], params={"train": {"epochs": 3}})
         from mlflow.tracking import MlflowClient
         client = MlflowClient()
-        found = client.search_runs([client.get_experiment_by_name("my-experiment-v1").experiment_id])
+        found = client.search_runs([client.get_experiment_by_name("myapp.my-experiment-v1").experiment_id])
         curve = [m.value for m in client.get_metric_history(found[0].info.run_id, "loss")]
     finally:
         for name in [m for m in sys.modules if m.split(".")[0] == "mlflow" and m not in had]:
