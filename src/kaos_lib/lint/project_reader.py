@@ -53,6 +53,17 @@ def step_folder(name: str) -> str:
     return f"{STEPS_DIR}/{name.replace('-', '_')}"
 
 
+def _top_keys(root: pathlib.Path, path: pathlib.Path) -> set:
+    """The top-level keys of one YAML file of the config tree (without `defaults`); empty when it cannot be read."""
+    if not inside(root, path) or path.stat().st_size > MAX_FILE_BYTES:
+        return set()
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return set()
+    return {str(k) for k in doc if k != "defaults"} if isinstance(doc, dict) else set()
+
+
 def config_sections(root: pathlib.Path) -> Optional[set]:
     """Top-level sections of the config tree (files and group folders of config/), or None without a config folder."""
     cfg = root / CONFIG_DIR
@@ -66,14 +77,8 @@ def config_sections(root: pathlib.Path) -> Optional[set]:
             names.add(p.name)
         elif p.suffix in (".yaml", ".yml") and p.stem != "config":
             names.add(p.stem)
-    main = cfg / "config.yaml"
-    if inside(root, main) and main.stat().st_size <= MAX_FILE_BYTES:
-        try:
-            doc = yaml.safe_load(main.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError):
-            doc = None
-        if isinstance(doc, dict):
-            names.update(str(k) for k in doc if k != "defaults")
+            names.update(_top_keys(root, p))      # the engine composes the keys of a file, not its name: one file may hold several
+    names.update(_top_keys(root, cfg / "config.yaml"))
     names.discard(PLATFORM_SECTION)
     return names
 

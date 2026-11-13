@@ -1,7 +1,7 @@
 """kaos_lib: the KAOS platform package (pipeline steps, datasets, run outputs, CLI).
 
 Public API:
-    kaos_lib.step      start, input, output, upstream, check, result: what a pipeline step is given and hands on
+    kaos_lib.step      start, input, output, upstream, check, result, skip: what a pipeline step is given and hands on
     kaos_lib.datasets  DatasetRef, resolve, list_datasets, versions, release, create_dataset, materialize
     kaos_lib.outputs   outputs_repo, write_run
     kaos_lib.layouts   load, available, Layout (validate, skeleton, materialize, publish): dataset layouts

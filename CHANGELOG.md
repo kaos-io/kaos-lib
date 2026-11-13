@@ -10,6 +10,32 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; ev
 template.** Nothing in kaos-lib converts an old app.
 
 ### Added
+- A value in `when=` is compared exactly: a string as text, a number or a boolean by its JSON text (`evaluate.rows !=
+  1000000` is false for 1000000; `1e6`, `1000000.0` and `1000000` all match it). A text that could never match is refused
+  by `kaosctl lint` and the render (`.5`, `+1`, `True`, an integer above 9007199254740992, a line break). `when=` text with a
+  control character is refused. `L-E07` also refuses a step that writes a name a step it needs writes.
+- The final task of a run says the truth in every outcome (what it promoted, what another run moved, what it did not try, and
+  whether trying again helps), and no pod starts for it when no `promote-<name>` is `true`. A run that overlaps another
+  promoting run on the same dataset is refused whole at the end; its versions stay readable by their exact version.
+- Conditions and skipping. `when=` can test a value an earlier step handed on: `when="evaluate.passed == true"`
+  (`<step>.<value>`, the step must be in `needs=`; a missing value stops the run with a message that names the step and the
+  value). `kaos_lib.step.skip("reason")` ends a step as skipped: exit code 0, a skipped result with the reason, nothing
+  saved. The steps that need a skipped step still run and find it with `step.skipped(name)` or
+  `step.upstream(name, optional=True)`. `kaos_lib.testing.running(upstream_skipped=...)` and `kaosctl step run` show it.
+  New pages: Conditions and skipping, Sweeps, Several pipelines, Re-running.
+- **Breaking, in the same release: a dataset's `latest` moves once, at the end of the run, for all or none.** A step only
+  seals its version (`step.result()` no longer moves `latest`; the context has no `promote`). A final task of the run
+  checks every dataset whose `promote-<name>` is `true` and moves them all, or none when one of them moved meanwhile.
+  `kaos.promoted` stays on the merge. Skipped producers are not promoted. Pages "Move `latest`" and "Principles" say so.
+- Lint rule set 2.3.0: `L-E07` also refuses a dataset name under 3 characters, an input that is also an output of the same
+  step, and a step with no folder `steps/<name with underscores>/`; `L-E05` reads a config file with several top-level
+  keys as several sections, as the engine does; `L-W06` is silent when the step sets `checkpoint_every=`; new `L-W07` (a
+  GPU step that produces a dataset runs on the cluster) and `L-I04` (steps built in a loop were not read). `L-I01` and `L-I02`
+  name a step built in a loop by its line. `kaosctl step run` finds steps built in a loop by running `pipeline.py` with a
+  recorder, and says which folder is missing instead of `exited with code 127`.
+- `kaosctl render` and `kaosctl step run` take the engine release from the `engine` block of this kaos-lib release's
+  `_release.json` when no flag, variable or context gives one. No release names one yet: the message says so and says what
+  to do.
 - Step kinds are a contract, checked by `L-E07` and by the platform: an ingest step produces a dataset, a transform step
   produces something, a train step produces a model, an evaluate step produces artifacts only, a publish step and a
   control step produce nothing (page "Step kinds"). `L-W06` warns about a training step with a time limit

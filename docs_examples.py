@@ -375,6 +375,83 @@ def flow_control(tmp: pathlib.Path) -> dict:
     raise ExampleError("check did not end a run with 0 epochs")
 
 
+def _run_ending(app, work, name, kind, produces, **kwargs):
+    """One step started with `kaos_lib.testing.running` that may end by itself (`step.skip`): (exit code or None, run)."""
+    from kaos_lib import testing
+    work.mkdir(parents=True, exist_ok=True)
+    code = None
+    with testing.running(work, kind=kind, name=name, app="myapp", experiment="my-experiment-v1",
+                         produces=list(produces), **kwargs) as run, contextlib.redirect_stdout(io.StringIO()):
+        try:
+            load(app, name.replace("-", "_")).main()
+        except SystemExit as exc:
+            code = exc.code
+    return code, run
+
+
+def flow_conditions(tmp: pathlib.Path) -> dict:
+    """`when=` on a value of a needed step and `step.skip()`: run the whole pipeline three ways (the model passes and
+    publish delivers; it passes and publish skips itself; it does not pass and publish does not run)."""
+    app = flow_app("conditions", tmp)
+    summary = {}
+    for case, epochs, name, line in (
+            ("delivered", 5, "my-model", "score 0.5: published as my-model"),
+            ("skipped", 5, "", "score 0.5: not published, no registry name is set in config/registry.yaml"),
+            ("failed", 2, "my-model", "score 0.2: not published, the model did not pass")):
+        base = tmp / case
+        trained, trun = run_step(app, base / "train", "train", "train", [("model", "model")], params={"train": {"epochs": epochs}})
+        evaluated, erun = run_step(app, base / "evaluate", "evaluate", "evaluate", [("artifact", "verdict")],
+                                   params={"evaluate": {"threshold": 0.3}}, upstream={"train": trained["values"]},
+                                   upstream_writes={"train": {"model": trun.output("model")}})
+        if evaluated["values"] != {"passed": epochs / 10 >= 0.3, "score": epochs / 10}:
+            raise ExampleError(f"evaluate handed on {evaluated['values']}")
+        kwargs = {}
+        if case == "failed":                      # the condition `evaluate.passed == true` is false: publish never starts
+            publish_upstream = {"publish": None}
+        else:
+            code, prun = _run_ending(app, base / "publish", "publish", "publish", [], params={"registry": {"name": name}},
+                                     upstream={"evaluate": evaluated["values"]})
+            if case == "delivered" and (code is not None or prun.result["values"] != {"delivered": "my-model"}):
+                raise ExampleError(f"publish ended with {code!r} and {prun.result}")
+            if case == "skipped":
+                reason = "no registry name is set in config/registry.yaml"
+                if code != 0 or prun.result != {"version": 1, "status": "skipped", "reason": reason}:
+                    raise ExampleError(f"publish did not skip itself cleanly: {code!r} {prun.result}")
+                kwargs["upstream_skipped"] = {"publish": reason}
+                publish_upstream = {}
+            else:
+                publish_upstream = {"publish": prun.result["values"]}
+        result, run = run_step(app, base / "summary", "summary", "evaluate", [("artifact", "summary-report")],
+                               upstream={"evaluate": evaluated["values"], **publish_upstream}, **kwargs)
+        if (run.output("summary-report") / "summary.txt").read_text() != line + "\n":
+            raise ExampleError(f"summary wrote another line in the case {case}")
+        summary[case] = result["values"]
+    if summary != {"delivered": {"published": True}, "skipped": {"published": False}, "failed": {"published": False}}:
+        raise ExampleError(f"summary handed on {summary}")
+    return summary
+
+
+def flow_sweep(tmp: pathlib.Path) -> dict:
+    """A sweep as a loop inside one step: it tries every rate of the setting and keeps the best."""
+    app = flow_app("sweep", tmp)
+    result, run = run_step(app, tmp / "run", "train", "train", [("model", "best-model")],
+                           params={"train": {"epochs": 3, "learning_rates": "0.1,0.01,0.001"}})
+    if result["values"]["best_learning_rate"] != 0.01 or result["values"]["tried"] != 3:
+        raise ExampleError(f"train handed on {result['values']}")
+    if (run.output("best-model") / "weights.txt").read_text() != "learning rate 0.01\n":
+        raise ExampleError("train did not keep the best model")
+    return result
+
+
+def rerun_pin() -> None:
+    """The setting of the page "Re-running" pins a version of a dataset of the same project."""
+    from kaos_lib.datasets import DatasetRef
+    value = yaml.safe_load((FLOWS / "rerun" / "config" / "dataset.yaml").read_text(encoding="utf-8"))["dataset"]
+    ref = DatasetRef.parse(value)
+    if (ref.repo, ref.version) != ("dataset-myapp-clean", "v3"):
+        raise ExampleError(f"{value!r} parses as {ref}")
+
+
 def packages_dockerfile(tmp: pathlib.Path) -> None:
     """The Dockerfile of the page "Add packages", in a one-step app: no error or warning of the Dockerfile rules (L-D*);
     L-D07 (the image runs as root) is an info for every Dockerfile of the template too."""
@@ -394,6 +471,131 @@ def shared_reference() -> None:
     ref = DatasetRef.parse(value)
     if (ref.owner, ref.repo, ref.version) != ("acme-vision", "dataset-cats", "v1"):
         raise ExampleError(f"{value!r} parses as {ref}")
+
+
+KINDS_EXAMPLES = EXAMPLES / "kinds"
+# The mistakes the step type pages show: (kind, lines of pipeline.py, the rule, the sentence `kaosctl lint` gives).
+# The page of the type must hold each sentence word for word.
+KIND_MISTAKES = (
+    ("ingest", 'fetch = step("fetch", kind="ingest", produces=[artifact("files")])', "L-E07",
+     "Step 'fetch': an ingest step brings data in, so it produces a dataset. Add produces=[dataset(\"name\")]."),
+    ("transform", 'clean = step("clean", kind="transform", inputs=["dataset"])', "L-E07",
+     "Step 'clean': a transform step turns data into something. Add produces=[...] with a dataset, a model or an artifact."),
+    ("train", 'train = step("train", kind="train", produces=[artifact("log")])', "L-E07",
+     "Step 'train': a train step produces a model. Add produces=[model(\"name\")], or give the step the kind of the "
+     "work it does (ingest, transform, evaluate, publish, control)."),
+    ("evaluate", 'score = step("score", kind="evaluate", produces=[dataset("scores")])', "L-E07",
+     "Step 'score': an evaluate step writes reports only, so it may not produce a dataset or a model. Use "
+     "kind=\"transform\" for a step that makes a dataset, kind=\"train\" for one that makes a model."),
+    ("publish", 'register = step("register", kind="publish", produces=[artifact("receipt")])', "L-E07",
+     "Step 'register': a publish step delivers a result and produces nothing here. Remove produces=, or give the step "
+     "the kind of the work it does."),
+    ("control", 'check = step("check", kind="control", inputs=["dataset"])', "L-E07",
+     "Step 'check': a control step steers the run and handles no data, so it takes no inputs= and no produces=."),
+)
+
+
+# Warnings the train page shows: (the lines of pipeline.py, the rule, the message `kaosctl lint` gives).
+TRAIN_WARNINGS = (
+    ('train = step("train", kind="train", walltime="12h", produces=[model("model")])', "L-W06",
+     "Step 'train' is a training step with a time limit (the default on the run form) and is not resumable: a run cut by "
+     "its time limit starts over. Add resumable=True and save checkpoints."),
+    ('train = step("train", kind="train", gpu=True, walltime="12h", resumable=False, produces=[model("model")])', "L-W01",
+     "Step 'train' has a default time limit of 12 hours and is not resumable (set not resumable). An interruption (a lost "
+     "machine, the time limit) loses all its work."),
+)
+
+
+def _lint_text(tmp: pathlib.Path, body: str):
+    """The findings for a pipeline with the line `body`, and the config and the folders a step needs."""
+    app = tmp / "mistake"
+    (app / "config").mkdir(parents=True)
+    (app / "steps").mkdir()
+    (app / "config" / "config.yaml").write_text("defaults:\n  - _self_\n  - dataset\n", encoding="utf-8")
+    (app / "config" / "dataset.yaml").write_text('dataset: "dataset-default"\n', encoding="utf-8")
+    (app / "pipeline.py").write_text("from kubecore.authoring import artifact, dataset, model, pipeline, step\n"
+                                     "with pipeline('p') as p:\n    " + body + "\n", encoding="utf-8")
+    complete(app)
+    return lint(app).findings
+
+
+def _kind_app(kind: str, tmp: pathlib.Path) -> pathlib.Path:
+    """The example app `kinds/<kind>` with an image file for every step; it must lint without an error."""
+    app = tmp / "app"
+    shutil.copytree(KINDS_EXAMPLES / kind, app)
+    complete(app)
+    report = lint(app)
+    if report.errors:
+        raise ExampleError(f"kaosctl lint finds errors in kinds/{kind}:\n{report.to_json()}")
+    return app
+
+
+def kind_examples(tmp: pathlib.Path) -> None:
+    """The minimal example of each step type: it lints without an error and its steps run. Ingest, publish and
+    control use the apps of docs/examples/flows, which the pages of the guide that need them show too."""
+    for number, flow in enumerate((flow_ingest, flow_publish, flow_control)):
+        flow(tmp / f"flow{number}")
+    from kaos_lib import checkpoint
+    data = _tree(tmp / "data", **{"a.txt": "alpha\n", "empty.txt": ""})
+    app = _kind_app("transform", tmp / "transform")
+    result, run = run_step(app, tmp / "transform" / "run", "filter", "transform", [("dataset", "filtered")],
+                           params={"filter": {"min_bytes": 1}}, inputs={"dataset": data})
+    if result["values"] != {"kept": 1} or [p.name for p in run.output("filtered").iterdir()] != ["a.txt"]:
+        raise ExampleError(f"filter handed on {result['values']}")
+    app = _kind_app("train", tmp / "train")
+    saved = os.environ.get(checkpoint.CHECKPOINT_DIR_ENV)
+    os.environ[checkpoint.CHECKPOINT_DIR_ENV] = str(tmp / "train" / "checkpoints")
+    try:
+        result, run = run_step(app, tmp / "train" / "run", "train", "train", [("model", "model")],
+                               params={"train": {"epochs": 3}}, inputs={"dataset": data})
+    finally:
+        if saved is None:
+            os.environ.pop(checkpoint.CHECKPOINT_DIR_ENV, None)
+        else:
+            os.environ[checkpoint.CHECKPOINT_DIR_ENV] = saved
+    if result["values"] != {"epochs": 3} or (run.output("model") / "weights.txt").read_text() != "trained for 3 epochs\n":
+        raise ExampleError(f"train handed on {result['values']}")
+    app = _kind_app("evaluate", tmp / "evaluate")
+    trained, trun = run_step(app, tmp / "evaluate" / "train", "train", "train", [("model", "model")])
+    result, run = run_step(app, tmp / "evaluate" / "run", "evaluate", "evaluate", [("artifact", "report")],
+                           params={"evaluate": {"threshold": 0.5}}, upstream={"train": trained["values"]},
+                           upstream_writes={"train": {"model": trun.output("model")}})
+    if result["values"] != {"score": 0.8, "passed": True} or result["writes"][0]["type"] != "artifact":
+        raise ExampleError(f"evaluate handed on {result}")
+
+
+def kind_mistakes(tmp: pathlib.Path) -> None:
+    """Each mistake of KIND_MISTAKES is an error of its rule with the sentence that the page of its type shows."""
+    for number, (kind, body, rule, sentence) in enumerate(KIND_MISTAKES):
+        found = [f for f in _lint_text(tmp / str(number), body) if f.rule == rule and sentence in f.message]
+        if not found or found[0].level != "error":
+            raise ExampleError(f"the {kind} mistake is not an error {rule} with the sentence on its page: {sentence!r}")
+        page = (HERE / "docs" / f"step-type-{kind}.md").read_text(encoding="utf-8")
+        if sentence not in page:
+            raise ExampleError(f"docs/step-type-{kind}.md does not show the sentence of kaosctl lint: {sentence!r}")
+    train = (HERE / "docs" / "step-type-train.md").read_text(encoding="utf-8")
+    for number, (body, rule, sentence) in enumerate(TRAIN_WARNINGS):
+        found = [f for f in _lint_text(tmp / f"warning{number}", body) if f.rule == rule and sentence in f.message]
+        if not found:
+            raise ExampleError(f"the train warning is not {rule} with the sentence on its page: {sentence!r}")
+        if sentence not in train:
+            raise ExampleError(f"docs/step-type-train.md does not show the sentence of kaosctl lint: {sentence!r}")
+
+
+def flow_gpus(tmp: pathlib.Path) -> None:
+    """The step of the page "GPUs on HPC (Slurm)": the app lints, and the sizes it picks follow the count it is told
+    (torch is the step's own package, so the decision is a function the test calls without it)."""
+    app = flow_app("gpus", tmp)
+    step_module = load(app, "train")
+    one, four = step_module.plan(1, 8, 64), step_module.plan(4, 32, 64)
+    if one != {"gpus": 1, "batch": 64, "workers": 8, "parallel": False} or \
+            four != {"gpus": 4, "batch": 256, "workers": 32, "parallel": True}:
+        raise ExampleError(f"the step of flows/gpus plans {one} and {four}")
+    from kaos_lib import runtime
+    shared = runtime.context({"KUBECORE_SLOT_GPUS": "1", "KUBECORE_SLOT_CPUS": "8", "KUBECORE_SLOT_SHARED": "1"}).slot
+    alone = runtime.context({"KUBECORE_SLOT_GPUS": "4"}).slot
+    if (shared.gpus, shared.shared, alone.gpus, alone.shared) != (1, True, 4, False):
+        raise ExampleError(f"the slot of a shared step and of a step alone: {shared} {alone}")
 
 
 def check_all() -> None:
@@ -425,10 +627,15 @@ def check_all() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         ledger_example(pathlib.Path(tmp))
     for flow in (flow_two_inputs, flow_skip, flow_fan_in, flow_metrics, flow_ingest, flow_publish, flow_control,
-                 packages_dockerfile):
+                 flow_conditions, flow_sweep, flow_gpus, packages_dockerfile):
         with tempfile.TemporaryDirectory() as tmp:
             flow(pathlib.Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        kind_examples(pathlib.Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        kind_mistakes(pathlib.Path(tmp))
     shared_reference()
+    rerun_pin()
     for path in sorted(EXAMPLES.rglob("*.py")):
         compile(path.read_text(encoding="utf-8"), str(path), "exec")
     for path in sorted(EXAMPLES.rglob("*.yaml")):

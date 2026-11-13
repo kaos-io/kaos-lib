@@ -1,0 +1,2 @@
+registry:
+  name: my-model # where publish delivers the model; empty: publish skips itself

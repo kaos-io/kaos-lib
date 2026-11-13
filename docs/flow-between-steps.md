@@ -21,7 +21,7 @@ The first step ends with the values. The second names the first in `needs=` and 
 ```
 
 **The run records** the values in the result of the first step. A value is text, a number, a boolean, a list or an
-object. The whole result has a size limit ([the limits](must-and-can.md#the-limits)): bigger things go in a file
+object. The whole result has a size limit ([the limits](contract.md#the-limits)): bigger things go in a file
 ([next scenario](#files-to-the-next-step)) or in MLflow ([See your results](see-your-results.md)).
 
 ## Files to the next step
@@ -49,7 +49,7 @@ Declare an artifact in `produces=`, write into its folder, and read the folder b
 
 **You want** a step to run only when the run form asks for it, and the steps after it to work either way.
 
-`when=` holds the name of a run-form field, compared with a value: `when="extra-mode != off"`. The field is named
+`when=` holds the name of a run-form field, compared with a value: `when="extra-mode != off"` (or a value of a needed step: `"evaluate.passed == true"`, see [Conditions and skipping](conditions-and-skipping.md)). The field is named
 as in [Settings](settings.md): `extra.mode` is the field `extra-mode`. Join comparisons with `and` or `or` (`and` is
 taken first; no parentheses), and put a value with spaces in quotes. A step that is skipped leaves no result and no
 files. The step after it asks for them with `optional=True` and gets `None` when they are not there. Without
@@ -79,7 +79,9 @@ files. The step after it asks for them with `optional=True` and gets `None` when
 --8<-- "examples/flows/skip/steps/final/app/entry.py"
 ```
 
-[Test your steps](test-your-steps.md#a-step-that-copes-with-a-skipped-step) runs `final` both ways.
+[Test your steps](test-your-steps.md#a-step-that-copes-with-a-skipped-step) runs `final` both ways. A step can also
+leave itself out while it runs, with `step.skip("the reason")`, and `when=` can test a value an earlier step handed on:
+[Conditions and skipping](conditions-and-skipping.md).
 
 **The run records** nothing for `extra` when it is skipped, and its result and files when it ran.
 `optional=True` does not make a declared input optional: an input named in `inputs=` is always there.
@@ -89,7 +91,7 @@ files. The step after it asks for them with `optional=True` and gets `None` when
 **You want** one step to gather the work of several others, for example to keep the better of two models.
 
 `needs=[small, large]` gives `pick-best` the result of both, and lets it read the model each one made. A step may need
-at most ten steps ([limits](must-and-can.md#the-limits)).
+at most ten steps ([limits](contract.md#the-limits)).
 
 ```python title="pipeline.py"
 --8<-- "examples/flows/fan-in/pipeline.py"

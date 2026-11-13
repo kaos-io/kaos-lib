@@ -1,0 +1,2 @@
+filter:
+  min_bytes: 1 # the smallest file to keep

@@ -49,7 +49,7 @@ kaosctl login
 
 What you are looking at in `pipeline.py`, one line for each keyword of `step(...)`:
 
-- `kind=` says what the step does, one of six kinds, each with its own contract ([Step kinds](step-kinds.md)).
+- `kind=` says what the step does, one of six kinds, each with its own contract ([Step types](step-types.md)).
 - `reads=` names the sections of `config/` the step gets as settings ([page 3](settings.md)).
 - `inputs=` names the datasets the step reads ([page 4](read-data.md)).
 - `needs=` names the steps that run before this one and whose results it can read ([page 5](pass-things-on.md)).

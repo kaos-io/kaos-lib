@@ -9,30 +9,30 @@ import ast
 import re
 from typing import Iterable
 
-from .constants import (COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, NAME_MAX,
+from .constants import (LONGEST_MINUTES, COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, MIN_DATASET_NAME, NAME_MAX,
                         OLD_APP_NOTICE, OLD_ENTRY_ARGUMENT, PIPELINE_FILE, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
-                        TIME_PATTERN)
+                        STEPS_DIR, TIME_PATTERN)
 from . import when_text
 from .model import ERROR, Span
 from .pipeline_reader import UNKNOWN, literal
-from .project_reader import platform_group
+from .project_reader import platform_group, step_folder
 from .registry import (DECLARED, NOT_VERIFIED, OFF, REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, STATIC,
                        VERIFIED, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes,
-                       rule, runs_needed)
+                       rule, runs_needed, step_label)
 
 _STEP_NAME, _TIME = re.compile(STEP_NAME_PATTERN), re.compile(TIME_PATTERN)
 _EVERY = re.compile(r"^([0-9]+)([mh]?)$")
 _DEPENDS_TOKEN = re.compile(r"([A-Za-z0-9_][A-Za-z0-9_-]*)(?:\.(?:Succeeded|Failed|Skipped|Omitted|Errored|Daemoned))?")
 
 
-def _step_label(step) -> str:
-    return f"Step '{step.name}'" if isinstance(step.name, str) else "A step"
+_step_label = step_label
 
 
 @rule("L-E01", "TooLongNotResumable", ERROR,
-      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set "
-      "walltime to the longest run or less.", requires=(REQUIRES_HPC,))
+      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set the "
+      "default walltime= to the longest run or less (the run form's <step>-walltime starts with it).",
+      requires=(REQUIRES_HPC,))
 def too_long_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     lane = ctx.catalogue.hpc.lane_max_minutes
     for step in gpu_steps(ctx):
@@ -43,13 +43,14 @@ def too_long_not_resumable(ctx: LintContext) -> Iterable[Hit]:
         how = "is set not resumable" if state == OFF else "is not declared resumable and the platform recorded " \
             f"that its last continuation did not resume ({ctx.evidence(step).reason or 'no reason given'})"
         yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                  f"{_step_label(step)} asks for a time limit of {pretty_minutes(limit)}, but the longest run on "
+                  f"{_step_label(step)} has a default time limit of {pretty_minutes(limit)}, but the longest run on "
                   f"the HPC (Slurm) site is {pretty_minutes(lane)}, and the step {how}, so it would be cut off. "
                   f"The platform refuses it at submit.")
 
 
 @rule("L-E02", "TooLongBeyondContinuations", ERROR,
-      "Shorten walltime, or split the work into steps that each fit within the runs allowed.",
+      "Shorten the default walltime= (the person who starts the run can still set a limit on the run form, and the "
+      "same rule applies), or split the work into steps that each fit within the runs allowed.",
       requires=(REQUIRES_HPC, REQUIRES_CONTINUATIONS))
 def too_long_beyond_continuations(ctx: LintContext) -> Iterable[Hit]:
     lane, cap = ctx.catalogue.hpc.lane_max_minutes, ctx.catalogue.max_continuations
@@ -60,7 +61,7 @@ def too_long_beyond_continuations(ctx: LintContext) -> Iterable[Hit]:
         runs = runs_needed(limit, lane)
         if runs > cap + 1:
             yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"{_step_label(step)} is resumable, but a time limit of {pretty_minutes(limit)} needs {runs} "
+                      f"{_step_label(step)} is resumable, but its default time limit of {pretty_minutes(limit)} needs {runs} "
                       f"runs of at most {pretty_minutes(lane)}, and a step continues at most {cap} times "
                       f"({cap + 1} runs in all, {pretty_minutes(lane * (cap + 1))}). The platform refuses it.")
 
@@ -243,24 +244,53 @@ def _unknown_arguments(ctx, step) -> Iterable[Hit]:
         yield Hit(ctx.file, ctx.span(step.call), "step() is called without a name.", "Give the step a name.")
 
 
+def _needed_steps(ctx, step) -> set:
+    """The names of the steps in this step's needs=[...] that can be read: step variables of the same pipeline."""
+    node = step.node("needs")
+    names = {el.id for el in getattr(node, "elts", ()) if isinstance(el, ast.Name)}
+    return {s.name for s in ctx.pipeline.steps if s.var in names and isinstance(s.name, str)}
+
+
 def _when_argument(ctx, step) -> Iterable[Hit]:
     text = step.value("when", None)
     if text is UNKNOWN or text is None:
         return
     node, label = ctx.span(step.node("when")), _step_label(step)
     if when_text.uses_workflow_syntax(text):
-        yield Hit(ctx.file, node, f"{label}: when= is written with the name of a run-form field, for example "
-                  f"{when_text.EXAMPLE}. Write the field's name instead of {{{{workflow.parameters.<field>}}}}.",
-                  f"Write the field's name: {when_text.EXAMPLE}.")
+        yield Hit(ctx.file, node, f"{label}: when= is written with plain names, not with {{{{...}}}}. "
+                  f"{when_text.ALLOWED}", f"Write the name: {when_text.EXAMPLE}.")
+        return
+    if when_text.has_control_character(text):
+        yield Hit(ctx.file, node, f"{label}: when={text!r} holds a control character (a line break, a tab). Write the "
+                  f"condition on one line.", "Write the condition on one line.")
         return
     named = when_text.fields(text)
     if named is None:
-        yield Hit(ctx.file, node, f"{label}: when={text!r} is not a run-form field compared with a value, for "
-                  f"example {when_text.EXAMPLE}. Join comparisons with and / or; no parentheses.",
-                  f"Write it as a field name, ==, or !=, and a value: {when_text.EXAMPLE}.")
+        yield Hit(ctx.file, node, f"{label}: when={text!r} is not a condition the platform can read. "
+                  f"{when_text.ALLOWED}",
+                  f"Write it as a name, == or !=, and a value: {when_text.FORMS}.")
         return
-    form = ctx.run_form
+    form, needed = ctx.run_form, _needed_steps(ctx, step)
+    declared = {s.name for s in ctx.pipeline.steps if isinstance(s.name, str)}
     for field in named:
+        head, dot, key = field.partition(".")
+        if dot and head in needed:
+            if not when_text.VALUE_KEY.match(key):
+                yield Hit(ctx.file, node, f"{label}: when= names the value {key!r} of step {head!r}, which is not a "
+                          f"name step.result() could have been given (letters, digits and _).",
+                          f"Write {head}.<value> with the keyword you gave step.result(<value>=...).")
+                return
+            for compared, _, value in when_text.comparisons(text):
+                problem = when_text.value_problem(value) if compared == field else ""
+                if problem:
+                    yield Hit(ctx.file, node, f"{label}: when= compares {head}.{key} with {value!r}, which cannot be "
+                              f"matched reliably: {problem}.", "Write the text the way the message says.")
+                    return
+            continue
+        if dot and head in declared:
+            yield Hit(ctx.file, node, f"{label}: when= reads a value of step {head!r}, which this step does not need.",
+                      f"Add {head} to needs=[...] of this step: a step sees the result of the steps in its needs= only.")
+            return
         if form is None or field in form.fields or (
                 form.schema and any(field == s or field.startswith(s + "-") for s in form.sections)):
             continue
@@ -270,12 +300,23 @@ def _when_argument(ctx, step) -> Iterable[Hit]:
         return
 
 
+def _time_sentence(step, field, value) -> str:
+    """What compose says about a walltime or a checkpoint interval the run form would refuse (kubecore/run_settings.py
+    time_problem), for the field of this step."""
+    name = step.name if isinstance(step.name, str) else "<step>"
+    return (f"{name}-{field} is {str(value)!r}. Write minutes or hours, for example 90, 90m or 12h: at least one "
+            f"minute, at most 30 days, no other unit.")
+
+
 def _time_arguments(ctx, step) -> Iterable[Hit]:
     limit, resumable = step.value("walltime", None), step.value("resumable", None)
     if limit is not UNKNOWN and limit is not None:
         if not (isinstance(limit, str) and _TIME.match(limit)):
             yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: "
-                      f"walltime={limit!r} must be minutes or hours as text, like '90m', '12h' or '720'.")
+                      f"walltime={limit!r} must be minutes or hours as text, like '90m', '12h' or '720'. It is the default of "
+                      f"the run form's time limit for the step.")
+        elif not 0 < parse_minutes(limit) <= LONGEST_MINUTES:    # the run form would refuse its default: compose's sentence
+            yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: {_time_sentence(step, 'walltime', limit)}")
     if resumable is UNKNOWN or resumable is None or resumable is False:
         return
     ok = resumable is True or (isinstance(resumable, str) and _TIME.match(resumable)
@@ -297,6 +338,8 @@ def _every_arguments(ctx, step) -> Iterable[Hit]:
         valid = (m and int(m.group(1)) != 0) or (zero_ok and not isinstance(v, bool) and str(v).strip() == "0")
         if not valid:
             yield Hit(ctx.file, ctx.span(step.node(key)), f"{_step_label(step)}: {key}={v!r} must be {what}.")
+        elif key == "checkpoint_every" and m and not 0 < int(m.group(1)) * (60 if m.group(2) == "h" else 1) <= LONGEST_MINUTES:
+            yield Hit(ctx.file, ctx.span(step.node(key)), f"{_step_label(step)}: {_time_sentence(step, 'checkpoint-every', v)}")
 
 
 @rule("L-E07", "StepDeclaration", ERROR,
@@ -310,9 +353,12 @@ def step_declaration(ctx: LintContext) -> Iterable[Hit]:
             if step.opaque:
                 continue
             yield from _step_name(ctx, step)
+            yield from _folder(ctx, step)
             yield from _kind(ctx, step, any_kind)
             inputs = yield from _inputs(ctx, step)
             produced = yield from _produces(ctx, step)
+            yield from _input_is_output(ctx, step, inputs, produced)
+            yield from _output_of_needed_step(ctx, step, produced, made)
             yield from _control_handles_no_data(ctx, step, inputs, produced)
             yield from _kind_contract(ctx, step)
             yield from _same_name_twice(ctx, step, inputs, made)
@@ -339,6 +385,42 @@ def _step_name(ctx, step) -> Iterable[Hit]:
                   f"'<step>{RESERVED_STEP_SUFFIX}'.", "Rename the step and its steps/<folder>.")
 
 
+def _folder(ctx, step) -> Iterable[Hit]:
+    """Every step has its folder steps/<name with underscores>/ (checked in a repository that has a steps/ folder)."""
+    name = step.name
+    if not isinstance(name, str) or not (ctx.root / STEPS_DIR).is_dir() or (ctx.root / step_folder(name)).is_dir():
+        return
+    folder = step_folder(name)
+    hyphen = f"{STEPS_DIR}/{name}"
+    found = f" There is a folder {hyphen}/: rename it to {folder}/." if (ctx.root / hyphen).is_dir() else ""
+    yield Hit(ctx.file, ctx.span(step.node("name")),
+              f"Step '{name}' has no folder {folder}/. The folder of a step is steps/ plus the step's name with every "
+              f"hyphen written as an underscore.{found}",
+              f"Create {folder}/ with a Dockerfile and app/entry.py.")
+
+
+def _input_is_output(ctx, step, inputs, produced) -> Iterable[Hit]:
+    """The step reads an input and writes an output by name, into folders of that name: one name is one thing."""
+    for name in sorted({n for _, n in produced} & set(inputs)):
+        yield Hit(ctx.file, ctx.span(step.node("produces")), f"{_step_label(step)}: '{name}' is both an input "
+                  f"(inputs=) and one of its own outputs (produces=): the step reads and writes by name, so the two "
+                  f"must differ.", f"Rename the config value (for example 'previous-{name}', in inputs= and in "
+                  f"config/) or the produced name.")
+
+
+def _output_of_needed_step(ctx, step, produced, made) -> Iterable[Hit]:
+    """A step reads what a needed step wrote by name, and writes its own outputs by name: one name is one thing."""
+    needs = step.node("needs")
+    own = {n for _, n in produced}
+    for el in needs.elts if isinstance(needs, (ast.List, ast.Tuple)) else ():
+        for _, name in made.get(getattr(el, "id", None), ()):
+            if name in own:
+                yield Hit(ctx.file, ctx.span(step.node("produces")), f"{_step_label(step)}: {name} is both something "
+                          f"the step it needs, {el.id!r}, produces and one of its own outputs (produces=): the step "
+                          f"reads and writes by name, so the two must differ.", "Rename the produced name of one of "
+                          "the two steps.")
+
+
 def _kind(ctx, step, any_kind) -> Iterable[Hit]:
     kinds = ", ".join(STEP_KINDS)
     if "kind" not in step.args:
@@ -354,8 +436,8 @@ def _kind(ctx, step, any_kind) -> Iterable[Hit]:
 
 def _control_handles_no_data(ctx, step, inputs, produced) -> Iterable[Hit]:
     if step.value("kind") == "control" and (inputs or produced):
-        yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)} is a control step: it steers the run "
-                  "and handles no data, so it takes no inputs= and no produces=.",
+        yield Hit(ctx.file, ctx.span(step.node("kind")), f"{_step_label(step)}: a control step steers the run and "
+                  "handles no data, so it takes no inputs= and no produces=.",
                   "Give the step the kind of the work it does: " + ", ".join(k for k in STEP_KINDS if k != "control"))
 
 
@@ -469,6 +551,10 @@ def _produces(ctx, step):
         if not isinstance(name, str) or not _NAME.match(name) or name.startswith(RESERVED_NAME_PREFIX):
             yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: {name!r} is not a name for what a step "
                       f"produces. " + _NAMES, "Rename it.")
+        elif kind == "dataset" and len(name) < MIN_DATASET_NAME:
+            yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)}: the dataset name {name!r} is too short. A dataset "
+                      f"name has {MIN_DATASET_NAME} to {NAME_MAX} characters: it is stored as dataset-<app>-<name>.",
+                      "Give the dataset a longer name, for example dataset(\"embeddings\").")
         elif name in seen:
             yield Hit(ctx.file, ctx.span(el), f"{_step_label(step)} produces '{name}' twice.",
                       "Give each thing the step produces its own name.")

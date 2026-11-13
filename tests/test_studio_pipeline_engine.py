@@ -102,8 +102,21 @@ def test_a_wheel_that_cannot_be_checked_is_refused(text, said):
         pe.resolve_pin(text, None, {})
 
 
+def test_a_release_that_names_an_engine_gives_it_when_nothing_else_does(monkeypatch):
+    from kaos_lib import support
+    named = {"wheel": URL, "sha256": "a" * 64, "version": "1.2.3"}
+    monkeypatch.setattr(support, "packaged", lambda: {"version": "0.5.0", "engine": named})
+    pin = pe.resolve_pin(None, None, {})
+    assert (pin.url, pin.sha256, pin.version, pin.source) == (URL, "a" * 64, "1.2.3", "this kaos-lib release")
+    assert pe.resolve_pin(URL + "#sha256=" + "b" * 64, None, {}).sha256 == "b" * 64, "a flag still wins"
+    monkeypatch.setattr(support, "packaged", lambda: {"version": "0.5.0", "engine": {"wheel": URL, "sha256": "x"}})
+    with pytest.raises(KaosLibError, match="this kaos-lib release: the engine wheel needs its SHA-256"):
+        pe.resolve_pin(None, None, {})
+
+
 def test_no_engine_says_how_to_give_one(tmp_path):
-    with pytest.raises(KaosLibError, match="no pipeline engine was given.*--context"):
+    with pytest.raises(KaosLibError, match="no pipeline engine was given. This kaos-lib release names no engine of its own.*"
+                                           "--engine-wheel.*pull request renders the pipeline"):
         pe.resolve_pin(None, None, {})
     ctx = tmp_path / "c.yaml"
     ctx.write_text("kaosLib:\n  spec: kaos-lib==0.4.0\n")

@@ -20,7 +20,7 @@ makes.
 ```
 
 **The run records** a read named `dataset`: the repository, the version that was asked for (`v2`, `latest`, ...) and
-the exact version that was read ([the result](datasets-versions-hashes.md#what-a-run-records)). The step may open the
+the exact version that was read ([the result](data-reads.md#what-a-run-records)). The step may open the
 folder or not: a declared input is recorded either way.
 
 ## A step with two inputs
@@ -49,7 +49,7 @@ setting, so each is a field on the run form with its own version.
 ```
 
 **The run records** two reads, `before` and `after`, in the order of `inputs=`, each with its own exact version. A
-step may read at most 16 datasets by name ([limits](must-and-can.md#the-limits)).
+step may read at most 16 datasets by name ([limits](contract.md#the-limits)).
 
 ## Make a dataset and read it in the same run
 
@@ -102,32 +102,18 @@ first pipeline writes it. The second only reads.
 
 ## Move `latest`
 
-**You want** `latest` to point to the version a run made. A run that does not ask still makes its version,
-and leaves `latest` where it was, so an experiment never changes what other pipelines read.
+**You want** `latest` to point to the version a run made. A step only makes its version. `latest` moves once, at the end of
+the run, and only when the whole run went well.
 
-The run form has a choice for each dataset the pipeline makes: `promote-<name>`, with the name from `produces=`
-(`promote-clean` for `dataset("clean")`). It offers `false` and `true`, and the default is `false`. Set it to `true` for
-the run that should move `latest`.
+You write nothing for it. The platform adds one field `promote-<name>` to the run form for every `dataset("<name>")` in
+`produces=` (`promote-clean` for `dataset("clean")`). The person who starts the run picks `true` or `false`; the default is
+`false`. A run left at `false` still makes its version and leaves `latest` where it was, so an experiment never changes what
+other pipelines read.
 
-| the run | the version it made | `latest` |
-|---|---|---|
-| has `promote-clean` set to `true` | new | moves to it |
-| leaves `promote-clean` at `false` | new | stays |
-| writes the same files as `latest` already holds | none: the existing version is reused | unchanged |
+**The run records** the version the step made, in the step's result. Later steps of the run read that version, whether or
+not `latest` moves.
 
-A run uploads only what differs from `latest` and from the newest version an earlier run sealed: a run that does not
-promote does not upload the same files again on every run (it still makes its own version).
+What happens in each case is in [When `latest` moves](data-writes.md#when-latest-moves): when two datasets are set to `true`, when
+two runs ask at once, and when the end of a run is cut short.
 
-**The run records** the version of the write. With a promotion that is the version `latest` now points to; without
-it, the version that was made. Later steps read that version either way.
-
-### When two runs ask at once {#when-two-runs-write-at-once}
-
-A dataset has one `latest`. When two runs ask to move it at the same time, the second finds that `latest` has moved,
-makes its version again on top of the new one, and then moves `latest`. It tries up to three times. So `latest` is always
-the complete version of one run, never a mix of two. If it still cannot, the step fails with
-`changed 3 times while this step was promoting it. Another run is writing the same dataset`, and the version it made is
-kept, but `latest` does not point to it. Only one pipeline writes a dataset, so this is rare: it needs two runs of the
-same pipeline.
-
-Next: [Datasets, versions and hashes](datasets-versions-hashes.md).
+Next: [The data contract](data-contract.md).

@@ -24,6 +24,13 @@ exclude_docs: |
   generated/install.md
   design/
   examples/
+# The old pages stay as short pages that say where their content moved, so that a link to them still works.
+not_in_nav: |
+  step-kinds.md
+  must-and-can.md
+  principles.md
+  datasets-versions-hashes.md
+
 hooks:
   - docs/hooks.py
   - docs_check.py   # words, removed names, links: a finding fails the build
@@ -105,26 +112,42 @@ nav:
       - 9. HPC (Slurm): hpc.md
       - 10. Try it locally: try-it-locally.md
       - 11. A real pipeline: a-real-pipeline.md
-  - How it works:
-      - Principles: principles.md
-      - What you must and what you can: must-and-can.md
-      - Step kinds: step-kinds.md
-      - Datasets, versions and hashes: datasets-versions-hashes.md
-      - Glossary: glossary.md
+  - The contract:
+      - Your contract with the platform: contract.md
+      - Step types:
+          - Overview and which type is my step: step-types.md
+          - ingest: step-type-ingest.md
+          - transform: step-type-transform.md
+          - train: step-type-train.md
+          - evaluate: step-type-evaluate.md
+          - publish: step-type-publish.md
+          - control: step-type-control.md
+      - The data contract:
+          - Datasets, names and versions: data-contract.md
+          - What a run reads: data-reads.md
+          - What a run writes: data-writes.md
+          - What is kept, and for how long: data-retention.md
   - How to:
       - Data flow scenarios: data-flow.md
       - "Datasets": flow-datasets.md
       - "Between steps": flow-between-steps.md
       - "Train and resume": flow-training.md
+      - Conditions and skipping: conditions-and-skipping.md
+      - Sweeps: sweeps.md
+      - Several pipelines: several-pipelines.md
+      - Re-running: rerun.md
       - Test your steps: test-your-steps.md
       - See your results: see-your-results.md
       - Add packages to a step: add-packages.md
+      - GPUs on HPC (Slurm): gpus-on-hpc.md
       - Bring data in: bring-data-in.md
       - Share a dataset: share-a-dataset.md
       - Make a dataset layout: make-a-layout.md
+      - Clean up: clean-up.md
       - When something goes wrong: when-something-goes-wrong.md
   - Reference:
       - Cheat sheet: cheat-sheet.md
+      - Glossary: glossary.md
       - Reference: reference.md
       - Commands: generated/cli.md
       - Python API: api.md
@@ -146,9 +169,11 @@ nav:
           - L-W04: lint/L-W04.md
           - L-W05: lint/L-W05.md
           - L-W06: lint/L-W06.md
+          - L-W07: lint/L-W07.md
           - L-I01: lint/L-I01.md
           - L-I02: lint/L-I02.md
           - L-I03: lint/L-I03.md
+          - L-I04: lint/L-I04.md
           - L-D01: lint/L-D01.md
           - L-D02: lint/L-D02.md
           - L-D03: lint/L-D03.md

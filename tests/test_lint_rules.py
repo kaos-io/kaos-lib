@@ -5,7 +5,7 @@ import pathlib
 import pytest
 
 from kaos_lib.lint import ALL_RULES, lint_project
-from lint_corpus import CASES, write_repo
+from lint_corpus import CASES, PLAIN_STEP, repo, write_repo
 
 DOCS = pathlib.Path(__file__).resolve().parent.parent / "docs" / "lint"
 LEVELS = {"E": "error", "W": "warning", "I": "info"}
@@ -158,3 +158,131 @@ def test_w03_leaves_the_default_version_in_config_alone(tmp_path, config):
 @pytest.mark.parametrize("kw", ['walltime="2h"', "resumable=True", 'checkpoint_every="20m"', 'idle_timeout="40m"'])
 def test_a_step_without_a_gpu_may_declare_what_the_engine_accepts_for_every_step(tmp_path, kw):
     assert messages(tmp_path, f'    a = step("a", kind="evaluate", {kw})\n', rule="L-E06") == []
+
+
+# --- authoring flows: folders, names, one-name rule, conditions on a step's value, loops ------------------------
+
+def test_a_dataset_name_under_three_characters_is_refused_before_render(tmp_path):
+    out = messages(tmp_path, '    a = step("a", kind="ingest", produces=[dataset("x")])\n', {"a": ""}, rule="L-E07")
+    assert any("the dataset name 'x' is too short. A dataset name has 3 to 40 characters" in m for m in out), out
+
+
+def test_an_input_that_is_also_an_output_of_the_same_step_is_refused_with_the_fix(tmp_path):
+    body = '    a = step("a", kind="transform", inputs=["dataset"], produces=[dataset("dataset")])\n'
+    found = [f for f in run(tmp_path, repo(body, {"a": ""}), None).findings if f.rule == "L-E07"]
+    assert any("'dataset' is both an input (inputs=) and one of its own outputs (produces=)" in f.message
+               and "previous-dataset" in f.fix for f in found), found
+
+
+def test_a_step_without_its_folder_names_the_folder_and_the_underscore_rule(tmp_path):
+    found = [f for f in run(tmp_path, repo('    a = step("model-eval", kind="evaluate")\n', {"other": ""}), None).findings
+             if f.rule == "L-E07" and "folder" in f.message]
+    assert found and "has no folder steps/model_eval/." in found[0].message
+    assert "every hyphen written as an underscore" in found[0].message and "Create steps/model_eval/" in found[0].fix
+
+
+def test_a_hyphen_folder_is_named_in_the_message(tmp_path):
+    files = repo('    a = step("model-eval", kind="evaluate")\n', {"other": ""})
+    files["steps/model-eval/Dockerfile"] = "FROM scratch\n"
+    found = [f for f in run(tmp_path, files, None).findings if f.rule == "L-E07" and "folder" in f.message]
+    assert found and "There is a folder steps/model-eval/: rename it to steps/model_eval/." in found[0].message
+
+
+def test_a_step_with_its_folder_and_a_repository_without_steps_are_not_judged(tmp_path):
+    ok = repo('    a = step("model-eval", kind="evaluate")\n', {"model-eval": ""})
+    assert not [f for f in run(tmp_path / "a", ok, None).findings if "no folder" in f.message]
+    bare = {k: v for k, v in repo('    a = step("model-eval", kind="evaluate")\n').items() if not k.startswith("steps/")}
+    assert not [f for f in run(tmp_path / "b", bare, None).findings if "no folder" in f.message]
+
+
+def test_a_config_file_with_several_top_level_keys_gives_each_one_as_a_section(tmp_path):
+    config = {"config/config.yaml": "defaults:\n  - scenarios\n", "config/scenarios.yaml": "source:\n  a: 1\ntrain:\n  b: 2\n"}
+    body = '    a = step("a", kind="evaluate", reads=["source", "train"])\n'
+    assert not messages(tmp_path / "a", body, {"a": ""}, rule="L-E05", config=config)
+    assert any("does not exist in config/" in m for m in
+               messages(tmp_path / "b", '    a = step("a", kind="evaluate", reads=["nope"])\n', {"a": ""}, rule="L-E05", config=config))
+
+
+def test_a_train_step_that_declares_checkpoint_every_is_not_told_it_is_not_resumable(tmp_path):
+    body = '    t = step("work", kind="train", walltime="12h", checkpoint_every="10m", produces=[model("m")])\n'
+    assert not messages(tmp_path, body, {"work": PLAIN_STEP}, rule="L-W06")
+
+
+def test_a_step_built_in_a_loop_is_named_by_its_line_not_by_a_python_object(tmp_path):
+    out = messages(tmp_path, '    for i in range(2):\n        step(f"t-{i}", kind="evaluate", gpu=True)\n', rule="L-I01")
+    assert out and all("The step built at line 5 has its time limit chosen on the run form" in m and "object" not in m for m in out), out
+
+
+@pytest.mark.parametrize("when,expect", [
+    ("evaluate.passed == true", None),
+    ("evaluate.passed == true and experiment-name != off", None),
+    ("score > 0.5", "is not a condition the platform can read. A condition compares one name with a text, with == or != and nothing else"),
+    ("evaluate.pass-rate == 1", "is not a name step.result() could have been given"),
+    ("other.passed == true", "reads a value of step 'other', which this step does not need"),
+])
+def test_when_on_a_value_of_a_needed_step(tmp_path, when, expect):
+    body = (f'    e = step("evaluate", kind="evaluate")\n    o = step("other", kind="evaluate")\n'
+            f'    p = step("publish", kind="publish", needs=[e], when="{when}")\n')
+    out = messages(tmp_path, body, {"evaluate": "", "other": "", "publish": ""}, rule="L-E06") \
+        + messages(tmp_path / "x", body, {"evaluate": "", "other": "", "publish": ""}, rule="L-E07")
+    if expect is None:
+        assert not [m for m in out if "when" in m], out
+    else:
+        assert any(expect in m for m in out), out
+
+
+# --- a value is compared exactly; a line break in when=; one name for one thing across needed steps ----------------
+
+def when_body(condition):
+    return ('    e = step("evaluate", kind="evaluate")\n'
+            '    p = step("publish", kind="publish", needs=[e], when="' + condition + '")\n')
+
+
+@pytest.mark.parametrize("written, said", [
+    ("1e400", "too large"), (".5", "looks like a number"), ("+1", "looks like a number"), ("01", "looks like a number"),
+    ("5.", "looks like a number"), ("True", "write true in lowercase"), ("NULL", "write null in lowercase"),
+    ("9007199254740993", "an integer above 9007199254740992"),
+])
+def test_a_text_compared_with_a_steps_value_that_cannot_be_matched_reliably_is_refused(tmp_path, written, said):
+    out = messages(tmp_path, when_body(f"evaluate.rows == '{written}'"), {"evaluate": "", "publish": ""}, rule="L-E06")
+    assert any("cannot be matched reliably" in m and said in m for m in out), out
+
+
+@pytest.mark.parametrize("written", ["1000000", "1e6", "1.0", "0.5", "-3", "1e-5", "true", "false", "abc", "9007199254740992"])
+def test_a_text_that_can_be_matched_is_accepted(tmp_path, written):
+    out = messages(tmp_path, when_body(f"evaluate.rows != '{written}'"), {"evaluate": "", "publish": ""}, rule="L-E06")
+    assert not [m for m in out if "when" in m], out
+
+
+def test_a_line_break_in_when_is_refused(tmp_path):
+    body = '    p = step("publish", kind="publish", when="experiment-name == a\\nand experiment-name == b")\n'
+    out = messages(tmp_path, body, {"publish": ""}, rule="L-E06")
+    assert any("holds a control character" in m for m in out), out
+
+
+def test_a_step_that_writes_a_name_a_needed_step_writes_is_refused(tmp_path):
+    body = ('    a = step("first", kind="transform", produces=[artifact("report")])\n'
+            '    b = step("second", kind="transform", needs=[a], produces=[artifact("report")])\n')
+    out = messages(tmp_path, body, {"first": "", "second": ""}, rule="L-E07")
+    assert any("report is both something the step it needs, 'a', produces and one of its own outputs (produces=)" in m
+               for m in out), out
+
+
+@pytest.mark.parametrize("walltime", ["721h", "43201", "43201m", "0m", "0"])
+def test_a_walltime_the_form_would_refuse_is_refused_by_lint_with_composes_sentence(tmp_path, walltime):
+    body = f'    a = step("train", kind="evaluate", walltime="{walltime}")\n'
+    out = messages(tmp_path, body, {"train": ""}, rule="L-E06")
+    assert any(f"train-walltime is '{walltime}'. Write minutes or hours, for example 90, 90m or 12h: at least one minute, "
+               "at most 30 days, no other unit." in m for m in out), out
+
+
+@pytest.mark.parametrize("walltime", ["720h", "43200", "1m"])
+def test_a_walltime_up_to_thirty_days_is_accepted_by_lint(tmp_path, walltime):
+    body = f'    a = step("train", kind="evaluate", walltime="{walltime}")\n'
+    assert not [m for m in messages(tmp_path, body, {"train": ""}, rule="L-E06") if "walltime" in m]
+
+
+def test_a_checkpoint_interval_over_thirty_days_is_refused_by_lint(tmp_path):
+    body = '    a = step("train", kind="evaluate", checkpoint_every="721h")\n'
+    out = messages(tmp_path, body, {"train": ""}, rule="L-E06")
+    assert any("train-checkpoint-every is '721h'. Write minutes or hours" in m for m in out), out

@@ -42,6 +42,11 @@ Give an earlier step the value `None`: it did not run. The step must work with a
 --8<-- "examples/flows/skip/step_tests/test_final.py:15:40"
 ```
 
+A step that was skipped by `step.skip()` has a reason. Give it with `upstream_skipped={"evaluate": "the reason"}`: the
+step then finds `step.skipped("evaluate")` set. A step that ends itself with `step.skip(...)` raises `SystemExit` with
+code 0: call it inside `pytest.raises(SystemExit)`, and read `run.result` for `{"status": "skipped", "reason": ...}`
+([Conditions and skipping](conditions-and-skipping.md)).
+
 ## A step that stops and continues
 
 Ask the step to stop after the second pass, check that it ended with exit code 85, and run it again with the same

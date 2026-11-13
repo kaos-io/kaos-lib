@@ -15,4 +15,4 @@ shows the same test among the others.
 
 **The run records** a read of `clean`, and a write of type `model` named `model`. A stopped attempt records nothing: only
 the attempt that ends with `step.result()` makes the result. What a retry does with what it wrote is in
-[Datasets, versions and hashes](datasets-versions-hashes.md#when-a-step-is-run-again).
+[What a run writes](data-writes.md#when-a-step-is-run-again).

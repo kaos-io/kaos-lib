@@ -5,17 +5,18 @@ the heuristic ones (L-W04) say they are heuristics.
 """
 from __future__ import annotations
 
+import ast
 from typing import Iterable
 
 from .constants import LONG_GPU_STEP_MINUTES
 from .model import WARNING
 from .pipeline_reader import UNKNOWN
-from .registry import (DECLARED, NOT_VERIFIED, OFF, UNKNOWN_STATE, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule)
+from .registry import (DECLARED, NOT_VERIFIED, OFF, UNKNOWN_STATE, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule, step_label)
 
 
 @rule("L-W01", "LongGpuStepNotResumable", WARNING,
-      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten "
-      "walltime.")
+      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten the "
+      "default walltime= (the run form's <step>-walltime starts with it).")
 def long_gpu_step_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     hpc = ctx.catalogue.hpc
     for step in gpu_steps(ctx):
@@ -25,7 +26,7 @@ def long_gpu_step_not_resumable(ctx: LintContext) -> Iterable[Hit]:
         if hpc is not None and limit > hpc.lane_max_minutes:
             continue   # L-E01 reports it as an error
         yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                  f"Step '{step.name}' runs up to {pretty_minutes(limit)} and is not resumable "
+                  f"Step '{step.name}' has a default time limit of {pretty_minutes(limit)} and is not resumable "
                   f"({'set not resumable' if ctx.resumable(step) == OFF else 'the platform recorded that its last continuation did not resume'}). "
                   f"An interruption (a lost machine, the time limit) loses all its work.")
 
@@ -98,12 +99,30 @@ def declared_resumable_did_not_resume(ctx: LintContext) -> Iterable[Hit]:
 
 @rule("L-W06", "TrainTimeLimitNotResumable", WARNING,
       "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its "
-      "time limit then continues instead of starting over (see 'Long runs on HPC (Slurm)' in the guide).")
+      "time limit then continues instead of starting over (see the page 'Long jobs' of the guide).")
 def train_time_limit_not_resumable(ctx: LintContext) -> Iterable[Hit]:
     for step in ctx.pipeline.steps:
         if step.opaque or step.value("kind", None) != "train" or step.value("walltime", None) in (None, UNKNOWN):
             continue
+        if "checkpoint_every" in step.args:     # the step says how often its checkpoints are copied: it has them
+            continue
         if step.value("resumable", None) is None and ctx.resumable(step) == UNKNOWN_STATE:
             yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"Step '{step.name}' is a training step with a time limit and is not resumable: a run cut by "
-                      f"its time limit starts over. Add resumable=True and save checkpoints.")
+                      f"Step '{step.name}' is a training step with a time limit (the default on the run form) and is "
+                      f"not resumable: a run cut by its time limit starts over. Add resumable=True and save "
+                      f"checkpoints.")
+
+
+@rule("L-W07", "DatasetProducerStaysOnCluster", WARNING,
+      "Nothing is wrong, but the step will run on the cluster, not on an HPC (Slurm) site. To use HPC for the heavy "
+      "work, make it an artifact (or a model) in one step and copy it into the dataset in a cheap second step.")
+def dataset_producer_stays_on_cluster(ctx: LintContext) -> Iterable[Hit]:
+    """A step that produces a dataset is never given an HPC class: gpu=True does not change that."""
+    for step in ctx.pipeline.steps:
+        node = step.node("produces")
+        made = [el for el in getattr(node, "elts", ()) if isinstance(getattr(el, "func", None), ast.Name)
+                and el.func.id == "dataset"]
+        if step.is_gpu is True and made and not step.opaque:
+            yield Hit(ctx.file, ctx.span(step.node("produces")),
+                      f"{step_label(step)} asks for a GPU and produces a dataset. A step that produces a dataset runs "
+                      f"on the cluster only: the run form offers it no HPC (Slurm) class.")

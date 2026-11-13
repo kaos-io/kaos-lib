@@ -8,7 +8,7 @@ There is nothing to set for CPU, memory or disk. `pipeline.py` has no keyword fo
 
 ## A step that needs a GPU
 
-A step declares `gpu=True`, and its class field then starts on a GPU class. The template ships a small GPU step, in
+A step declares `gpu=True`, and its class field then starts on a GPU class. Only a step with `gpu=True` is offered a GPU class, on the platform's own machines and on HPC (Slurm) alike. The template ships a small GPU step, in
 `examples/gpu_check/`, and a commented line in `pipeline.py`. Copy the step's folder and take the comment off the
 line:
 
@@ -43,7 +43,7 @@ Your image decides whether torch uses the GPU. Install a CUDA-enabled torch: the
 Linux is one, and a CPU-only build never uses the GPU. `kaosctl lint` warns (`L-D08`) about a GPU step whose image shows
 no CUDA support.
 
-A GPU step that sits idle ends as idle, so the GPU stops costing money ([the limits](must-and-can.md#the-limits)).
-Several steps of one project may share a node on HPC ([page 9](hpc.md)).
+A GPU step that sits idle ends as idle, so the GPU stops costing money ([the limits](contract.md#the-limits)).
+Several steps of one project may share a node on HPC ([page 9](hpc.md)); [GPUs on HPC (Slurm)](gpus-on-hpc.md) shows the code that is right with either.
 
 Next: [Long jobs](long-jobs.md).

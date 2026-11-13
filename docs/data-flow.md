@@ -14,11 +14,15 @@ guide is built.
 | hand numbers or text to the next step | [Values to the next step](flow-between-steps.md#values-to-the-next-step) |
 | hand files to the next step | [Files to the next step](flow-between-steps.md#files-to-the-next-step) |
 | skip a step by a choice on the form, and keep the steps after it working | [A step that may be skipped](flow-between-steps.md#a-step-that-may-be-skipped) |
+| run a step only when an earlier step's value says so, or end a step as skipped | [Conditions and skipping](conditions-and-skipping.md) |
+| try several settings and keep the best | [Sweeps](sweeps.md) |
+| have two pipelines | [Several pipelines](several-pipelines.md) |
+| run the pipeline again | [Re-running](rerun.md) |
 | gather the work of several steps in one | [One step needs several steps](flow-between-steps.md#one-step-needs-several-steps) |
 | train, write a model and continue after an interruption | [Train, checkpoint and resume](flow-training.md) |
 | bring data in from outside | [Bring data in](bring-data-in.md) |
 | read a dataset that another project shares | [Share a dataset](share-a-dataset.md) |
 | log metrics and find the files and models of a run | [See your results](see-your-results.md) |
 
-For the ideas behind them, read [Principles](principles.md) and
-[Datasets, versions and hashes](datasets-versions-hashes.md).
+For the rules behind them, read [Your contract with the platform](contract.md) and
+[The data contract](data-contract.md).

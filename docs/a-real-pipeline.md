@@ -9,7 +9,7 @@ specific to it: [the steps](https://github.com/novelcore/yolo-pipelines-template
 --8<-- "examples/yolo-pipeline/pipeline.py"
 ```
 
-| step | kind | what it does | what you know from |
+| step | type | what it does | what you know from |
 |---|---|---|---|
 | `config-validation` | `control` | checks that the form values fit together, before any machine is paid for | a `control` step handles no data: no `inputs=`, no `produces=` |
 | `prepare-data` | `transform` | writes the run's dataset again as the dataset `prepared`, all of it or a sample | `inputs=` and `produces=dataset(...)` ([page 4](read-data.md), [6](produce-a-dataset.md)) |
@@ -49,5 +49,5 @@ Create a pipeline from the YOLO template and put a YOLO dataset in your project 
 On the run form, pick the dataset and set `data-sample_size` to `50` and `data-seed` to any number. `prepare-data` keeps 50
 images of each split, the same 50 for the same seed. The run is short. When it works, set `data-sample_size` empty and run the full dataset on a GPU or on Slurm.
 
-You have now read a whole pipeline. Next: [Principles](principles.md) explains why everything works the way it does,
+You have now read a whole pipeline. Next: [Your contract with the platform](contract.md) states every rule the pipeline follows,
 and the [Reference](reference.md) holds the look-up tables.

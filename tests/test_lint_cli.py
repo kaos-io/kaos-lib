@@ -57,7 +57,7 @@ def test_text_json_and_markdown_forms(tmp_path, capsys):
 def test_status_form_is_one_line_with_the_counts_and_the_rule_set(tmp_path, capsys):
     root = write_repo(tmp_path / "r", CASES["L-E06"][0])
     code, out, _ = kaosctl(capsys, str(root), "--format", "status")
-    assert code == 2 and out == "1 error, 0 warnings, 0 infos; 2 rules skipped (rule set 2.2.0)\n"
+    assert code == 2 and out == "1 error, 0 warnings, 0 infos; 2 rules skipped (rule set 2.4.0)\n"
 
 
 def test_markdown_lists_skipped_rules_and_caps_long_lists(tmp_path, capsys):

@@ -20,18 +20,18 @@ same check on every pull request, and an error fails it. Warnings and infos neve
 
 ## Project facts
 
-Some checks need facts about your project: its compute classes and the longest run of its Slurm site. On a pull
+Some checks need facts about your project: its compute classes and the longest run of its HPC (Slurm) site. On a pull
 request they come from your project. Locally, a check that lacks them is listed as `skipped`: never as passed.
 
 | option | does |
 |---|---|
-| (none) | built-in facts: the longest run and the continuations of [the limits](must-and-can.md#the-limits), no list of classes |
+| (none) | built-in facts: the longest run and the continuations of [the limits](contract.md#the-limits), no list of classes |
 | `--context FILE` | reads the facts from your project's context file |
 | `--catalogue FILE`, `--catalogue none` | reads them from a catalogue file, or skips every check that needs one |
 | `--export-catalogue FILE` | with `--context`, writes the catalogue and stops |
 
 Whether a step can continue after an interruption is judged in this order: what `pipeline.py` says (`resumable=`), what the
-platform recorded for the step on the Slurm site, what the step's code shows (`kaos_lib.checkpoint`, a hooked framework),
+platform recorded for the step on the HPC (Slurm) site, what the step's code shows (`kaos_lib.checkpoint`, a hooked framework),
 and otherwise nothing: a check that needs to know stays silent rather than guess.
 
 ## Options
@@ -64,7 +64,7 @@ prove the pipeline is right.
 | error | [L-E04 ClientIdentity](lint/L-E04.md) | your own service account, a pod patch or a reserved name |
 | error | [L-E05 DependencyOrProducer](lint/L-E05.md) | a wrong `needs=`, `reads=`, name or cycle |
 | error | [L-E06 RefusedArgument](lint/L-E06.md) | a `step()` argument the library refuses |
-| error | [L-E07 StepDeclaration](lint/L-E07.md) | a step without a `kind`, or with a wrong `inputs=` or `produces=` |
+| error | [L-E07 StepDeclaration](lint/L-E07.md) | a step without a `kind`, a folder or a valid name, or with a wrong `inputs=` or `produces=` |
 | error | [L-E08 OldStepCode](lint/L-E08.md) | code from before the current pipelines: a copy of the platform's pipeline code, `--params`, old environment variables |
 | error | [L-E09 PlatformConfigGroup](lint/L-E09.md) | the `platform` group in the app's config |
 | warning | [L-W01 LongGpuStepNotResumable](lint/L-W01.md) | a long GPU step known not to continue |
@@ -73,6 +73,7 @@ prove the pipeline is right.
 | warning | [L-W04 NoMlflowOrModelNotRegistered](lint/L-W04.md) | no MLflow logging, or no registered model |
 | warning | [L-W05 DeclaredResumableDidNotResume](lint/L-W05.md) | a step declared resumable restarted from zero on the platform |
 | warning | [L-W06 TrainTimeLimitNotResumable](lint/L-W06.md) | a training step with a time limit that is not resumable |
+| warning | [L-W07 DatasetProducerStaysOnCluster](lint/L-W07.md) | a GPU step that produces a dataset runs on the cluster, not on HPC |
 | error | [L-D01 MissingKaosLibArg](lint/L-D01.md) | a step uses kaos-lib but its Dockerfile has no `ARG KAOS_LIB_PACKAGE` |
 | error | [L-D02 KaosLibNotInstalled](lint/L-D02.md) | the step imports kaos_lib but nothing installs `${KAOS_LIB_PACKAGE}` |
 | error | [L-D03 WrongArchitecture](lint/L-D03.md) | a `FROM --platform=` other than linux/amd64 |
@@ -81,8 +82,9 @@ prove the pipeline is right.
 | warning | [L-D06 HugeLayers](lint/L-D06.md) | `COPY . .`, baked-in data, pip without `--no-cache-dir`, apt without cleanup |
 | info | [L-D07 RootUser](lint/L-D07.md) | the image runs as root |
 | warning | [L-D08 NoCudaForGpuStep](lint/L-D08.md) | a GPU step whose image shows no CUDA support, or whose plain base sets no NVIDIA driver path |
-| info | [L-I01 NodeSharing](lint/L-I01.md) | a GPU step with no limit cannot share a node |
+| info | [L-I01 NodeSharing](lint/L-I01.md) | where the time limit of a GPU step is chosen, and why a limit close to what it needs shares a node more often |
 | info | [L-I02 LearnedLimits](lint/L-I02.md) | a short limit may be shortened further |
+| info | [L-I04 StepsBuiltInALoop](lint/L-I04.md) | steps built in a loop were not read by the checks |
 | info | [L-I03 Schedules](lint/L-I03.md) | skipped in every report: a pipeline cannot declare a schedule |
 
 The `L-D` rows read each step's `Dockerfile`, never build it. `kaosctl build` prints the same findings.
