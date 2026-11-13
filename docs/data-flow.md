@@ -17,7 +17,7 @@ guide is built.
 | run a step only when an earlier step's value says so, or end a step as skipped | [Conditions and skipping](conditions-and-skipping.md) |
 | try several settings and keep the best | [Sweeps](sweeps.md) |
 | have two pipelines | [Several pipelines](several-pipelines.md) |
-| run the pipeline again | [Re-running](rerun.md) |
+| run the pipeline again, or start it from a step | [Re-running](rerun.md) |
 | gather the work of several steps in one | [One step needs several steps](flow-between-steps.md#one-step-needs-several-steps) |
 | train, write a model and continue after an interruption | [Train, checkpoint and resume](flow-training.md) |
 | bring data in from outside | [Bring data in](bring-data-in.md) |

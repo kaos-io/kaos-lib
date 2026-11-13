@@ -34,7 +34,7 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Optional
 
-from . import lock, runtime, writer
+from . import lock, record, runtime, writer
 from .errors import AuthError, EmptyDataset, KaosLibError, LockError, NotFoundError, PermissionDenied, StepError
 from .layouts import local
 
@@ -500,14 +500,15 @@ def _item_prefix(prefix: str, index: Optional[int]) -> str:
 
 
 def _artifact(run: _Running, name: str, write: lock.Write, item: Optional[int] = None) -> pathlib.Path:
-    """A model or an artifact of this run: ``<name>/<experiment>/<run>/`` of its repository (``.../<index>/`` for an
-    item of a step with ``matrix=``), at the written commit."""
+    """A model or an artifact: ``<name>/<experiment>/<run>/`` of its repository (``.../<index>/`` for an item of a
+    step with ``matrix=``), at the written commit; the write's ``path`` instead when it has one (a result taken from an
+    earlier run lives under that run's folder)."""
     from .outputs import run_prefix
     step = run.step
     staged = local.staged_dir(write.commit, repo=write.repo)
     if staged:
         return staged
-    prefix = _item_prefix(run_prefix(step.experiment, step.run, name), item)
+    prefix = _item_prefix(write.path or run_prefix(step.experiment, step.run, name), item)
     target = local.cache_dir(write.repo, write.commit, prefix)
     if not local.marker_matches(target, write.repo, write.commit, prefix):
         local.fetch(run.client, write.repo, write.commit, [prefix], target, prefix, strip=prefix,
@@ -766,6 +767,7 @@ def result(**values) -> None:
     partial.write_text(text, encoding="ascii")
     os.replace(partial, target)
     run.done = True
+    _record(run, text)
 
 
 def skip(reason: str) -> None:
@@ -788,7 +790,23 @@ def skip(reason: str) -> None:
     os.replace(partial, target)
     run.done = True
     print(f"step '{run.step.step}' skipped: {reason}", flush=True)
+    _record(run, text)
     sys.exit(0)
+
+
+def _record(run: _Running, text: str) -> None:
+    """Keep the result just handed on as ``kaos-runs/<run>/<step>.json`` of the app's outputs repository, so that a later run
+    can start from the next step and take this result as it is (``kaos_lib.record``). Best effort: a record that cannot be
+    saved is a warning in the step's log and the step still succeeds. A local run saves nothing, and neither does an item of a
+    step with ``matrix=`` (the items share one step name; a step with ``matrix=`` is not reused yet)."""
+    if os.environ.get(LOCAL_WORK_ENV) or run.step.matrix:
+        return
+    try:
+        record.write(run.client, run.step.app, run.step.run, run.step.step, text)
+    except Exception as exc:  # noqa: BLE001 - whatever goes wrong here must not fail a step that has its result
+        print(f"WARNING: the result of step '{run.step.step}' could not be saved for a later run to reuse "
+              f"({exc.__class__.__name__}: {exc}). The step succeeded. A later run cannot take this step's result "
+              "from this run.", file=sys.stderr, flush=True)
 
 
 def _ledger_on_mlflow() -> None:
