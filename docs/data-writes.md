@@ -11,6 +11,8 @@ A step writes what it declares in `produces=`, into the folder `step.output("<na
 | `model("name")` | files of one run: weights | the repository `outputs-<app>`, under `<name>/<experiment>/<run>/` |
 | `artifact("name")` | files of one run: a report, plots, a table | the same place |
 
+A step with `matrix=` writes each output once for each item, under `<name>/<experiment>/<run>/<index>/`: one model or artifact name, one version for each item, with the item's number and values on the version ([Sweeps](sweeps.md)).
+
 Only the app that declares a dataset in `produces=` writes it. People and other pipelines read it. A step that tries to
 write anything it did not declare is refused: `this app may not write dataset-...: only what the step declares in
 produces=[...] in pipeline.py can be written.`

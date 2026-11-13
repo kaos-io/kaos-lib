@@ -30,8 +30,9 @@ the label the platform puts on the step. The step reads its own type with `step.
 ## A step that runs many times
 
 Any step can run many times in one run, once for each combination of values. This changes nothing about its type or its
-contract. The how-to is [Sweeps](sweeps.md); the field it adds to the run form is in
-[the run form](contract.md#the-run-form).
+contract. The how-to is [Sweeps](sweeps.md); the fields it adds to the run form are in
+[the run form](contract.md#the-run-form). `transform`, `train` and `evaluate` steps can have `matrix=`; `ingest`,
+`publish` and `control` steps run once and may not, and a step with `matrix=` may not produce a dataset.
 
 ## Which type is my step?
 

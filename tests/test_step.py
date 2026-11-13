@@ -66,7 +66,7 @@ def test_every_fixture_context_starts_a_step(monkeypatch, name):
     got = begin(monkeypatch, wire(name))
     assert (got.run, got.app, got.project, got.step, got.kind, got.experiment) == tuple(
         want[k] for k in ("run", "app", "project", "step", "kind", "experiment"))
-    assert got.params == want["params"]
+    assert got.params == {**want["params"], **want.get("matrix", {}).get("values", {})}   # an item's values are settings
     assert got.ledger.to_dict() == want["ledger"]
     assert [(p.name, p.type, p.repo) for p in got.produces] == [(p["name"], p["type"], p["repo"]) for p in want["produces"]]
     assert set(got.upstream) == set(want["upstream"])

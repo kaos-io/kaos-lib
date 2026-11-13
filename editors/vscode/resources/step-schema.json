@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "2.4.0",
+  "ruleset_version": "2.5.0",
   "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
   "authoring_modules": [
     "kubecore.authoring"
@@ -403,6 +403,63 @@
             "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
           }
         ]
+      },
+      {
+        "name": "matrix",
+        "position": 12,
+        "type": "dict[str, list]",
+        "required": false,
+        "default": null,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "Values to try, for example `{\"lr\": [0.01, 0.001], \"batch\": [16, 32]}`. The step runs once for each combination (at most 32) and reads its values like any setting, `step.params[\"lr\"]`. The step after it gets a list with one entry for each run. The run form can change the combinations and how many run at once (four at a time by default). The step may not produce a dataset, and may not be an `ingest`, `publish` or `control` step.",
+        "snippet": "{\"${1:lr}\": [${2:0.01, 0.001}]}",
+        "values": [
+          {
+            "insert": "{\"lr\": [0.01, 0.001]}",
+            "label": "{\"lr\": [0.01, 0.001]}",
+            "doc": "Two runs, one for each learning rate."
+          },
+          {
+            "insert": "{\"lr\": [0.01, 0.001], \"batch\": [16, 32]}",
+            "label": "{\"lr\": [0.01, 0.001], \"batch\": [16, 32]}",
+            "doc": "Four runs: every learning rate with every batch size."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          }
+        ]
+      },
+      {
+        "name": "matrix_allow_failed",
+        "position": 13,
+        "type": "bool",
+        "required": false,
+        "default": false,
+        "gpu_only": false,
+        "pattern": null,
+        "doc": "Only with `matrix=`. By default one failed run fails the step and the pipeline run. With `True` the step after it runs when some runs failed, as long as one finished, and sees which ones failed (`status` `\"failed\"`, no values). Use it to pick the best of the runs that did not fail.",
+        "snippet": "True",
+        "values": [
+          {
+            "insert": "True",
+            "label": "True",
+            "doc": "Let the step after it run when some runs failed."
+          }
+        ],
+        "links": [
+          {
+            "title": "L-E06",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+          },
+          {
+            "title": "L-W08",
+            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W08.html"
+          }
+        ]
       }
     ]
   },
@@ -613,6 +670,13 @@
       "level": "warning",
       "fix": "Nothing is wrong, but the step will run on the cluster, not on an HPC (Slurm) site. To use HPC for the heavy work, make it an artifact (or a model) in one step and copy it into the dataset in a cheap second step.",
       "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W07.html"
+    },
+    {
+      "id": "L-W08",
+      "name": "AllowedFailureReachesDataset",
+      "level": "warning",
+      "fix": "Remove matrix_allow_failed=True from the step, or make the step that writes the dataset read step.upstream(...) and call step.skip(reason) when too few items are ok.",
+      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W08.html"
     }
   ]
 }

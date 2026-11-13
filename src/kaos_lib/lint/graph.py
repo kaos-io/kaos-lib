@@ -41,7 +41,22 @@ def _node(facts: PipelineFacts, step: Step, index: int) -> dict:
         "kind": _text(step.value("kind", None)),
         "walltime": _text(step.value("walltime", None)),
         "resumable": _text(step.value("resumable", None)),
+        "matrix_items": _matrix_items(step),
     }
+
+
+def _matrix_items(step: Step) -> Optional[int]:
+    """How many items a step with ``matrix=`` runs (the product of its lists), or None: no matrix=, or one the file
+    does not write out as values. The step is one node however many items it has."""
+    matrix = step.value("matrix", None)
+    if not isinstance(matrix, dict) or not matrix:
+        return None
+    count = 1
+    for values in matrix.values():
+        if not isinstance(values, (list, tuple)) or not values:
+            return None
+        count *= len(values)
+    return count
 
 
 def _text(value):

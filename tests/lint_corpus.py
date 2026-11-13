@@ -124,6 +124,12 @@ CASES = {
         repo('    t = step("embed", kind="transform", gpu=True, produces=[dataset("embeddings")])\n', {"embed": PLAIN_STEP}),
         repo('    t = step("embed", kind="transform", gpu=True, produces=[artifact("vectors")])\n', {"embed": PLAIN_STEP}),
         None, (4, "produces a dataset")),
+    "L-W08": (
+        repo('    t = step("train", kind="train", matrix={"lr": [0.01, 0.001]}, matrix_allow_failed=True, produces=[model("m")])\n'
+             '    s = step("scores", kind="evaluate", needs=[t], produces=[dataset("scores")])\n', {"train": PLAIN_STEP, "scores": PLAIN_STEP}),
+        repo('    t = step("train", kind="train", matrix={"lr": [0.01, 0.001]}, produces=[model("m")])\n'
+             '    s = step("scores", kind="evaluate", needs=[t], produces=[dataset("scores")])\n', {"train": PLAIN_STEP, "scores": PLAIN_STEP}),
+        None, (4, "a step after it writes a dataset")),
     "L-I04": (
         repo('    for i in range(2):\n        step(f"trial-{i}", kind="evaluate")\n'),
         repo('    t = step("trial", kind="evaluate")\n'),

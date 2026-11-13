@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from .constants import (DEFAULT_LIMIT_MINUTES, DOC_BASE, LONG_GPU_STEP_MINUTES, RULESET_VERSION,
+from .constants import (DEFAULT_LIMIT_MINUTES, DOC_BASE, LONG_GPU_STEP_MINUTES, MATRIX_MAX_ITEMS, RULESET_VERSION,
                         STEP_NAME_PATTERN, STEP_PARAMS, TIME_PATTERN)
 
 # The shape of this document. Bump when a field an editor reads changes meaning or goes away.
@@ -115,6 +115,21 @@ _PARAMS = {
         values=[_value('"40m"', "Allow 40 minutes without GPU use or log lines."),
                 _value('"1h"', "Allow one hour without GPU use or log lines."),
                 _value("0", "Never end the step as idle.")]),
+    "matrix": dict(
+        type="dict[str, list]", rules=("L-E06",), snippet='{"${1:lr}": [${2:0.01, 0.001}]}',
+        doc="Values to try, for example `{\"lr\": [0.01, 0.001], \"batch\": [16, 32]}`. The step runs once for each "
+            f"combination (at most {MATRIX_MAX_ITEMS}) and reads its values like any setting, `step.params[\"lr\"]`. "
+            "The step after it gets a list with one entry for each run. The run form can change the combinations "
+            "and how many run at once (four at a time by default). The step may not produce a dataset, and may not be an `ingest`, `publish` or "
+            "`control` step.",
+        values=[_value('{"lr": [0.01, 0.001]}', "Two runs, one for each learning rate."),
+                _value('{"lr": [0.01, 0.001], "batch": [16, 32]}', "Four runs: every learning rate with every batch size.")]),
+    "matrix_allow_failed": dict(
+        type="bool", rules=("L-E06", "L-W08"), default=False, snippet="True",
+        doc="Only with `matrix=`. By default one failed run fails the step and the pipeline run. With `True` the step "
+            "after it runs when some runs failed, as long as one finished, and sees which ones failed "
+            "(`status` `\"failed\"`, no values). Use it to pick the best of the runs that did not fail.",
+        values=[_value("True", "Let the step after it run when some runs failed.")]),
 }
 
 

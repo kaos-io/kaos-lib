@@ -432,14 +432,33 @@ def flow_conditions(tmp: pathlib.Path) -> dict:
 
 
 def flow_sweep(tmp: pathlib.Path) -> dict:
-    """A sweep as a loop inside one step: it tries every rate of the setting and keeps the best."""
+    """A step with `matrix=` runs once for each combination (here six, run one by one the way the platform starts
+    them), and the step after it reads the list of what they handed on and keeps the best model; it also copes with
+    a combination that failed."""
+    import itertools
     app = flow_app("sweep", tmp)
-    result, run = run_step(app, tmp / "run", "train", "train", [("model", "best-model")],
-                           params={"train": {"epochs": 3, "learning_rates": "0.1,0.01,0.001"}})
-    if result["values"]["best_learning_rate"] != 0.01 or result["values"]["tried"] != 3:
-        raise ExampleError(f"train handed on {result['values']}")
-    if (run.output("best-model") / "weights.txt").read_text() != "learning rate 0.01\n":
-        raise ExampleError("train did not keep the best model")
+    matrix = {"lr": [0.1, 0.01, 0.001], "batch": [16, 32]}
+    items = [dict(zip(matrix, values)) for values in itertools.product(*matrix.values())]   # the first name changes slowest
+    if len(items) != 6 or items[2] != {"lr": 0.01, "batch": 16}:
+        raise ExampleError(f"the combinations of the matrix are {items}")
+    trained = []
+    for index, values in enumerate(items):
+        result, run = run_step(app, tmp / f"train-{index}", "train", "train", [("model", "model")],
+                               params={"train": {"epochs": 3}}, matrix=values, matrix_index=index, matrix_of=len(items))
+        if (run.output("model", item=index) / "weights.txt").read_text() != f"learning rate {values['lr']}, batch {values['batch']}\n":
+            raise ExampleError(f"train wrote another model for the combination {index}")
+        trained.append({"matrix": values, "values": result["values"], "writes": {"model": run.output("model", item=index)}})
+    winners = {}
+    for case, failed in (("all", None), ("one failed", 3)):
+        listed = [dict(item, status="failed", values={}, writes={}) if i == failed else item for i, item in enumerate(trained)]
+        result, run = run_step(app, tmp / f"pick-{case}".replace(" ", "-"), "pick-best", "evaluate", [("artifact", "winner")],
+                               upstream_matrix={"train": listed})
+        winners[case] = (result["values"]["best_index"], result["values"]["tried"], result["values"]["finished"])
+        want = "learning rate " + str(items[winners[case][0]]["lr"]) + ", batch " + str(items[winners[case][0]]["batch"]) + "\n"
+        if (run.output("winner") / "weights.txt").read_text() != want:
+            raise ExampleError(f"pick-best kept another model in the case {case}")
+    if winners != {"all": (3, 6, 6), "one failed": (5, 6, 5)}:
+        raise ExampleError(f"pick-best chose {winners}")
     return result
 
 

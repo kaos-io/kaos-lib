@@ -47,6 +47,32 @@ step then finds `step.skipped("evaluate")` set. A step that ends itself with `st
 code 0: call it inside `pytest.raises(SystemExit)`, and read `run.result` for `{"status": "skipped", "reason": ...}`
 ([Conditions and skipping](conditions-and-skipping.md)).
 
+## A step with `matrix=`
+
+A step with `matrix=` runs once for each combination ([Sweeps](sweeps.md)). Test one run of it with `matrix=`, the values
+of that run, and `matrix_index`, its number. The step reads them as `params["lr"]`, and its output is `run.output(name, item=index)`:
+
+```python
+with testing.running(tmp_path, name="train", produces=[("model", "model")],
+                     matrix={"lr": 0.01, "batch": 16}, matrix_index=2, matrix_of=6) as run:
+    entry.main()
+assert run.output("model", item=2).is_dir()
+```
+
+Test the step after it with `upstream_matrix`: the list of the runs, in order. Each run has the values `matrix`, what it
+handed on (`values`), what it saved (`writes`, `reads`) and a `status`: `"ok"` (the default), `"failed"` or `"skipped"` with a `reason`.
+
+```python
+items = [{"matrix": {"lr": 0.1}, "values": {"loss": 0.4}, "writes": {"model": tmp_path / "m0"}},
+         {"matrix": {"lr": 0.01}, "status": "failed"}]
+with testing.running(tmp_path, name="pick-best", kind="evaluate", produces=[("artifact", "winner")],
+                     upstream_matrix={"train": items}) as run:
+    entry.main()
+```
+
+The entries of the list are the ones [Sweeps](sweeps.md#pick-the-best) describes. Cover a failed run: the step must still
+pick from the others.
+
 ## A step that stops and continues
 
 Ask the step to stop after the second pass, check that it ended with exit code 85, and run it again with the same

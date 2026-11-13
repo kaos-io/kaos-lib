@@ -175,3 +175,8 @@ def test_should_deliver_the_model_with_a_publish_step_that_produces_nothing(tmp_
 
 def test_should_let_a_control_step_stop_a_run_with_wrong_settings_and_hand_on_its_values(tmp_path):
     assert ex.flow_control(tmp_path)["values"] == {}
+
+
+def test_should_run_every_combination_of_the_sweep_and_pick_the_best_even_when_one_failed(tmp_path):
+    """The page Sweeps: `train` has `matrix=` (six items), `pick-best` reads the list, and copes with a failed item."""
+    assert ex.flow_sweep(tmp_path)["values"]["tried"] == 6

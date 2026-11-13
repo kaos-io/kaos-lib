@@ -34,6 +34,8 @@ The six values of `kind=`, side by side. [Step types](step-types.md) helps you p
 | `resumable=` | how long before the limit the step is told to save: `True`, `"20m"`, `False` | [HPC (Slurm)](hpc.md#when-the-limit-is-reached) |
 | `checkpoint_every=` | how often the platform copies the checkpoint your step saved: `"20m"`, `False`; the default of the run-form field `<step>-checkpoint-every` | [Long jobs](long-jobs.md) |
 | `idle_timeout=` | minutes without GPU use before a GPU step ends as idle; `0` for never | [Reference](reference.md#pipelinepy) |
+| `matrix=` | values to try, `{"lr": [0.01, 0.001]}`: the step runs once for each combination and reads `params["lr"]`; the next step gets a list | [Sweeps](sweeps.md) |
+| `matrix_allow_failed=` | `True` on a step with `matrix=`: the step after it runs when some runs failed and sees which; by default one failed run fails the step | [Sweeps](sweeps.md#pick-the-best) |
 
 The exact refusals of each keyword are in the [Reference](reference.md#pipelinepy).
 
@@ -42,10 +44,10 @@ The exact refusals of each keyword are in the [Reference](reference.md#pipelinep
 | call | one line | page |
 |---|---|---|
 | `step.start()` | first call: the run, the step, the experiment and `params` | [Your first step](first-step.md) |
-| `step.input(name, optional=False, writable=False)` | the folder of a dataset input, or of what a needed step made; `writable=True` is a private copy | [Read data](read-data.md) |
+| `step.input(name, optional=False, writable=False, item=None)` | the folder of a dataset input, or of what a needed step made; `writable=True` is a private copy; `item=N` is the output of item N of a step with `matrix=` | [Read data](read-data.md) |
 | `step.skip(reason)` | ends the step as skipped (exit code 0, nothing saved); `step.skipped(name)` is the reason an earlier step gave | [Conditions and skipping](conditions-and-skipping.md) |
 | `step.output(name)` | the empty folder for an output you declared; saved by `step.result()` | [Pass things on](pass-things-on.md#hand-on-a-file) |
-| `step.upstream(step, optional=False)` | the result of a needed step: `.values`, `.reads`, `.writes` | [Values to the next step](flow-between-steps.md#values-to-the-next-step) |
+| `step.upstream(step, optional=False)` | the result of a needed step: `.values`, `.reads`, `.writes`; after a step with `matrix=`, a list with one entry for each item | [Values to the next step](flow-between-steps.md#values-to-the-next-step) |
 | `step.check(name, layout=None, min_files=1)` | a condition on an output, checked before anything is saved | [Reference](reference.md#step-api-kaos_libstep) |
 | `step.workdir()` | a scratch folder, emptied for each attempt, never saved | [Reference](reference.md#step-api-kaos_libstep) |
 | `step.result(**values)` | last call: saves the outputs and hands the values on | [Your first step](first-step.md) |
@@ -54,7 +56,7 @@ The exact refusals of each keyword are in the [Reference](reference.md#pipelinep
 
 | call | one line | page |
 |---|---|---|
-| `testing.running(tmp_path, *, kind="train", name="step", app="app", experiment="test", params=None, inputs=None, upstream=None, upstream_writes=None, upstream_reads=None, produces=())` | call a step's `main()` in a test | [Test your steps](test-your-steps.md) |
+| `testing.running(tmp_path, *, kind="train", name="step", app="app", experiment="test", params=None, inputs=None, upstream=None, upstream_writes=None, upstream_reads=None, upstream_skipped=None, upstream_matrix=None, matrix=None, matrix_index=0, matrix_of=None, produces=())` | call a step's `main()` in a test | [Test your steps](test-your-steps.md) |
 | `checkpoint.load(name="state", default=None)`, `save(obj, name="state")`, `stop_requested()`, `exit_for_restart()` | keep your place and continue after a stop | [Long jobs](long-jobs.md) |
 | `progress.report(done, total=None, unit="step")` | one progress line on the run page | [Reference](reference.md#run-tools) |
 | `mlflow.mlflow(tracking_uri=None, token=None)` | sign the step in to the project's MLflow | [Reference](reference.md#run-tools) |

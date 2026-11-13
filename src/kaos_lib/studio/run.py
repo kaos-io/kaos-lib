@@ -16,12 +16,15 @@ import pathlib
 import re
 import shutil
 import sys
+from typing import Optional
 
 import yaml
 
 from .. import datasets, lock, testing
 from ..errors import KaosLibError
 from ..lint.constants import STEP_KINDS
+from ..lint.matrix import value_problem
+from ..lint.pipeline_reader import UNKNOWN
 from . import envallow, pipeline_engine, pyenv, proc, sample, steps
 from .constants import LOCAL_DIR, LOCAL_RUN_ID, OUTPUT_PRINT_CHARS
 from .dev import setup_step
@@ -121,8 +124,72 @@ def stage_inputs(step: steps.StepInfo, args, params: dict, staged: pathlib.Path)
     return reads
 
 
-def upstream_results(step: steps.StepInfo, args, results: pathlib.Path) -> dict:
-    """The result of every step this one needs: `--upstream`, else its last local run, else "did not run"."""
+def combinations(matrix: dict) -> list:
+    """Every combination of the values of a step's `matrix=`, the first name changing slowest: the order of the items."""
+    out = [{}]
+    for axis, values in matrix.items():
+        out = [{**done, axis: value} for done in out for value in values]
+    return out
+
+
+def matrix_items(step: steps.StepInfo) -> list:
+    """The combinations of a step with `matrix=` as pipeline.py writes it; a refusal when it cannot be read."""
+    if step.matrix is UNKNOWN or not isinstance(step.matrix, dict):
+        raise KaosLibError(f"step '{step.name}': kaosctl cannot read matrix= in pipeline.py, because it is not written "
+                           "out as values. Write it in the step() call, for example "
+                           "matrix={\"lr\": [0.01, 0.001]}.")
+    for axis, values in step.matrix.items():
+        for value in values if isinstance(values, (list, tuple)) else ():
+            problem = value_problem(f"step '{step.name}': matrix= value {value!r} of {axis!r}", value)
+            if problem:
+                raise KaosLibError(problem)
+    return combinations(step.matrix)
+
+
+def matrix_item(step: steps.StepInfo, index) -> "dict | None":
+    """`{"index", "of", "values"}` of the item `kaosctl step run --matrix-index` runs; None for a step with no
+    `matrix=`. A refusal that names the fix when the step needs an index and has none, or the index does not fit."""
+    if step.matrix is None:
+        if index is not None:
+            raise KaosLibError(f"step '{step.name}' has no matrix= in pipeline.py, so --matrix-index does not apply. "
+                               "Remove it, or add matrix={...} to the step.")
+        return None
+    items = matrix_items(step)
+    last = len(items) - 1
+    if index is None:
+        raise KaosLibError(f"step '{step.name}' has matrix=: it runs once for each of its {len(items)} combinations. "
+                           f"Run one with --matrix-index N, N from 0 to {last}, for example "
+                           f"kaosctl step run {step.name} --matrix-index 0.")
+    if not 0 <= index <= last:
+        raise KaosLibError(f"--matrix-index {index}: step '{step.name}' has {len(items)} combinations, numbered 0 to "
+                           f"{last}. Choose one of them.")
+    return {"index": index, "of": len(items), "values": items[index]}
+
+
+def matrix_upstream(name: str, combos: list, results: pathlib.Path) -> tuple:
+    """`(entry, how many ran)`: what a step gets for a needed step with `matrix=`, from the items run here
+    (`results/<step>.<index>.json`); an item that was not run is listed as failed."""
+    items, ran = [], 0
+    for index, values in enumerate(combos):
+        kept = results / f"{name}.{index}.json"
+        item = {"index": index, "values": values, "status": "failed"}
+        if kept.is_file():
+            try:
+                result = json.loads(kept.read_text(encoding="utf-8"))
+            except ValueError:
+                result = {}
+            if result.get("status") == "skipped":
+                item.update(status="skipped", reason=result.get("reason") or "skipped")
+            elif result.get("status") == "ok":
+                item.update(status="ok", result=result)
+            ran += item["status"] != "failed"
+        items.append(item)
+    return {"version": 1, "status": "matrix", "items": items}, ran
+
+
+def upstream_results(step: steps.StepInfo, args, results: pathlib.Path, fanned: Optional[dict] = None) -> dict:
+    """The result of every step this one needs: `--upstream`, else its last local run, else "did not run". A needed
+    step with `matrix=` (`fanned`: its name -> its combinations) is the list of the items run here."""
     given = {}
     for item in args.upstream or []:
         name, eq, value = item.partition("=")
@@ -132,6 +199,15 @@ def upstream_results(step: steps.StepInfo, args, results: pathlib.Path) -> dict:
         given[name] = pathlib.Path(value[1:]).read_text(encoding="utf-8") if value.startswith("@") else value
     out = {}
     for name in step.needs:
+        if name in (fanned or {}) and name not in given:
+            entry, ran = matrix_upstream(name, fanned[name], results)
+            ok = sum(i["status"] == "ok" for i in entry["items"])
+            out[name] = entry if ok else dict(testing.ABSENT)
+            print(f"  upstream {name}: " + (f"{ran} of its {len(entry['items'])} items from their last local runs; the "
+                                            "others did not run here and are listed as failed" if ok else
+                                            "no item ran here successfully: the step sees it as not run. Run its "
+                                            f"items first (kaosctl step run {name} --matrix-index N)"))
+            continue
         kept = results / f"{name}.json"
         text = given.get(name) or (kept.read_text(encoding="utf-8") if kept.is_file() else None)
         try:
@@ -144,7 +220,8 @@ def upstream_results(step: steps.StepInfo, args, results: pathlib.Path) -> dict:
     return out
 
 
-def step_context(root: pathlib.Path, step: steps.StepInfo, params: dict, reads: list, upstream: dict) -> dict:
+def step_context(root: pathlib.Path, step: steps.StepInfo, params: dict, reads: list, upstream: dict,
+                 matrix: Optional[dict] = None) -> dict:
     """The step context of a local run, in the contract's field order."""
     if step.kind not in STEP_KINDS:
         raise KaosLibError(f"{step.name} has no kind in pipeline.py: add kind=\"...\", one of {', '.join(STEP_KINDS)}.")
@@ -155,7 +232,7 @@ def step_context(root: pathlib.Path, step: steps.StepInfo, params: dict, reads: 
     own = {k: v for k, v in params.items() if k in step.reads and k not in PLATFORM_SECTIONS}
     return testing.local_context(run=run, app=app, step_name=step.name, kind=step.kind, params=own, reads=reads,
                                  experiment=experiment if isinstance(experiment, str) and experiment else app,
-                                 produces=step.produces, upstream=upstream)
+                                 produces=step.produces, upstream=upstream, matrix=matrix)
 
 
 def child_env(work: pathlib.Path, staged: pathlib.Path, context: dict) -> dict:
@@ -165,10 +242,11 @@ def child_env(work: pathlib.Path, staged: pathlib.Path, context: dict) -> dict:
             "KAOS_STAGED_ROOT": str(staged), "PYTHONUNBUFFERED": "1"}
 
 
-def print_result(step: steps.StepInfo, work: pathlib.Path, results: pathlib.Path, staged: pathlib.Path) -> None:
-    """Print the step's result and keep it where the next step's run will look."""
+def print_result(step: steps.StepInfo, work: pathlib.Path, results: pathlib.Path, staged: pathlib.Path,
+                 item: Optional[int] = None) -> None:
+    """Print the step's result and keep it where the next step's run will look (`<step>.<index>.json` for an item)."""
     file = work / "output" / RESULT_NAME
-    kept = results / f"{step.name}.json"
+    kept = results / (f"{step.name}.json" if item is None else f"{step.name}.{item}.json")
     if not file.is_file():
         kept.unlink(missing_ok=True)
         print(f"Result of {step.name}: none written. The steps that need it would see it as not run.")
@@ -190,7 +268,8 @@ def print_result(step: steps.StepInfo, work: pathlib.Path, results: pathlib.Path
     for read in result.get("reads", []):
         print(f"  read    {read.get('name')}: {read.get('repo')} at {str(read.get('commit'))[:12]}")
     for write in result.get("writes", []):
-        print(f"  wrote   {write.get('name')} ({write.get('type')}): {staged / str(write.get('name'))}")
+        folder = str(write.get("name")) + ("" if item is None else f".{item}")
+        print(f"  wrote   {write.get('name')} ({write.get('type')}): {staged / folder}")
 
 
 def run_step(args) -> int:
@@ -203,9 +282,11 @@ def run_step(args) -> int:
             f"step '{step.name}' has no folder {step.folder}/. The folder of a step is steps/ plus the step's name with "
             f"every hyphen written as an underscore. Create {step.folder}/ with a Dockerfile and app/entry.py."
             + (f" There is a folder steps/{step.name}/: rename it to {step.folder}/." if hyphen.is_dir() else ""))
+    item = matrix_item(step, getattr(args, "matrix_index", None))
     py = ensure_environment(step, args)
     local = local_dir(root)
-    work, staged, results = local / "work" / step.name, local / "staged", local / "results"
+    label = step.name if item is None else f"{step.name}.{item['index']}"
+    work, staged, results = local / "work" / label, local / "staged", local / "results"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)     # /work exists in the platform's container; /work/output does not until the step makes it
     staged.mkdir(exist_ok=True)
@@ -215,16 +296,18 @@ def run_step(args) -> int:
         raise KaosLibError(f"the composed parameters are not YAML ({exc}).") from None
     if not isinstance(params, dict):
         raise KaosLibError("the composed parameters are not a mapping.")
+    fanned = {s.name: matrix_items(s) for s in steps.discover(root) if s.name in step.needs and s.matrix is not None}
     context = step_context(root, step, params, stage_inputs(step, args, params, staged),
-                           upstream_results(step, args, results))
+                           upstream_results(step, args, results, fanned), item)
     services = envallow.platform_services_read(step.path)
     if services:
         print(f"NOTE: this step reads {', '.join(services)}, which only the platform sets. Here they are not set (no "
               f"platform secret reaches a local run), so a step that needs one stops with its own error, and one that has a fallback (config, a default) runs on it.")
-    print(f"Running {step.name}: python -m app.entry (run {context['run']}; the step context holds "
+    print(f"Running {step.name}" + ("" if item is None else f" item {item['index']} of {item['of']} {item['values']}")
+          + f": python -m app.entry (run {context['run']}; the step context holds "
           f"{len(lock.wire(context['params']))} characters of composed params: {', '.join(context['params']) or 'no section'})")
     done = proc.stream([str(py), str(WORKMAP), "app.entry"], env=child_env(work, staged, context), cwd=step.path)
-    print_result(step, work, results, staged)
+    print_result(step, work, results, staged, None if item is None else item["index"])
     if done.returncode:
         print(f"ERROR: {step.name} exited with code {done.returncode}.", file=sys.stderr)
     else:
