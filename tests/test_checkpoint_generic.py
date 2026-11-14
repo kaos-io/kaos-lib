@@ -141,3 +141,29 @@ def test_sigterm_is_a_stop_request_once_a_loop_looks_for_it_and_the_default_befo
     assert checkpoint.stop_requested() is False
     checkpoint._on_terminate(signal.SIGTERM, None)
     assert checkpoint.stop_requested() is True and kills == [signal.SIGTERM]
+
+
+@pytest.fixture
+def umask022():
+    old = os.umask(0o022)
+    yield
+    os.umask(old)
+
+
+def _mode(path):
+    return path.stat().st_mode & 0o777
+
+
+def test_a_saved_state_file_is_readable_by_the_platform_helper_that_copies_it(tmp_path, monkeypatch, umask022):
+    monkeypatch.setenv(checkpoint.CHECKPOINT_DIR_ENV, str(tmp_path / "f"))
+    path = checkpoint.save({"epoch": 1})
+    assert _mode(path) & 0o044 == 0o044
+
+
+def test_a_versioned_and_a_flat_checkpoint_folder_are_readable_by_others(tmp_path, monkeypatch, umask022):
+    monkeypatch.setenv(checkpoint.CHECKPOINT_DIR_ENV, str(tmp_path / "f"))
+    monkeypatch.setenv(checkpoint.OUTPUT_DIR_ENV, str(tmp_path / "out"))
+    for folder in (checkpoint.write_versioned(lambda d: (d / "w.bin").write_bytes(b"x")),
+                   checkpoint.write_flat(lambda d: (d / "w.bin").write_bytes(b"x"))):
+        assert _mode(folder) & 0o055 == 0o055
+        assert _mode(folder / checkpoint.MANIFEST_NAME) & 0o044 == 0o044

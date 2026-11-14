@@ -300,6 +300,14 @@ def _call_save(save_fn: Callable[[pathlib.Path], Any], tmp: pathlib.Path) -> Tup
     return progress, seconds
 
 
+def _ordinary_mode(path: pathlib.Path, base: int) -> None:
+    """``tempfile`` creates 0600 files and 0700 folders; give ``path`` what the process umask gives an ordinary one,
+    so the platform's helper, another user, can copy it."""
+    umask = os.umask(0)
+    os.umask(umask)
+    os.chmod(path, base & ~umask)
+
+
 def write_versioned(save_fn: Callable[[pathlib.Path], Any]) -> pathlib.Path:
     """Write one checkpoint as ``<checkpoint folder>/ckpt-<n>``: into a temporary folder, manifest last, one rename.
     Returns its folder; on any error nothing is left behind and the error propagates."""
@@ -307,6 +315,7 @@ def write_versioned(save_fn: Callable[[pathlib.Path], Any]) -> pathlib.Path:
     root.mkdir(parents=True, exist_ok=True)
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=".tmp-", dir=root))
     try:
+        _ordinary_mode(tmp, 0o777)
         progress, seconds = _call_save(save_fn, tmp)
         _sync(tmp)
         seq = _next_seq(root)
@@ -326,6 +335,7 @@ def write_flat(save_fn: Callable[[pathlib.Path], Any]) -> pathlib.Path:
     out.mkdir(parents=True, exist_ok=True)
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=".checkpoint-", dir=out))
     try:
+        _ordinary_mode(tmp, 0o777)
         progress, seconds = _call_save(save_fn, tmp)
         _sync(tmp)
         _write_manifest(tmp, progress, seconds, 0)
@@ -376,6 +386,7 @@ def _atomic_write(path: pathlib.Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=str(path.parent))
     try:
+        _ordinary_mode(pathlib.Path(tmp), 0o666)
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
