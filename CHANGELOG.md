@@ -102,6 +102,9 @@ template.** Nothing in kaos-lib converts an old app.
 - `kaosctl dataset push` to a new repository whose name no dataset can have is refused with the reason, before anything
   is created.
 
+### Fixed
+- What `kaos_lib.checkpoint` saves (the state file of `save(obj)`, the folder of a checkpoint) is readable by other users, so the platform's helper can copy it and a resumable step no longer restarts from zero (PRD novelcore/kaos#1911 AC-24, D-64).
+
 ### Changed
 - A step reads a dataset another project shares as the app itself, not with the project's key (PRD novelcore/kaos#1911 D-44).
   Nothing in an app changes: `<project>/dataset-<name>@<version>` reads as before. The key it gets there reads only the
