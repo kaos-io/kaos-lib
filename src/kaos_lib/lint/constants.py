@@ -77,13 +77,13 @@ COMPUTE_CLASS_KEYS = ("platform.kubecore.io/compute-class",)
 
 # Thresholds (owner review, OQ-13).
 LONGEST_MINUTES = 30 * 24 * 60        # the longest time limit or checkpoint interval the run form accepts: 30 days
-LONG_GPU_STEP_MINUTES = 4 * 60        # L-W01: the HPC (Slurm) default limit
+LONG_GPU_STEP_MINUTES = 4 * 60        # L-W01: a step with a time limit above this should be resumable (the same 4 hours as the default limit)
 SHORT_LIMIT_MINUTES = 2 * 60          # L-I02: a limit under this may be shortened by the platform
 
 # The built-in default catalogue: only facts that hold for every project.
 DEFAULT_LANE_MAX_MINUTES = 2 * 24 * 60   # the longest run of the default HPC (Slurm) lane: 2 days
 DEFAULT_MAX_CONTINUATIONS = 5            # a resumable step continues at most this many times
-DEFAULT_LIMIT_MINUTES = 4 * 60           # the limit of a GPU step that sets none
+DEFAULT_LIMIT_MINUTES = 4 * 60           # the time limit of any step that sets none, on any machine
 
 # Frameworks the library hooks for checkpoints when the step imports them.
 CHECKPOINT_FRAMEWORKS = ("ultralytics", "pytorch_lightning", "lightning", "transformers")
