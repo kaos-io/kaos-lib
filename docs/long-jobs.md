@@ -62,11 +62,10 @@ the hooks off.
 
 Every step has a time limit, the longest it may run, on the platform's own machines and on HPC (Slurm) alike. The run
 form shows it as the field `<step>-walltime` of every step ("The longest the step may run, as minutes or hours: 90m,
-12h. Default from pipeline.py."). Its default is `walltime=` in `pipeline.py`, and `4h` when the step sets none. The person who
+12h. Default from pipeline.py."). Its default is `walltime=` in `pipeline.py`. The person who
 starts the run chooses the limit. Time spent waiting for a machine does not count.
 
-Write the limit as minutes or hours, at least one minute and at most 30 days. A step that reaches its limit is ended,
-unless it can continue. What happens next depends on whether the step declares `resumable=` or leaves checkpoints:
+Write the limit as minutes or hours ([the limits](contract.md#the-limits)). Every step can be stopped and started again ([the principle](contract.md#a-step-can-be-stopped-and-started-again)). A step that reaches its limit is ended, unless it can continue. What happens next depends on whether the step declares `resumable=` or leaves checkpoints:
 
 | the step | it reaches its limit, loses its machine, or exits with 85 |
 |---|---|
@@ -93,12 +92,12 @@ The run form decides both times. The step keeps defaults in code, and the form v
 
 | | who sets it | order, first wins | default |
 |---|---|---|---|
-| time limit | the field `<step>-walltime` of the run form | the form value, then `walltime=` in `step(...)` | `walltime=`, else 4 hours |
+| time limit | the field `<step>-walltime` of the run form | the form value, then `walltime=` in `step(...)` | `walltime=`, else [the default](contract.md#the-limits) |
 | checkpoint interval | the field `<step>-checkpoint-every` of the run form. A step has it when it declares `checkpoint_every=` or `resumable=` (not `checkpoint_every=False`) | the form value, then `checkpoint_every=` in `step(...)`, then the value passed to `checkpoint.register(...)` in code, then the library's own (it adapts to the time a save takes) | `checkpoint_every=`, else 10 minutes for a `resumable=True` step |
 
 The platform's copy of the checkpoint folder and `checkpoint.tick()` read the same value, on the platform's own machines and
 on HPC (Slurm). A step with `checkpoint_every=False` has no field and keeps no copies. Both values are minutes or hours, at least one
-minute and at most 30 days: a `walltime=` or `checkpoint_every=` the form would refuse is refused when the pipeline is built.
+minute and within [the limits](contract.md#the-limits): a `walltime=` or `checkpoint_every=` the form would refuse is refused when the pipeline is built.
 
 ## When a step ends
 

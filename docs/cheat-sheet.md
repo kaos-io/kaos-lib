@@ -30,7 +30,7 @@ The six values of `kind=`, side by side. [Step types](step-types.md) helps you p
 | `produces=` | what the step makes: `dataset("n")`, `model("n")`, `artifact("n")` | [Reference](data-writes.md#what-a-step-writes) |
 | `gpu=` | `True` offers the step the GPU classes; how many GPUs it gets on HPC is in [GPUs on HPC (Slurm)](gpus-on-hpc.md) | [Bigger machines](bigger-machines.md) |
 | `when=` | a run-form field or a value of a needed step, compared with a text: `"extra-mode != off"`, `"evaluate.passed == true"`; the step is skipped when it is false | [Conditions and skipping](conditions-and-skipping.md) |
-| `walltime=` | the longest the step may run, anywhere: `"90m"`, `"12h"`; the default of the run-form field `<step>-walltime` | [Long jobs](long-jobs.md#the-time-limit) |
+| `walltime=` | the default of the run-form field `<step>-walltime`: `"90m"`, `"12h"` | [The limits](contract.md#the-limits) |
 | `resumable=` | how long before the limit the step is told to save: `True`, `"20m"`, `False` | [HPC (Slurm)](hpc.md#when-the-limit-is-reached) |
 | `checkpoint_every=` | how often the platform copies the checkpoint your step saved: `"20m"`, `False`; the default of the run-form field `<step>-checkpoint-every` | [Long jobs](long-jobs.md) |
 | `idle_timeout=` | minutes without GPU use before a GPU step ends as idle; `0` for never | [Reference](reference.md#pipelinepy) |

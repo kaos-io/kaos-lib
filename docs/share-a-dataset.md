@@ -29,7 +29,14 @@ the owner: ask the owner to change it. Only the project that owns a dataset writ
 
 A step reads a shared dataset as its own app: nothing in the app asks for a key or a token for it, and the code is the same
 as for a dataset of your project. The owner's data store gives your app read access to the datasets shared with your project and
-to nothing else of the owner's. The access renews itself while a step runs, however long a download takes, and the step does not
-see it. When the owner stops sharing a dataset, the next read of it is refused with a message that says the share was withdrawn
+to nothing else of the owner's. On the platform's own machines the access renews itself while a step runs, however long a download
+takes, and the step does not see it. When the owner stops sharing a dataset, the next read of it is refused with a message that says the share was withdrawn
 and names the owner. Every app of your project can read what is shared with the project; the
 other projects' apps cannot.
+
+## A step on HPC (Slurm) reads it too
+
+A step on HPC (Slurm) reads a shared dataset with your project's own access, like a dataset of your project: the
+platform copies it to the site before the job starts, over a secure connection, and `step.input(...)` returns the copy
+([what is copied, and when](data-reads.md#a-dataset-a-step-made-read-on-hpc-slurm)). The step's access to data lasts 12
+hours there and is not renewed ([what that means for the time limit](contract.md#a-step-can-be-stopped-and-started-again)).

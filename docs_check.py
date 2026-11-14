@@ -61,6 +61,11 @@ WORDS = (
     (r"\bkubectl\b", "a cluster command", "clients have no cluster access: name the console page or the kaosctl command"),
     (r"\bnamespaces?\b", "a cluster word", 'write "project"'),
     (r"\bcrossplane\b", "a platform component", 'write "the platform"'),
+    (r"\blakefs\b|\bLAKEFS_\w+", "the data store's product name", 'write "the data store"'),
+    # The pip extra `kaos-lib[zitadel]` is something a client types, so it is allowed.
+    (r"(?<!\[)\bzitadel\b", "the sign-in service's product name", 'write "the sign-in service" or "sign-in"'),
+    (r"\bkaos-promote\b", "the name of an internal task", 'write "the end of the run"'),
+    (r"\bpods?\b", "a cluster word", 'write "step" or "run"'),
     (r"\bkubecore-(?:dev|prod)-kaos[\w-]*|\bkaos-v3\b|\bgke-(?:dev|prod)\b|\bprd240-kaos\b", "a cluster name",
      'write "the platform" or "your project\'s machines"'),
 )
@@ -384,6 +389,8 @@ def self_test() -> int:
             "[line](https://github.com/kaos-io/kaos-lib/blob/main/docs_check.py#L1)",
             "[ok there](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html#a-heading)",      # 27-29: fine
             "[ok in yolo](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/index.md#a-heading)",
+            "Open lakeFS.", "Set LAKEFS_ACCESS_KEY.", "Zitadel signs you in.", "kaos-promote FAILED.", "The pods of a run.",   # 31-35: words
+            "Install `kaos-lib[zitadel]` for shared datasets.",                                                    # 36: allowed
         ]
         (top / "KAOS_LIB" / "docs" / "page.md").write_text("\n".join(lines) + "\n")
         env = {f"DOCS_CHECK_{key}": str(top / key) for key in REPOS}
@@ -391,7 +398,7 @@ def self_test() -> int:
         words, removed = check_text(lib, "KAOS_LIB")
         broken, _, skipped = check_links(lib, "KAOS_LIB", env)
         at = lambda found: sorted({int(f.split(":")[1]) for f in found if f.startswith("docs/page.md:")})
-        assert at(words) == [1, 2, 3, 4, 5, 6, 7, 8], f"words: {words}"
+        assert at(words) == [1, 2, 3, 4, 5, 6, 7, 8, 31, 32, 33, 34, 35], f"words: {words}"
         assert at(removed) == [10, 11, 12, 13, 14, 15, 16, 17], f"removed names: {removed}"
         assert at(broken) == [19, 20, 21, 22, 23, 24, 25, 26], f"links: {broken}"
         assert sum("novelcore/yolo-pipelines-template@dev docs/into-lib.md:1" in f for f in broken) == 1 and not skipped, \
