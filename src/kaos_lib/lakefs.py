@@ -8,6 +8,7 @@ HTTP failures become ``LakeFSError`` subclasses whose messages tell the user wha
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import threading
 import time
@@ -91,6 +92,7 @@ class LakeFS:
         self._served: set = set()          # repositories of the owner this client has read successfully
         self._attempted = float("-inf")
         self._templates: Optional[dict] = None
+        self._key_mtime = self._mtime_of_key_file()
 
     @classmethod
     def connect(cls, url: Optional[str] = None, start: Optional[str] = None) -> "LakeFS":
@@ -148,8 +150,35 @@ class LakeFS:
         raise self._error(resp, what)
 
     # -- the key of an app in another project's lakeFS -------------------
+    def _mtime_of_key_file(self) -> Optional[float]:
+        try:
+            return os.stat(self.credential.key_file).st_mtime if self.credential.key_file else None
+        except OSError:
+            return None
+
+    def _reread_key_file(self) -> None:
+        """A job's key is in a file the platform rewrites: take the key the file holds now, when it is new.
+
+        A file that is missing or unreadable for a moment (being rewritten) leaves the key in use as it is.
+        """
+        path = self.credential.key_file
+        mtime, exp = self._mtime_of_key_file(), self.credential.expires
+        if mtime is None or (mtime == self._key_mtime and not (exp is not None and _now() >= exp - RENEW_BEFORE)):
+            return
+        try:
+            cred = credentials.read_key_file(path)
+        except AuthError:
+            return
+        self._key_mtime = mtime
+        if (cred.access_key, cred.secret_key) != (self.credential.access_key, self.credential.secret_key):
+            self.credential = cred
+            self.session.auth = (cred.access_key, cred.secret_key)
+            self._generation += 1
+
     def _fresh_key(self) -> int:
         """Replace a key that is about to end; returns the generation of the key the next request carries."""
+        if self.credential.key_file:
+            self._reread_key_file()
         generation = self._generation
         exp = self.credential.expires
         if self._refresh and exp is not None and _now() >= exp - RENEW_BEFORE:

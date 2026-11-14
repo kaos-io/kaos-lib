@@ -10,6 +10,9 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; ev
 template.** Nothing in kaos-lib converts an old app.
 
 ### Added
+- A job on HPC can sign in to the data store with the key pair of its own app from a file (`LAKEFS_KEY_FILE`, JSON with
+  `access_key_id`, `secret_access_key` and `expiration`). The file is read again when it changes or the key is near its
+  end, so a long step goes on with a refreshed key. A key pair is used before a bearer token (PRD novelcore/kaos#1911 AC-14).
 - Start a run from a step: the run form's `reuse-from-run` and `start-from-step` (PRD novelcore/kaos#1911, novelcore/kaos#2080). The steps
   before the step are not run again; the new run takes the earlier run's results and outputs. Every step that ends
   (`step.result()`, `step.skip()`) now saves the exact result it handed on as `kaos-runs/<run>/<step>.json` of the app's
