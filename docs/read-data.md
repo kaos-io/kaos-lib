@@ -36,6 +36,9 @@ kaosctl dataset release dataset-default
 `list` shows the datasets you can read, `versions` the versions of one, and `release` gives the version `latest` points
 to the next version number ([what a version is](data-contract.md#what-a-version-is)).
 
+To put new files in a dataset, see [Add or change data](add-or-change-data.md); to fix a version, see
+[Release a dataset version](release-a-version.md).
+
 ## Add a second input
 
 Let `hello-world` also count the files of a reference dataset. A second setting holds it, and the step names it:

@@ -52,7 +52,7 @@ three names.
   `37592accd6a211f20307af0db7fceebf98c50367442b65eb1391ac0e6d6d3e96`. It is the exact name: one id is one set of files.
   Logs show the first 12 characters, `37592accd6a2`.
 - **`vN`**, a label such as `v2`, on an uploaded dataset. `kaosctl dataset release dataset-x` gives the version `latest`
-  points to the next number. It refuses when that state already has one: `nothing new to release`.
+  points to the next number. It refuses when that state already has one: `nothing new to release`. How: [Release a dataset version](release-a-version.md).
 - **`latest`**, the name that points to the dataset's current version. For an uploaded dataset it moves when a pull
   request is merged. For a produced dataset it moves at the end of a run whose steps all went well, when the run has its
   `promote-<name>` field set to `true` ([when `latest` moves](data-writes.md#when-latest-moves)). `latest` can be newer

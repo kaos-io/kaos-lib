@@ -64,6 +64,7 @@ The status of a step says why. These are the reasons you can meet:
 | `SiteLimit` | the site's monthly limit for the account is used up | ask your platform contact |
 | `SubmitLimit` | the site allows only so many queued and running jobs, and the project has that many. The step fails | run it again when jobs have ended |
 | `TooLongNotResumable`, `TooLongBeyondContinuations` | the time limit is longer than the site allows | make it resumable, or shorten it |
+| `DatasetNotStaged` | a dataset of more than 50 GB could not be copied to the site in the time allowed. The step fails before it is sent | run the step again: the copy goes on from the files already on the site ([what is copied](data-reads.md#a-dataset-a-step-made-read-on-hpc-slurm)) |
 | `GPUViolation` | the step used a GPU that was not its own, on a node several steps share | use only the GPU the step is given |
 
 ## On your laptop

@@ -68,6 +68,7 @@ kaosctl dataset push ./toy dataset-default -m "first files"
 `push` prints a link to a pull request in the data store, the place that keeps your project's datasets. Open the link in
 your browser and merge the pull request there: you merge it yourself, with the merge button on that page. A dataset
 changes only through a merged pull request.
+The steps for later changes are in [Add or change data](add-or-change-data.md).
 
 ## Run the pipeline
 

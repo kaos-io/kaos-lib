@@ -10,6 +10,8 @@ guide is built.
 | read two datasets, or two versions of one, in one step | [A step with two inputs](flow-datasets.md#a-step-with-two-inputs) |
 | make a dataset and read exactly that version in a later step | [Make a dataset and read it in the same run](flow-datasets.md#make-a-dataset-and-read-it-in-the-same-run) |
 | read a dataset that another pipeline makes | [A second pipeline reads the dataset](flow-datasets.md#a-second-pipeline-reads-the-dataset) |
+| add files to an uploaded dataset, or change them | [Add or change data](add-or-change-data.md) |
+| give the files of an uploaded dataset a version `vN`, and pin it | [Release a dataset version](release-a-version.md) |
 | move `latest` to the version a run made | [Move `latest`](flow-datasets.md#move-latest) |
 | hand numbers or text to the next step | [Values to the next step](flow-between-steps.md#values-to-the-next-step) |
 | hand files to the next step | [Files to the next step](flow-between-steps.md#files-to-the-next-step) |

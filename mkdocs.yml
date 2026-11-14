@@ -130,6 +130,8 @@ nav:
   - How to:
       - Data flow scenarios: data-flow.md
       - "Datasets": flow-datasets.md
+      - Add or change data: add-or-change-data.md
+      - Release a dataset version: release-a-version.md
       - "Between steps": flow-between-steps.md
       - "Train and resume": flow-training.md
       - Conditions and skipping: conditions-and-skipping.md
