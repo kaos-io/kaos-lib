@@ -54,6 +54,40 @@ kaosctl run --lock <mlflow run id> -- python my_script.py
 
 A step has a ledger on its MLflow run only if it uses MLflow (`from kaos_lib.mlflow import mlflow`).
 
+## A dataset a step made, read on HPC (Slurm)
+
+A step on HPC (Slurm) runs in your project's storage on the site, so the datasets it reads are copied there first. This
+holds for a dataset an earlier step made in the same run, such as `clean` made by `prepare`.
+
+| question | answer |
+|---|---|
+| what is copied | every dataset the step reads, and every dataset made by a step in its `needs=`, even if the step never opens it. The whole version, every file |
+| which version | the exact version the earlier step sealed in this run, never `latest` |
+| when | before the job is sent to the Slurm queue. The copy is not part of the step's time limit. The step waits, and its status says how far a long copy is, every 10 minutes |
+| what the step gets | `step.input("clean")` returns the copy on the site. The step code is the same as on the platform's own machines |
+| the next HPC run | reuses the copy if the site holds that version. Otherwise it fetches only the files that differ from a version of the same dataset that the site already holds |
+
+The step's log says what happened, one line for each dataset:
+
+```text
+HPC: dataset dataset-myapp-clean@b2e7b6573672 staged (first copy), 1.4 GB, 95s
+HPC: dataset dataset-myapp-clean@91c0e0aa1f3d staged (delta), 12.0 MB, 4s
+HPC: dataset dataset-myapp-clean@91c0e0aa1f3d staged (already cached)
+```
+
+- `first copy`: the site held no version of the dataset, and every file was copied.
+- `delta`: only the files that differ from a version the site held were copied.
+- `already cached`: the site held this version whole, and nothing was copied.
+
+A run that makes the same files as the last version makes no new version
+([unchanged content](data-writes.md#unchanged-content-makes-no-new-version)), so the next HPC run finds the same version
+and copies nothing. A run that changes some files makes a new version, and its copy is a delta.
+
+If the copy cannot be made, a dataset of up to 50 GB is downloaded by the step itself, when the job has started and counts
+against its time. A larger one stops the run before the job is sent: the reason is `DatasetNotStaged`. Run the step
+again: the copy goes on from the files that are already on the site ([the reasons](when-something-goes-wrong.md#why-an-hpc-slurm-step-waits-or-is-refused)).
+A file whose name ends in `.kaos-part`, or a path that could leave the dataset's folder (a `..` part, a leading `/`), also stops the run before the job is sent: rename or remove the file and make a new version. How long the copies stay on the site is on [Clean up](clean-up.md).
+
 ## When a dataset is empty
 
 A new app's first run reads the empty default dataset, and a step that opens it fails with

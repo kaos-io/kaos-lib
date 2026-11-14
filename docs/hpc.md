@@ -26,7 +26,7 @@ the limit is reached.
 
 A step that produces a dataset runs on the platform's own machines, so `prepare` stays where it is. Every other step
 except the step types `ingest`, `publish` and `control` may run on HPC. `train` reads `clean` from a copy that the platform
-puts beside the job before it starts, and `step.input()` returns that copy. The job waits in the Slurm queue first, for
+puts beside the job before it starts, and `step.input()` returns that copy. What is copied, when, and what the next run reuses: [a dataset a step made, read on HPC (Slurm)](data-reads.md#a-dataset-a-step-made-read-on-hpc-slurm). The job waits in the Slurm queue first, for
 minutes or hours. Outputs, result and MLflow use the same calls as anywhere. The step code never names a place.
 
 Several steps of one project on one class may share a node: each gets its own GPU and its share of the CPUs and the
