@@ -159,3 +159,149 @@ def test_no_secret_is_in_a_repr_or_an_error(keyfile, monkeypatch):
     with pytest.raises(AuthError) as err:
         credentials.resolve(URL)
     assert not any(s in str(err.value) for s in SECRETS)
+
+
+# -- review findings: the bearer is left for good once the file holds a key ------------------------------
+
+BEARER = "Bearer bearer-secret-token"
+
+
+def bearer_client(keyfile, monkeypatch, base=URL, server=None):
+    """A client made while the key file is absent, on the bearer."""
+    monkeypatch.setenv("LAKEFS_BEARER_TOKEN", "bearer-secret-token")
+    cred = credentials.resolve(base)
+    assert cred.token and cred.key_file == str(keyfile)
+    s = lakefs._session(cred, 4)
+    if server is not None:
+        s.mount(base, server)
+    return LakeFS(base, cred, session=s)
+
+
+def test_a_client_on_the_bearer_takes_the_key_once_the_file_holds_one(keyfile, monkeypatch):
+    server = FakeLakeFS(URL)
+    client = bearer_client(keyfile, monkeypatch, server=server)
+    client._call("GET", "/repositories")
+    assert server.auth[-1] == BEARER
+    write_key(keyfile)
+    client._call("GET", "/repositories")
+    assert server.auth[-1] == basic("KAOSXFILEKEY000001", "file-secret-AAA")
+    assert "Authorization" not in client.session.headers and client.credential.token is None
+    write_key(keyfile, key="KAOSXFILEKEY000002", secret="file-secret-BBB", bump=5)
+    client._call("GET", "/repositories")
+    assert server.auth[-1] == basic("KAOSXFILEKEY000002", "file-secret-BBB")
+
+
+def test_the_peer_path_after_the_switch_uses_the_key_not_the_bearer(world, keyfile, monkeypatch):
+    own, owner = world
+    keyfile.unlink()
+    own.valid_auth = {BEARER, basic("KAOSXFILEKEY000001", "file-secret-AAA")}
+    monkeypatch.setenv("LAKEFS_BEARER_TOKEN", "bearer-secret-token")
+    client = LakeFS.connect()
+    assert client.credential.token
+    write_key(keyfile)
+    path = datasets.materialize(REF, client=client)
+    assert (path / "f.bin").read_bytes() == b"data"
+    assert own.exchanges() == [{"owner": "a"}]          # the key-pair branch: an app's key in the owner's lakeFS
+    assert BEARER not in own.auth[-2:] and own.auth[-1] == basic("KAOSXFILEKEY000001", "file-secret-AAA")
+    peer = client._peer_clients["a"]
+    assert peer.credential.token is None and "Authorization" not in peer.session.headers
+
+
+def test_a_peer_client_made_on_the_bearer_is_not_kept_after_the_switch(world, keyfile, monkeypatch):
+    own, owner = world
+    keyfile.unlink()
+    own.valid_auth = None
+    owner.valid_auth = None
+    monkeypatch.setenv("LAKEFS_BEARER_TOKEN", "bearer-secret-token")
+    client = LakeFS.connect()
+    old = client.for_owner("a")
+    assert old.credential.token
+    write_key(keyfile)
+    new = client.for_owner("a")
+    assert new is not old and new.credential.token is None
+
+
+def test_a_replacement_that_keeps_the_mtime_is_picked_up_even_without_expiration(keyfile):
+    keyfile.write_text(json.dumps({"access_key_id": "KAOSXFILEKEY000001", "secret_access_key": "file-secret-AAA"}))
+    st = keyfile.stat()
+    client = LakeFS(URL, credentials.resolve(URL))
+    other = keyfile.with_name("next.json")
+    other.write_text(json.dumps({"access_key_id": "KAOSXFILEKEY000002", "secret_access_key": "file-secret-BBB"}))
+    os.utime(other, ns=(st.st_atime_ns, st.st_mtime_ns))        # same mtime, same size, another inode
+    os.replace(other, keyfile)
+    assert keyfile.stat().st_mtime_ns == st.st_mtime_ns
+    client._fresh_key()
+    assert client.session.auth == ("KAOSXFILEKEY000002", "file-secret-BBB")
+
+
+def test_a_file_near_its_end_and_unchanged_is_read_at_most_every_few_seconds(keyfile, monkeypatch):
+    write_key(keyfile, expires=60)
+    client = LakeFS(URL, credentials.resolve(URL))
+    clock = [time.time()]
+    monkeypatch.setattr(lakefs, "_now", lambda: clock[0])
+    reads = []
+    real = credentials.read_key_file
+    monkeypatch.setattr(credentials, "read_key_file", lambda p: reads.append(p) or real(p))
+    for _ in range(50):
+        client._fresh_key()
+    assert len(reads) == 1
+    clock[0] += lakefs.REREAD_GAP + 1
+    for _ in range(50):
+        client._fresh_key()
+    assert len(reads) == 2
+
+
+def test_two_threads_never_interleave_the_swap(keyfile):
+    import threading
+    write_key(keyfile)
+    client = LakeFS(URL, credentials.resolve(URL))
+    creds = [credentials.Credential(access_key=f"K{i}", secret_key=f"S{i}") for i in range(2)]
+    stop, bad = threading.Event(), []
+
+    def swap(cred):
+        while not stop.is_set():
+            client._install(cred)
+
+    def watch():
+        for _ in range(20000):
+            with client._swapping:
+                if client.session.auth != (client.credential.access_key, client.credential.secret_key):
+                    bad.append(1)
+    threads = [threading.Thread(target=swap, args=(c,)) for c in creds]
+    for t in threads:
+        t.start()
+    watch()
+    stop.set()
+    for t in threads:
+        t.join()
+    assert not bad and client._generation > 0
+
+
+def test_a_refusal_rereads_the_file_and_retries_once_with_a_different_key(keyfile):
+    write_key(keyfile)
+    server = FakeLakeFS(URL)
+    server.valid_auth = {basic("KAOSXFILEKEY000001", "file-secret-AAA")}
+    cred = credentials.resolve(URL)
+    s = lakefs._session(cred, 4)
+    s.mount("https://", server)
+    client = LakeFS(URL, cred, session=s)
+    # the platform writes a new key and the old one stops working before the stamp is looked at again
+    server.valid_auth = {basic("KAOSXFILEKEY000002", "file-secret-BBB")}
+    keyfile.write_text(json.dumps({"access_key_id": "KAOSXFILEKEY000002", "secret_access_key": "file-secret-BBB"}))
+    st = client._key_stamp
+    client._stamp_of_key_file = lambda: st          # the refusal, not the stamp, finds the change
+    client._call("GET", "/repositories")
+    assert server.denied == 1 and server.auth[-1] == basic("KAOSXFILEKEY000002", "file-secret-BBB")
+
+
+def test_a_refusal_with_an_unchanged_file_is_raised_without_a_retry(keyfile):
+    write_key(keyfile)
+    server = FakeLakeFS(URL)
+    server.valid_auth = set()
+    cred = credentials.resolve(URL)
+    s = lakefs._session(cred, 4)
+    s.mount("https://", server)
+    client = LakeFS(URL, cred, session=s)
+    with pytest.raises(AuthError, match="rejected"):
+        client._call("GET", "/repositories")
+    assert server.denied == 1

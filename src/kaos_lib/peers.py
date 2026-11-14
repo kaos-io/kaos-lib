@@ -57,6 +57,7 @@ def load(client) -> Peers:
     """The own project's peers (``GET /kaos/v1/peers`` with the client's own credential), cached per process."""
     if client.base_url in _CACHE:
         return _CACHE[client.base_url]
+    client._fresh_key()
     resp = client.session.get(client.base_url + PEERS_PATH, timeout=TIMEOUT, allow_redirects=False)
     if resp.status_code in (301, 302, 303, 307, 308, 401):
         raise AuthError(f"lakeFS rejected the credential (peers of {client.base_url}). Run `kaosctl login` again.")

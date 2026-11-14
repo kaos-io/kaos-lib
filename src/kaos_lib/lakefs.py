@@ -27,6 +27,7 @@ USER_AGENT = "kaos-lib/0.5"
 
 
 RENEW_BEFORE = 120   # seconds: a key of another project's lakeFS is replaced this long before it ends
+REREAD_GAP = 5       # seconds: a key file that did not change is read again this seldom, once its key is near its end
 RENEW_GAP = 10       # seconds: after one request for a new key, no other, whatever is refused meanwhile
 _REFUSED = (301, 302, 303, 307, 308, 401, 403)
 
@@ -89,10 +90,12 @@ class LakeFS:
         self._refresh = None
         self._generation = 0
         self._renewing = threading.Lock()
+        self._swapping = threading.RLock()  # guards credential, session auth/header, generation, key file state
+        self._read_at = float("-inf")
         self._served: set = set()          # repositories of the owner this client has read successfully
         self._attempted = float("-inf")
         self._templates: Optional[dict] = None
-        self._key_mtime = self._mtime_of_key_file()
+        self._key_stamp = self._stamp_of_key_file()
 
     @classmethod
     def connect(cls, url: Optional[str] = None, start: Optional[str] = None) -> "LakeFS":
@@ -110,6 +113,8 @@ class LakeFS:
         (``credentials.resolve_peer``). This project's access key is never sent to the owner.
         """
         from . import peers
+        if self.credential.key_file:
+            self._fresh_key()       # a bearer client takes the key pair once the key file holds one
         if self.owner:
             raise LakeFSError(f"this client reads project {self.owner}; ask the own project's client for {owner}.")
         if owner in self._peer_clients:
@@ -143,6 +148,11 @@ class LakeFS:
             resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
             if resp.status_code in _REFUSED and repo in self._served:
                 raise self._withdrawn(what)     # read before, refused now with a new key: the share is gone
+        elif self.credential.key_file and resp.status_code == 401:
+            # The platform may have written a new key since: read the file once, and try once more with a different key.
+            if self._reread_key_file(force=True) or self._generation != generation:
+                resp.close()
+                resp = self.session.request(method, f"{self.base_url}/api/v1{path}", **kw)
         if resp.status_code in ok:
             if repo:
                 self._served.add(repo)
@@ -150,30 +160,53 @@ class LakeFS:
         raise self._error(resp, what)
 
     # -- the key of an app in another project's lakeFS -------------------
-    def _mtime_of_key_file(self) -> Optional[float]:
+    def _stamp_of_key_file(self):
+        """Which file the key file is now: (mtime_ns, inode, size), None when there is none."""
         try:
-            return os.stat(self.credential.key_file).st_mtime if self.credential.key_file else None
-        except OSError:
+            st = os.stat(self.credential.key_file)
+        except (OSError, TypeError):
             return None
+        return (st.st_mtime_ns, st.st_ino, st.st_size)
 
-    def _reread_key_file(self) -> None:
+    def _install(self, cred: credentials.Credential) -> None:
+        """Make ``cred`` the credential of this client and of its session (one swap, under the lock)."""
+        with self._swapping:
+            had_bearer = bool(self.credential.token)
+            self.credential = cred
+            if cred.token:
+                self.session.auth = None
+                self.session.headers["Authorization"] = f"Bearer {cred.token}"
+            else:
+                self.session.headers.pop("Authorization", None)
+                self.session.auth = (cred.access_key, cred.secret_key)
+            if had_bearer and not cred.token:
+                self._peer_clients.clear()      # a peer client made on the bearer must not outlive it
+            self._generation += 1
+
+    def _reread_key_file(self, force: bool = False) -> bool:
         """A job's key is in a file the platform rewrites: take the key the file holds now, when it is new.
 
-        A file that is missing or unreadable for a moment (being rewritten) leaves the key in use as it is.
+        True when the credential changed. A file that is missing or unreadable for a moment leaves the credential
+        as it is. The file is read when it is another file than the last time (mtime, inode, size), or, with its key
+        near its end, at most every REREAD_GAP seconds; ``force`` reads it now.
         """
-        path = self.credential.key_file
-        mtime, exp = self._mtime_of_key_file(), self.credential.expires
-        if mtime is None or (mtime == self._key_mtime and not (exp is not None and _now() >= exp - RENEW_BEFORE)):
-            return
-        try:
-            cred = credentials.read_key_file(path)
-        except AuthError:
-            return
-        self._key_mtime = mtime
-        if (cred.access_key, cred.secret_key) != (self.credential.access_key, self.credential.secret_key):
-            self.credential = cred
-            self.session.auth = (cred.access_key, cred.secret_key)
-            self._generation += 1
+        with self._swapping:
+            path = self.credential.key_file
+            stamp, exp, now = self._stamp_of_key_file(), self.credential.expires, _now()
+            if stamp is None:
+                return False
+            near_end = exp is not None and now >= exp - RENEW_BEFORE and now - self._read_at >= REREAD_GAP
+            if not (force or stamp != self._key_stamp or near_end):
+                return False
+            self._key_stamp, self._read_at = stamp, now
+            try:
+                cred = credentials.read_key_file(path)
+            except AuthError:
+                return False
+            if (cred.access_key, cred.secret_key) == (self.credential.access_key, self.credential.secret_key):
+                return False
+            self._install(cred)
+            return True
 
     def _fresh_key(self) -> int:
         """Replace a key that is about to end; returns the generation of the key the next request carries."""
@@ -201,9 +234,7 @@ class LakeFS:
                 if repo in self._served:
                     raise self._withdrawn(what) from None
                 raise
-            self.credential = cred
-            self.session.auth = (cred.access_key, cred.secret_key)
-            self._generation += 1
+            self._install(cred)
 
     def _withdrawn(self, what: str) -> AuthError:
         return AuthError(f"the share was withdrawn: project {self.owner} no longer shares this dataset with your project "
@@ -302,6 +333,7 @@ class LakeFS:
         """kaos-lake's ``GET /kaos/v1/dataset-templates`` (layouts and the storage prefix), read once; None if it has none."""
         if self._templates is None:
             try:
+                self._fresh_key()
                 resp = self.session.get(f"{self.base_url}/kaos/v1/dataset-templates", timeout=30,
                                         allow_redirects=False)
                 body = resp.json() if resp.status_code == 200 else None

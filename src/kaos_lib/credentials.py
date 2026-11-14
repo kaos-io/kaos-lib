@@ -93,7 +93,8 @@ def from_env() -> Optional[Credential]:
             if not os.environ.get("LAKEFS_BEARER_TOKEN"):
                 raise
     token = os.environ.get("LAKEFS_BEARER_TOKEN")
-    return Credential(token=token) if token else None
+    # The path stays with a bearer: the client takes the key pair as soon as the file holds a valid one.
+    return Credential(token=token, key_file=path or None) if token else None
 
 
 def save_session(base_url: str, token: str) -> None:
