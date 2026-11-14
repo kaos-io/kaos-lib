@@ -3,6 +3,7 @@ import pytest
 
 from fake_lakefs import FakeLakeFS
 from kaos_lib import cli
+from kaos_lib.credentials import NotShared
 
 OWN = FakeLakeFS.BASE        # "http://lakefs.test": not in the cluster, so the peers' public URLs are used
 A, C, D, E = "https://lakefs-a.test", "https://lakefs-c.test", "https://lakefs-d.test", "https://lakefs-e.test"
@@ -124,3 +125,50 @@ def test_list_shared_without_a_peer_token(capsys, peers_of_b, monkeypatch):
 def test_list_without_shared_is_unchanged(capsys, peers_of_b):
     code, out, _ = run(capsys, "dataset", "list")
     assert code == 0 and "dataset-default" in out and all(f.calls == [] for f in peers_of_b.values())
+
+
+REFUSAL = ("not shared with your project: {} shares no dataset with your project. Ask project {} to share the dataset "
+           "with your project. Only an app of your project reads it this way.")
+
+
+@pytest.fixture
+def app_of_b(peers_of_b, fake, monkeypatch):
+    """The caller is an app: each peer's key is asked from the own lakeFS first (``credentials.peer_key``)."""
+    from kaos_lib import credentials
+    monkeypatch.setattr(cli, "_connect", lambda args: fake.client(
+        credential=credentials.Credential(access_key="AK-B", secret_key="SK-B")))
+    answers = {"a": credentials.Credential(access_key="KA", secret_key="SA"),
+               "c": NotShared(REFUSAL.format("c", "c")),
+               "d": credentials.Credential(access_key="KD", secret_key="SD")}
+
+    def peer_key(session, own_base_url, owner, timeout=30):
+        answer = answers[owner]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+    monkeypatch.setattr(credentials, "peer_key", peer_key)
+    return answers
+
+
+def test_list_shared_by_an_app_survives_a_peer_that_shares_nothing(capsys, app_of_b):
+    code, out, err = run(capsys, "dataset", "list", "--shared")
+    assert code == 0 and "a/dataset-cats" in out and "c/" not in out
+    assert "c:" not in err and "Ask project" not in err          # a refusal is no noise: nothing is shared
+
+
+def test_list_shared_by_an_app_when_every_peer_shares_nothing(capsys, app_of_b):
+    for owner in ("a", "d"):
+        app_of_b[owner] = NotShared(REFUSAL.format(owner, owner))
+    code, out, err = run(capsys, "dataset", "list", "--shared")
+    assert code == 0 and "No datasets are shared with your project yet" in out and err == ""
+
+
+@pytest.mark.parametrize("error,note", [
+    ("LakeFSError", "asking for its key failed: HTTP 500"),
+    ("DatasetError", "its lakeFS has no public URL"),
+])
+def test_list_shared_by_an_app_keeps_other_peer_failures_visible(capsys, app_of_b, error, note):
+    from kaos_lib import errors
+    app_of_b["c"] = getattr(errors, error)(note)
+    code, out, err = run(capsys, "dataset", "list", "--shared")
+    assert code == 0 and "a/dataset-cats" in out and f"NOTE: c: {note}; nothing listed from it." in err

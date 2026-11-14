@@ -9,7 +9,7 @@ with you:
 kaosctl dataset list --shared
 ```
 
-Each row is `<project>/<dataset>`, its versions and a description. Without any shared dataset the command says so.
+Each row is `<project>/<dataset>`, its versions and a description. Without any shared dataset the command says so. A project that shares nothing with yours is left out; a project that cannot be asked (not reachable, an error) is named in a `NOTE:` line and the rest is still listed.
 `kaosctl dataset versions <project>/dataset-cats` lists the versions of one, and `kaosctl dataset pull
 <project>/dataset-cats@v1` downloads one.
 
