@@ -2,8 +2,10 @@
 
 Order (first hit wins):
   1. LAKEFS_ACCESS_KEY + LAKEFS_SECRET_KEY   an app's key pair (pods, CI) -> Basic auth
-  2. LAKEFS_BEARER_TOKEN                     a bearer token (Slurm jobs)
-  3. the cached browser-login session       a person's Zitadel token (laptop)
+  2. LAKEFS_KEY_FILE                         a file with an app's key pair that the platform keeps fresh (jobs on
+                                             HPC): JSON ``{"access_key_id", "secret_access_key", "expiration"}``
+  3. LAKEFS_BEARER_TOKEN                     a bearer token (Slurm jobs)
+  4. the cached browser-login session       a person's Zitadel token (laptop)
 
 The session cache is ~/.config/kubecore-ml/lakefs-session.json (0600), the file
 the earlier ``kubecore-dataset`` CLI wrote, so an existing login keeps working.
@@ -19,7 +21,7 @@ import json
 import os
 import pathlib
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from . import oidc
@@ -30,11 +32,13 @@ from .errors import AuthError, ConfigError, LakeFSError
 @dataclass(frozen=True)
 class Credential:
     """How to authenticate to lakeFS: a bearer ``token`` or an access-key pair."""
-    token: Optional[str] = None
+    token: Optional[str] = field(default=None, repr=False)
     access_key: Optional[str] = None
-    secret_key: Optional[str] = None
+    secret_key: Optional[str] = field(default=None, repr=False)
     #: When the key stops working (seconds since the epoch), if the server said; None: not known.
     expires: Optional[float] = None
+    #: The file the key was read from (``LAKEFS_KEY_FILE``); the client reads it again when it changes.
+    key_file: Optional[str] = None
 
     @property
     def kind(self) -> str:
@@ -47,13 +51,50 @@ def session_path() -> pathlib.Path:
     return pathlib.Path(home) / "lakefs-session.json"
 
 
+KEY_FILE_ENV = "LAKEFS_KEY_FILE"
+
+
+def read_key_file(path: str) -> Credential:
+    """The key pair in the file ``path``; AuthError saying what is wrong when there is none that works.
+
+    Never puts a value of the file into the error.
+    """
+    try:
+        data = json.loads(pathlib.Path(path).read_text())
+        key, secret = data["access_key_id"], data["secret_access_key"]
+        if not (isinstance(key, str) and isinstance(secret, str) and key and secret):
+            raise ValueError
+    except FileNotFoundError:
+        raise AuthError(f"the key file {path} does not exist yet. The platform writes it when the step starts; "
+                        "run `kaosctl login`, or set LAKEFS_BEARER_TOKEN.") from None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise AuthError(f"the key file {path} cannot be read: it holds no access key and secret key. "
+                        "Run `kaosctl login`, or set LAKEFS_BEARER_TOKEN.") from None
+    expires = _epoch(data.get("expiration")) if data.get("expiration") else None
+    if expires is not None and expires <= datetime.datetime.now(datetime.timezone.utc).timestamp():
+        raise AuthError(f"the key in the key file {path} has ended and no newer one was written. "
+                        "Run `kaosctl login`, or set LAKEFS_BEARER_TOKEN.")
+    return Credential(access_key=key, secret_key=secret, expires=expires, key_file=path)
+
+
 def from_env() -> Optional[Credential]:
-    """Credential from the environment (chain steps 1 and 2), or None."""
+    """Credential from the environment (chain steps 1 to 3), or None.
+
+    A key file that holds no working key is skipped when a bearer token is set; without one its error is raised.
+    """
     key, secret = os.environ.get("LAKEFS_ACCESS_KEY"), os.environ.get("LAKEFS_SECRET_KEY")
     if key and secret:
         return Credential(access_key=key, secret_key=secret)
+    path = os.environ.get(KEY_FILE_ENV)
+    if path:
+        try:
+            return read_key_file(path)
+        except AuthError:
+            if not os.environ.get("LAKEFS_BEARER_TOKEN"):
+                raise
     token = os.environ.get("LAKEFS_BEARER_TOKEN")
-    return Credential(token=token) if token else None
+    # The path stays with a bearer: the client takes the key pair as soon as the file holds a valid one.
+    return Credential(token=token, key_file=path or None) if token else None
 
 
 def save_session(base_url: str, token: str) -> None:
@@ -81,7 +122,7 @@ def resolve(base_url: str) -> Credential:
     if cred is None:
         raise AuthError(
             "not signed in. Run `kaosctl login`, or set LAKEFS_ACCESS_KEY/LAKEFS_SECRET_KEY "
-            "(or LAKEFS_BEARER_TOKEN) in the environment.")
+            "(or LAKEFS_KEY_FILE, or LAKEFS_BEARER_TOKEN) in the environment.")
     return cred
 
 
