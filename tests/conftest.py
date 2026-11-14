@@ -3,6 +3,9 @@ dataset on disk."""
 from __future__ import annotations
 
 import json
+import pathlib
+import subprocess
+import sys
 
 import pytest
 
@@ -15,6 +18,17 @@ ENV_VARS = ("LAKEFS_ENDPOINT", "LAKEFS_URL", "LAKEFS_ACCESS_KEY", "LAKEFS_SECRET
             "KUBECORE_ML_OIDC_PROJECT_ID", "ZITADEL_MACHINE_KEY_FILE", "ZITADEL_DOMAIN",
             "ZITADEL_MLFLOW_PROJECT_ID", "MLFLOW_TRACKING_URI", "MLFLOW_TRACKING_TOKEN", "MLFLOW_TRACKING_AUTH",
             "MLFLOW_RUN_ID", "KAOS_LIB_LOCK", "KAOS_LIB_SUPPORT", "KAOS_STEP_CONTEXT", "KAOS_STAGED_ROOT")
+
+
+def pytest_sessionstart(session):
+    """Steps and `kaosctl` run in a child python that imports whichever kaos_lib is installed. Stop early, with
+    the reason, when that is not the checkout under test (an older install gives unrelated failures)."""
+    import kaos_lib
+    child = subprocess.run([sys.executable, "-c", "import kaos_lib; print(kaos_lib.__file__)"],
+                           capture_output=True, text=True).stdout.strip()
+    if not child or pathlib.Path(child).resolve().parent != pathlib.Path(kaos_lib.__file__).resolve().parent:
+        raise pytest.UsageError("a child python imports kaos_lib from %r, not from the checkout (%s): run the tests in "
+                                "a virtualenv with `pip install -e '.[test]'`" % (child, kaos_lib.__file__))
 
 
 @pytest.fixture(autouse=True)
