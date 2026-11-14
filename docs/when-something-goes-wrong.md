@@ -22,9 +22,9 @@ the command.
 | `result value 'x' is a ...; values are text, numbers, booleans, lists and objects.` | a value that is not plain data, for example a numpy array | convert it: `int(x)`, `x.tolist()` |
 | `this app may not write dataset-...: only what the step declares in produces=[...] in pipeline.py can be written.` | the step wrote a dataset another app declares, or one it did not declare | declare it in `produces=`, or write a dataset of your own |
 | `dataset-... does not exist. The platform creates the dataset or the outputs of an app when its pipeline declares them in produces=[...]; it is there shortly after that change is merged.` | the first run started before the platform made the dataset | run again shortly: it is made soon after the change that declares it is merged |
-| `kaos-promote FAILED: Promoted by this run: ... Not promoted, because another run promoted the dataset first: dataset 'clean' (dataset-...) ... Another run moved a dataset, so trying this task again cannot finish it: start a new run to promote clean.` | another run moved `latest` of the dataset while this one was running | start a new run to promote the datasets the message names. Every version of this run is kept and can be read by its exact version |
-| `kaos-promote FAILED: Promoted by this run: ... Dataset 'x' (...) could not be promoted: ... The data store did not answer as needed: try again.` | the data store failed between two moves of `latest` | the platform tries again by itself; a dataset this run moved is recognised. If it still fails, start a new run ([what is left](data-writes.md#if-the-end-of-the-run-is-cut-short)) |
-| `lakeFS rejected the credential this step was given, or it has expired. The app cannot fix this: report it to the platform team with the run's name` | the step's sign-in was refused | report it with the run's name; your code cannot fix it |
+| `FAILED: Promoted by this run: ... Not promoted, because another run promoted the dataset first: dataset 'clean' (dataset-...) ... Another run moved a dataset, so trying this task again cannot finish it: start a new run to promote clean.` | another run moved `latest` of the dataset while this one was running | start a new run to promote the datasets the message names. Every version of this run is kept and can be read by its exact version |
+| `FAILED: Promoted by this run: ... Dataset 'x' (...) could not be promoted: ... The data store did not answer as needed: try again.` | the data store failed between two moves of `latest` | the platform tries again by itself; a dataset this run moved is recognised. If it still fails, start a new run ([what is left](data-writes.md#if-the-end-of-the-run-is-cut-short)) |
+| `... rejected the credential this step was given, or it has expired. The app cannot fix this: report it to the platform team with the run's name` | the step's sign-in was refused | report it with the run's name; your code cannot fix it |
 | `KAOS: this GPU step cannot reach the NVIDIA driver (libcuda.so.1 not found: ...); the image or node is not set up for GPU` | the GPU machine the step got has no usable driver | pick a class that has a GPU; if it has one, tell your platform contact |
 | `ERROR: this is not a pipeline step: KAOS_STEP_CONTEXT is not set. Run the step with: kaosctl step run <step>` | you started `entry.py` by hand | use `kaosctl step run`, or [a test](test-your-steps.md) |
 
@@ -32,7 +32,7 @@ the command.
 
 | you see | it means |
 |---|---|
-| `kaos-lib: Zitadel could not be reached (...); the sign-in is tried again in N seconds.` | the sign-in service did not answer. A short outage is normal: the step tries again for about two and a half minutes and goes on when it answers. Do nothing. If the tries run out the step fails with `cannot reach Zitadel` |
+| `kaos-lib: ... could not be reached (...); the sign-in is tried again in N seconds.` | the sign-in service did not answer. A short outage is normal: the step tries again for about two and a half minutes and goes on when it answers. Do nothing. If the tries run out the step fails with `cannot reach ...` and the name of the sign-in service |
 | `output 'x': the same content as the last version of dataset-... (...); no new version.` | the step wrote the files the last version already holds |
 | `output 'x': sealed dataset-... at ... (kept as ...). It becomes the latest when the whole run has ended well, if the run form's promote-x is ticked.` | the step made its version; `latest` moves at the end of the run, if `promote-<name>` is `true` and every step went well |
 | `output 'x': 0 file(s) to upload, 0 to delete, 0 unchanged since the last version of dataset-..., 201 reused from an earlier run (copied, not uploaded).` | the files are the ones an earlier run sealed and did not move `latest` to: they were copied, not uploaded again. The run still has its own version |
@@ -74,7 +74,7 @@ The status of a step says why. These are the reasons you can meet:
 | `To run with the settings you have, write a params.yaml (a section per config file the step reads ...) and pass --params-file params.yaml. ... no pipeline engine was given.` | `kaosctl step run` needs the settings from a file you write | write a `params.yaml` and pass `--params-file params.yaml`: [Try it locally](try-it-locally.md#run-steps-the-way-the-platform-does) |
 | `--python x: no such interpreter (/path/x).` | the Python you named is not at that path. A relative path is read from the folder you run the command in | give a path that exists from there, or an absolute one |
 | `--python x cannot import kaos_lib: install kaos-lib into that ...` | that Python has no kaos-lib | install kaos-lib into it |
-| `not signed in. Run kaosctl login, or set LAKEFS_ACCESS_KEY/LAKEFS_SECRET_KEY ...` | no sign-in on this machine | run `kaosctl login` inside your app folder |
+| `not signed in. Run kaosctl login ...` | no sign-in on this machine | run `kaosctl login` inside your app folder |
 | `your kaosctl login session has expired: run kaosctl login again.` | the session ended | `kaosctl login` again |
 | `no step named 'x' in ... Steps: ...` | a typo in the step name | use one of the names listed |
 
@@ -82,7 +82,7 @@ The status of a step says why. These are the reasons you can meet:
 
 | you see | it means | do this |
 |---|---|---|
-| `cannot determine the lakeFS URL ...` | `kaosctl` does not know your project | run it inside your app folder, or pass `--url` |
+| `cannot determine the data store URL ...` | `kaosctl` does not know your project | run it inside your app folder, or pass `--url` |
 | `... has no version v3. Available: v1, v2.` | the version does not exist | `kaosctl dataset versions <repo>`; release a version after the pull request is merged |
 | `nothing new to release: the head of ... main is already v2.` | nothing changed since `v2` | merge a pull request first |
 | `'x' is not a dataset reference: write <repository>@<ref>` | a reference without its version | write `dataset-name@v1` |

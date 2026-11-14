@@ -24,7 +24,7 @@ machines: the run form offers it no HPC class.
 - Keeps the model of each run in its own folder, `<name>/<experiment>/<run>/`, so a later run never overwrites it
   ([models and artifacts](data-writes.md#models-and-artifacts)).
 - Adds the run form's field `<step>-walltime`, where whoever starts the run chooses the time limit. `walltime=` in
-  `pipeline.py` is only its default, and without it the default is 4 hours. When the step declares `checkpoint_every=`, the
+  `pipeline.py` is only its default ([the limits](contract.md#the-limits)). When the step declares `checkpoint_every=`, the
   form also has `<step>-checkpoint-every`, which `checkpoint_every=` defaults.
 - Runs a step that declares `resumable=` again, from its newest checkpoint, when it reaches its time limit, loses its
   machine or exits with code 85: up to 5 times by default after the first run ([Long jobs](long-jobs.md)).

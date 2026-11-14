@@ -11,8 +11,7 @@ You do not have to do anything: the cleanup of failed jobs runs by itself every 
 
 | What | Where it is | Why it is kept |
 |---|---|---|
-| Finished runs and their records | the run page of your project | to look at a run again |
-| The pods of a finished run, and with them the logs of its steps | the run page | to read what a step printed |
+| Finished runs, their records and the logs of their steps | the run page of your project | to look at a run again and read what a step printed |
 | Work folders of steps that **failed, were cancelled or stopped as idle** | on the HPC (Slurm) site, in your project's storage | so you can see what the step left |
 | Checkpoint copies of steps that are not finished | on the HPC (Slurm) site | so a step can continue where it stopped |
 | Job output files | on the HPC (Slurm) site | what the job printed |
@@ -26,8 +25,7 @@ Work folders, checkpoint copies and datasets on the site count against your proj
 
 | What | When |
 |---|---|
-| The record of a finished run | 35 days after it ends |
-| The pods of a finished run, succeeded or failed, and with them the logs of its steps | 7 days after it ends. Read the log of a step within a week |
+| The record of a finished run and the logs of its steps | the numbers are on [What is kept, and for how long](data-retention.md#finished-runs-and-their-logs) |
 | Work folders of failed, cancelled and idle steps; their checkpoint copies; their job output files | kept 14 days so you can look at them, then removed at the next weekly cleanup (**every Sunday at 03:17 UTC**) |
 | Checkpoint copies of a step that has been abandoned for 7 days | when the next job of your project starts on the site. On the platform's own machines, copies of a run that never finished are removed after 7 days |
 | A step image replaced by a newer build | within the hour. An image nothing has used for 14 days is removed too |

@@ -5,7 +5,7 @@ labelled images, makes an INT8 version of it, and registers the result. This pag
 what you know. The pages in the yolo repository ([yolo pipeline](https://github.com/novelcore/yolo-pipelines-template/blob/dev/README.md)) hold what is
 specific to it: [the steps](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/the-pipeline.md), [the dataset layout](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/datasets.md), [every form field](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/parameters.md) and [the Slurm notes](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/slurm.md).
 
-```python title="pipeline.py" hl_lines="26 28 32 37 41"
+```python title="pipeline.py" hl_lines="26 28 33 37 39 43"
 --8<-- "examples/yolo-pipeline/pipeline.py"
 ```
 
@@ -13,7 +13,7 @@ specific to it: [the steps](https://github.com/novelcore/yolo-pipelines-template
 |---|---|---|---|
 | `config-validation` | `control` | checks that the form values fit together, before any machine is paid for | a `control` step handles no data: no `inputs=`, no `produces=` |
 | `prepare-data` | `transform` | writes the run's dataset again as the dataset `prepared`, all of it or a sample | `inputs=` and `produces=dataset(...)` ([page 4](read-data.md), [6](produce-a-dataset.md)) |
-| `model-training` | `train` | trains on a GPU on exactly the version `prepare-data` wrote; logs to MLflow | `gpu=True` ([7](bigger-machines.md)), `walltime=` ([9](hpc.md)), checkpoints ([8](long-jobs.md)) |
+| `model-training` | `train` | trains on a GPU on exactly the version `prepare-data` wrote; logs to MLflow | `gpu=True` ([7](bigger-machines.md)), `walltime=` ([9](hpc.md)), `resumable=` and checkpoints ([8](long-jobs.md)) |
 | `qat-finetune` | `train` | goes on training in a way that prepares the model for INT8 | `when=`, below |
 | `model-quantization` | `transform` | makes the INT8 model and compares it with the full one | `when=` |
 | `model-registration` | `publish` | registers the best checkpoint in MLflow | `kind="publish"` runs on the platform's machines |

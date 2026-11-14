@@ -14,9 +14,7 @@ DOCS = REPO / "docs"
 CHEAT = (DOCS / "cheat-sheet.md").read_text(encoding="utf-8")
 # Not part of what a step's code calls: the parser of the context, and the reset a test harness uses.
 NOT_CALLED_BY_A_STEP = {"parse", "stop"}
-KINDS = ["Home", "Start here", "The contract", "How to", "Reference", "Changelog"]
-# Pages that moved: each stays as a short page that points to the new place, outside the navigation.
-MOVED = {"step-kinds.md", "must-and-can.md", "principles.md", "datasets-versions-hashes.md"}
+KINDS = ["Home", "The contract", "Start here", "How to", "Reference", "Changelog"]
 
 
 def nav() -> list:
@@ -63,12 +61,11 @@ def test_should_put_every_page_in_the_navigation_once():
     found = sorted(p.relative_to(DOCS).as_posix() for p in DOCS.rglob("*.md")
                    if "generated" not in p.parts and "examples" not in p.parts and "design" not in p.parts)
     assert sorted(listed) == sorted(set(listed)), "a page is in the navigation twice"
-    absent = [p for p in found if p not in listed and p not in MOVED]
+    absent = [p for p in found if p not in listed]
     assert not absent, f"pages that are not in the navigation: {absent}"
-    assert not MOVED & set(listed), "a page that moved is in the navigation"
 
 
-def test_should_group_the_navigation_in_the_kinds_of_page_and_put_the_contract_second():
+def test_should_group_the_navigation_in_the_kinds_of_page_and_put_the_contract_first():
     assert [next(iter(e)) if isinstance(e, dict) else e for e in nav()] == KINDS
 
 
@@ -90,10 +87,3 @@ def test_should_have_a_page_for_every_step_type_with_the_same_headings():
         text = (DOCS / f"step-type-{kind}.md").read_text(encoding="utf-8")
         assert re.findall(r"^## (.+)$", text, re.M) == headings, f"the headings of the page of {kind}"
         assert text.startswith(f"# {kind}\n")
-
-
-def test_should_keep_a_moved_page_short_and_pointing_at_the_new_place():
-    for name in MOVED:
-        text = (DOCS / name).read_text(encoding="utf-8")
-        assert len(text.splitlines()) <= 25, f"{name} is not a short page"
-        assert re.search(r"\]\((contract|step-types|data-contract)\.md", text), f"{name} does not point at the new place"

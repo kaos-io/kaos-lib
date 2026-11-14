@@ -123,7 +123,7 @@ in code, see [Test your steps](test-your-steps.md#a-step-with-matrix).
 - A step may need only one step with `matrix=`. When it does, it may need at most 4 steps in all.
 - The step may not produce a dataset: a dataset has one writer and one version for each run. Produce a model or an
   artifact, and let the step after it write the dataset.
-- A step of the kind `ingest`, `publish` or `control` runs once and cannot have `matrix=` ([Step kinds](step-kinds.md)).
+- A step of the kind `ingest`, `publish` or `control` runs once and cannot have `matrix=` ([Step types](step-types.md)).
 - A step with `matrix=` cannot need another step with `matrix=`. Put a step between them that picks which results to use.
 - A `when=` cannot read a value of a step with `matrix=` (it has one value for each run). A `when=` on the step itself is
   fine: every run is then skipped.

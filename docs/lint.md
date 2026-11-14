@@ -61,7 +61,7 @@ prove the pipeline is right.
 | error | [L-E01 TooLongNotResumable](lint/L-E01.md) | a limit above the longest run, and the step is known not to continue |
 | error | [L-E02 TooLongBeyondContinuations](lint/L-E02.md) | a resumable step needs more runs than allowed |
 | error | [L-E03 UnknownClass](lint/L-E03.md) | a pinned class your project cannot use |
-| error | [L-E04 ClientIdentity](lint/L-E04.md) | your own service account, a pod patch or a reserved name |
+| error | [L-E04 ClientIdentity](lint/L-E04.md) | your own service account, a patch of the machine settings or a reserved name |
 | error | [L-E05 DependencyOrProducer](lint/L-E05.md) | a wrong `needs=`, `reads=`, name or cycle |
 | error | [L-E06 RefusedArgument](lint/L-E06.md) | a `step()` argument the library refuses |
 | error | [L-E07 StepDeclaration](lint/L-E07.md) | a step without a `kind`, a folder or a valid name, or with a wrong `inputs=` or `produces=` |

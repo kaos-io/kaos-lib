@@ -24,13 +24,6 @@ exclude_docs: |
   generated/install.md
   design/
   examples/
-# The old pages stay as short pages that say where their content moved, so that a link to them still works.
-not_in_nav: |
-  step-kinds.md
-  must-and-can.md
-  principles.md
-  datasets-versions-hashes.md
-
 hooks:
   - docs/hooks.py
   - docs_check.py   # words, removed names, links: a finding fails the build
@@ -100,18 +93,6 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Start here:
-      - 1. Run it: run-it.md
-      - 2. Your first step: first-step.md
-      - 3. Settings: settings.md
-      - 4. Read data: read-data.md
-      - 5. Pass things on: pass-things-on.md
-      - 6. Produce a dataset: produce-a-dataset.md
-      - 7. Bigger machines: bigger-machines.md
-      - 8. Long jobs: long-jobs.md
-      - 9. HPC (Slurm): hpc.md
-      - 10. Try it locally: try-it-locally.md
-      - 11. A real pipeline: a-real-pipeline.md
   - The contract:
       - Your contract with the platform: contract.md
       - Step types:
@@ -127,6 +108,18 @@ nav:
           - What a run reads: data-reads.md
           - What a run writes: data-writes.md
           - What is kept, and for how long: data-retention.md
+  - Start here:
+      - 1. Run it: run-it.md
+      - 2. Your first step: first-step.md
+      - 3. Settings: settings.md
+      - 4. Read data: read-data.md
+      - 5. Pass things on: pass-things-on.md
+      - 6. Produce a dataset: produce-a-dataset.md
+      - 7. Bigger machines: bigger-machines.md
+      - 8. Long jobs: long-jobs.md
+      - 9. HPC (Slurm): hpc.md
+      - 10. Try it locally: try-it-locally.md
+      - 11. A real pipeline: a-real-pipeline.md
   - How to:
       - Data flow scenarios: data-flow.md
       - "Datasets": flow-datasets.md

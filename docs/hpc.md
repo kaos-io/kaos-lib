@@ -15,8 +15,9 @@ A step does not name a queue or a quality of service. The platform chooses them.
 
 Slurm stops a job at its time limit. The limit is the one every step has, wherever it runs: the field `<step>-walltime`
 of the run form, whose default is `walltime=` on the step: `"90m"`, `"12h"` or `"720"` (minutes). A step that sets none
-gets `4h`. The longest limit is 30 days ([the limits](contract.md#the-limits)). [Long jobs](long-jobs.md#the-time-limit) says what happens when
-the limit is reached.
+gets `4h` ([the limits](contract.md#the-limits)). What a step on HPC may ask for, and why: [A step can be stopped and started again](contract.md#a-step-can-be-stopped-and-started-again)
+(the `12h` of the example below is for the platform's own machines; on HPC today a limit above 11 hours 30 minutes needs `resumable=`).
+[Long jobs](long-jobs.md#the-time-limit) says what happens when the limit is reached.
 
 ```python title="pipeline.py" hl_lines="24"
 --8<-- "examples/first-pipeline/hpc/pipeline.py"
@@ -39,9 +40,9 @@ A step that keeps a checkpoint ([page 8](long-jobs.md)) continues in a new job. 
 limit, and `resumable=` on the step sets how long before ([Reference](reference.md#pipelinepy)). A step that does not keep
 one ends at its limit.
 
-A step that asks for more time than the longest run the site allows is not cut. If it can continue, it runs as several
-capped jobs, one after the other, each from the last checkpoint. If it cannot, it is refused before it is sent: make it
-resumable, or shorten the limit in the field `<step>-walltime` of the run form (`walltime=` is only its default). `kaosctl lint` reports the default before you push (`L-E01`, `L-E02`).
+A step that asks for more time than one run may last is not cut. If it is resumable, it runs as several capped jobs, one
+after the other, each from the last checkpoint. If it is not, it is refused before it is sent: make it resumable, or
+shorten the limit in the field `<step>-walltime` of the run form (`walltime=` is only its default). `kaosctl lint` reports the default before you push (`L-E01`, `L-E02`).
 
 A step that waits or is refused has a reason in its status:
 [Why an HPC (Slurm) step waits or is refused](when-something-goes-wrong.md#why-an-hpc-slurm-step-waits-or-is-refused) lists them.

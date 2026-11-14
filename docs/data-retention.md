@@ -1,7 +1,7 @@
 # What is kept, and for how long
 
 Some things a run leaves are removed by themselves, on a schedule. Everything else stays until you remove it. This page
-lists both. The numbers are the defaults; the first two are set for each project.
+lists both. The numbers are the defaults; each project can set its own.
 
 ## Removed by itself
 
@@ -13,8 +13,17 @@ lists both. The numbers are the defaults; the first two are set for each project
 Both apply to the datasets a step produces only. They do not touch an uploaded dataset, a model or an artifact. The 7 and
 30 days are the defaults; each project can set its own.
 
-What your runs leave besides data (the records and pods of finished runs, their logs, and the files and checkpoint copies
-on the HPC (Slurm) site) is on [Clean up](clean-up.md).
+## Finished runs and their logs
+
+This is what the platform does today. It is not a promise: [the contract](contract.md#what-is-not-promised-today) does not
+make one, so copy what you need into an artifact or a dataset.
+
+| what | removed when |
+|---|---|
+| the record of a finished run, succeeded or failed | 35 days after it ends. A project can set another number of days. A pipeline with a step that can run on HPC (Slurm) is kept at least 32 days, so the month's HPC spend stays counted |
+| the logs of its steps | 7 days after the run ends. Read the log of a step within a week |
+
+The files and checkpoint copies a run leaves on the HPC (Slurm) site are on [Clean up](clean-up.md).
 
 ## Never removed
 

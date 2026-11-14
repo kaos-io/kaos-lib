@@ -23,12 +23,13 @@ HERE = Path(__file__).parent
 
 with pipeline("ml-pipeline") as p:
     # A gate: it decides whether the run goes on and handles no data.
-    validate = step("config-validation", kind="control", reads=["model", "quantization"])
+    validate = step("config-validation", kind="control", reads=["experiment", "model", "quantization", "registration"])
     prepare = step("prepare-data", kind="transform", needs=[validate], reads=["data"], inputs=["dataset"],
                    produces=[dataset("prepared")])
-    # walltime: the default of the run form's time limit for this step, which applies wherever the step runs
-    # and which whoever starts the run can change. Size it to the longest expected training. Nothing else to declare for long trainings: the platform runs a step lost
-    # with its machine again and continues it from the checkpoints Ultralytics writes.
+    # walltime: the default time limit of the step, here 12h. The person who starts a run sets the limit on the run
+    # form (`model-training-walltime`); this value is what the run form starts with. A step lost with its machine is run again and
+    # continues from the checkpoints Ultralytics writes. Today a limit above 11 h 30 is refused on an HPC (Slurm) class
+    # unless the step declares resumable=.
     train = step("model-training", kind="train", gpu=True, needs=[prepare], walltime="12h",
                  reads=["experiment", "model", "train", "image_processing", "logging"],
                  produces=[model("checkpoints")])
