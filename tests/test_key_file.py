@@ -105,6 +105,7 @@ def test_the_client_rereads_a_key_near_its_end_and_keeps_it_when_nothing_new_is_
     client._fresh_key()                      # near the end, nothing new: the old key goes on, no error here
     assert client.session.auth[0] == "KAOSXFILEKEY000001"
     write_key(keyfile, key="KAOSXFILEKEY000002", secret="file-secret-BBB")   # same mtime second is possible
+    client._read_at -= lakefs.REREAD_GAP     # a rewrite the file clock hides is found at the next read near the end
     client._fresh_key()
     assert client.session.auth[0] == "KAOSXFILEKEY000002"
 
