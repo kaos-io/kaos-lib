@@ -103,6 +103,7 @@ template.** Nothing in kaos-lib converts an old app.
   is created.
 
 ### Fixed
+- `kaosctl dataset list --shared` from an app no longer fails when one project of the organisation shares nothing with yours: that project is skipped and the datasets of the others are listed (PRD novelcore/kaos#1911 AC-44). A project that fails for another reason is named in a `NOTE:` line on stderr.
 - What `kaos_lib.checkpoint` saves (the state file of `save(obj)`, the folder of a checkpoint) is readable by other users, so the platform's helper can copy it and a resumable step no longer restarts from zero (PRD novelcore/kaos#1911 AC-24, D-64).
 
 ### Changed

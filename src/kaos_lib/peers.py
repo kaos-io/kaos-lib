@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 import requests
 
+from .credentials import NotShared
 from .errors import AuthError, ConfigError, DatasetError, LakeFSError
 
 PEERS_PATH, SHARED_PATH = "/kaos/v1/peers", "/kaos/v1/shared"
@@ -121,7 +122,12 @@ def _shared_rows(owner: str, body) -> list:
 
 
 def _shares_of(client, p: Peer) -> PeerShares:
-    peer_client = client.for_owner(p.project)
+    try:
+        peer_client = client.for_owner(p.project)
+    except NotShared:
+        return PeerShares(p.project)   # the peer shares nothing with this project: no key for it, and no name revealed
+    except (LakeFSError, DatasetError) as exc:   # this peer only; a failure for every peer (no token, old lakeFS) still stops
+        return PeerShares(p.project, note=str(exc))
     try:
         resp = peer_client.session.get(peer_client.base_url + SHARED_PATH, timeout=TIMEOUT, allow_redirects=False)
     except requests.RequestException as exc:
