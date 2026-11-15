@@ -54,13 +54,11 @@ def install_page(fetch: Optional[Callable] = None) -> str:
     """How to install kaosctl, the same on every platform: no address, no release read at build time.
     (``fetch`` is accepted and ignored: older callers passed one.)"""
     return "\n".join([
-        "Your platform publishes the kaos-lib it supports, and `kaosctl` finds it for you.", "",
-        "- If you have `kaosctl`, run `kaosctl login` in your app folder, then `kaosctl upgrade`. It installs the "
-        "version your platform recommends. Run `kaosctl --version` to see what you have and what the platform "
-        "recommends.",
-        "- If you do not have it yet, open the console of your platform: its **Pipelines** page shows the line "
-        "that installs `kaosctl`. Copy it into a terminal.",
-        "- To add the editor extension for VS Code afterwards, run `kaosctl vscode install`.", ""])
+        "Install `kaosctl` with pip from your platform's package index. Your platform admin, or the console of "
+        "your platform, gives you the index and the version to install.", "",
+        "- To move to a newer version later, run `kaosctl upgrade`. It installs the version your platform "
+        "recommends when the platform publishes one. `kaosctl --version` shows what you have.",
+        "- To add the editor extension for VS Code, run `kaosctl vscode install`.", ""])
 
 
 def built_page(version: str, commit: str) -> str:

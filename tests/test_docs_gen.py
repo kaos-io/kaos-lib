@@ -28,7 +28,7 @@ def test_every_command_of_the_parser_has_its_help_in_the_reference():
 
 def test_the_install_page_names_no_index_no_bucket_and_no_release():
     page = docs_gen.install_page()
-    assert "kaosctl upgrade" in page and "kaosctl login" in page and "console" in page
+    assert "kaosctl upgrade" in page and "package index" in page and "console" in page
     for word in ("http://", "https://", "--index-url", "release.json", "pip install"):
         assert word not in page, word
     assert page == docs_gen.install_page(lambda url: {"version": "9"}), "it reads nothing: the same page every build"

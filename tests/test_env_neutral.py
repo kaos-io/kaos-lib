@@ -160,6 +160,13 @@ def test_lint_doc_base_flag_and_environment(capsys, tmp_path, monkeypatch):
 
 
 # ------------------------------------------------------------------ the guard
+def _unavailable(reason: str):
+    """A guard that cannot run is a failure in CI ($CI or $KAOS_LIB_CI set) and a skip on a laptop."""
+    if os.environ.get("CI") or os.environ.get("KAOS_LIB_CI"):
+        pytest.fail(f"{reason}: install the test extra (pip install -e '.[test]') so this guard runs in CI")
+    pytest.skip(reason)
+
+
 def _hits(root: pathlib.Path) -> list:
     needle = DEV.encode()
     return [str(p.relative_to(root)) for p in sorted(root.rglob("*"))
@@ -176,14 +183,17 @@ def _build(tmp_path, *command):
 
 
 def test_the_built_wheel_names_no_dev_project(tmp_path):
-    pytest.importorskip("build")
+    try:
+        import build  # noqa: F401
+    except ImportError:
+        _unavailable("the `build` package is not installed")
     out = tmp_path / "dist"
     work = tmp_path / "src-copy"
     shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(".git", "node_modules", "__pycache__", "*.egg-info", "build", "dist", "site"))
     done = subprocess.run([sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(out)],
                           cwd=work, capture_output=True, text=True)
     if done.returncode:
-        pytest.skip(f"the wheel could not be built here: {done.stderr[-300:]}")
+        _unavailable(f"the wheel could not be built here: {done.stderr[-300:]}")
     wheel = next(out.glob("*.whl"))
     with zipfile.ZipFile(wheel) as z:
         bad = [n for n in z.namelist() if DEV.encode() in z.read(n)]
@@ -191,14 +201,17 @@ def test_the_built_wheel_names_no_dev_project(tmp_path):
 
 
 def test_the_built_docs_site_names_no_dev_project(tmp_path, monkeypatch):
-    pytest.importorskip("mkdocs")
+    try:
+        import mkdocs  # noqa: F401
+    except ImportError:
+        _unavailable("mkdocs is not installed")
     site = tmp_path / "site"
     env = {k: v for k, v in os.environ.items() if not k.startswith("KAOS_LIB_")}
     env.update(DOCS_CHECK_OFFLINE="1", SOURCE_DATE_EPOCH="1700000000")
     done = subprocess.run([sys.executable, "-m", "mkdocs", "build", "--strict", "-q", "-d", str(site)],
                           cwd=ROOT, capture_output=True, text=True, env=env)
     if done.returncode and "No module named" in done.stderr:
-        pytest.skip("the docs dependencies are not installed")
+        _unavailable("the docs dependencies are not installed")
     assert done.returncode == 0, done.stderr[-800:] + done.stdout[-800:]
     assert _hits(site) == []
     assert "<loc>" not in (site / "sitemap.xml").read_text(), "no site_url, so no sitemap that names a host"

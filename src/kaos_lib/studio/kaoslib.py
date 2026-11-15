@@ -72,7 +72,8 @@ def resolve(flag: Optional[str] = None, context: Optional[str] = None, dockerfil
             f"no kaos-lib to install: none was named (--kaos-lib), the context file has none, your platform has "
             f"recommended none, the Dockerfile declares no default, and this machine knows no package index to "
             f"install kaosctl's own version {__version__} from (kaosctl carries no address of any platform). "
-            "Pass --kaos-lib <requirement or path>, sign in with `kaosctl login`, or set KAOS_LIB_INDEX_URL.")
+            "Pass --kaos-lib <requirement or path>, or set KAOS_LIB_INDEX_URL (your platform may not publish "
+            "addresses yet; `kaosctl login` keeps them once it does).")
     req = channel.requirement(f"=={__version__}", zitadel=True)
     return KaosLibSpec(str(req), _indexes_for(req, found.index_url),
                        f"this kaosctl's own version ({__version__}), from the package index named by {found.describe('index_url')}")

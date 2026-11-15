@@ -24,18 +24,18 @@ class DevOutcome:
     detail: str = ""
 
 
-def requirements_text(deps: StepDeps, spec: kaoslib.KaosLibSpec) -> str:
+def requirements_text(deps: StepDeps, spec: Optional[kaoslib.KaosLibSpec]) -> str:
     """The requirements file the environment is installed from: indexes first, the step's lines, then kaos-lib.
 
     A `--index-url` in a step's file (a CUDA wheel index) becomes an extra index here: the step's other packages
     still come from PyPI, which is how its image gets them (a separate `pip install` per file).
     """
     extra = {url for _, url in deps.index_options}
-    if deps.declares_kaos_lib_arg or deps.imports_kaos_lib:
+    if spec is not None and (deps.declares_kaos_lib_arg or deps.imports_kaos_lib):
         extra.update(spec.index_urls)
     lines = [f"--extra-index-url {url}" for url in sorted(extra)]
     lines += deps.requirements
-    if deps.declares_kaos_lib_arg or deps.imports_kaos_lib:
+    if spec is not None and (deps.declares_kaos_lib_arg or deps.imports_kaos_lib):
         lines.append(spec.requirement)     # a step that never uses kaos-lib does not get it (data-summary: PyYAML only)
     return "\n".join(lines) + "\n"
 
@@ -44,7 +44,8 @@ def setup_step(step: steps.StepInfo, spec_flag: Optional[str], context: Optional
                echo=print, editor_hint: bool = False) -> DevOutcome:
     """Set up one step's environment and interpreter hint. Never runs the step's code."""
     deps = read_step_deps(step.path)
-    spec = kaoslib.resolve(spec_flag, context, deps.kaos_lib_default)
+    uses = deps.declares_kaos_lib_arg or deps.imports_kaos_lib
+    spec = kaoslib.resolve(spec_flag, context, deps.kaos_lib_default) if uses else None   # a step without kaos-lib needs none
     python, note = pyenv.find_python(deps.python, uv)
     for n in deps.notes:
         echo(f"  note: {n}")
@@ -53,7 +54,6 @@ def setup_step(step: steps.StepInfo, spec_flag: Optional[str], context: Optional
         echo(result.log[-2000:])
         return DevOutcome(step.name, "failed", result.note)
     hint = vscode.write_interpreter_hint(step.path) if editor_hint else "unchanged"
-    uses = deps.declares_kaos_lib_arg or deps.imports_kaos_lib
     detail = f"Python {result.python}" + (f", kaos-lib from {spec.source}" if uses else "")
     extras = [n for n in (note, "" if hint in ("written", "unchanged") else hint) if n]
     return DevOutcome(step.name, result.status, "; ".join([detail] + extras))

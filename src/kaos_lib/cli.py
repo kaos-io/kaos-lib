@@ -305,9 +305,9 @@ def cmd_upgrade(args) -> int:
         found = addresses.resolve(base_url=platform)
         if not found.releases_base:
             print(f"ERROR: {where} publishes no recommended kaos-lib, and this machine knows no release address "
-                  "to look for the newest one (no KAOS_LIB_RELEASES_BASE, and the platform has published none "
-                  "to this machine). Sign in to your platform with `kaosctl login` (it keeps the platform's addresses), "
-                  "or set KAOS_LIB_RELEASES_BASE; nothing was installed.", file=sys.stderr)
+                  "to look for the newest one. Your platform may not publish addresses yet: set "
+                  "KAOS_LIB_RELEASES_BASE, or run `kaosctl login` once your platform serves them. Nothing was "
+                  "installed.", file=sys.stderr)
             return EXIT_USER_ERROR
         newest = channel.public_release(mine if mine in channel.PREFIX else "stable") or {}
         rec = channel.recommended(newest)
@@ -467,9 +467,9 @@ def cmd_vscode_install(args) -> int:
     """Install the VS Code extension that was published with this kaos-lib release (same version, same commit)."""
     record = channel.public_vscode(__version__)
     if not record and not channel.releases_base():
-        print("ERROR: this machine knows no release address to download the VS Code extension from. Sign in to "
-              "your platform with `kaosctl login` (it keeps the platform's addresses), or set "
-              "KAOS_LIB_RELEASES_BASE.", file=sys.stderr)
+        print("ERROR: this machine knows no release address to download the VS Code extension from. Your platform may "
+              "not publish addresses yet: set KAOS_LIB_RELEASES_BASE, or run `kaosctl login` once your platform "
+              "serves them.", file=sys.stderr)
         return EXIT_USER_ERROR
     if not record:
         print(f"ERROR: no VS Code extension is published for kaos-lib {__version__}. It is published with every "

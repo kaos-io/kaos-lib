@@ -175,7 +175,7 @@ template.** Nothing in kaos-lib converts an old app.
   message or fix changes.
 - The documentation build reads `KAOS_LIB_SITE_URL` (default empty: no canonical link, an empty sitemap) and
   `KAOS_LIB_RELEASE_BUCKET` (the full bucket address, only for `docs_check.py`'s link checks). The install page names no
-  index and reads nothing at build time: it points to `kaosctl upgrade` and the console.
+  index and reads nothing at build time: it says to install with pip from your platform's index and to use `kaosctl upgrade`.
 - The guide, the examples and the README name no platform address. A test fails if the dev project's name appears in
   the package source, the built wheel or the built documentation site.
 

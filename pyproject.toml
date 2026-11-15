@@ -26,7 +26,10 @@ Changelog = "https://github.com/kaos-io/kaos-lib/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 zitadel = ["PyJWT>=2.8", "cryptography>=41"]   # machine-key tokens for datasets shared by other projects
 mlflow = ["mlflow-skinny>=3,<4", "PyJWT>=2.8", "cryptography>=41"]   # kaos_lib.mlflow, kaos_lib.lock.write/load, run --lock
-test = ["pytest>=7", "PyJWT>=2.8", "cryptography>=41", "mlflow-skinny>=3,<4"]
+test = ["pytest>=7", "PyJWT>=2.8", "cryptography>=41", "mlflow-skinny>=3,<4",
+        # the guards of tests/test_env_neutral.py build the wheel and the docs site; in CI they fail rather than skip
+        "build>=1", "setuptools>=77", "wheel",
+        "mkdocs-material>=9.5,<10", "mkdocstrings[python]>=0.26,<1", "pymdown-extensions>=10.14,<10.17"]
 
 [project.scripts]
 kaosctl = "kaos_lib.cli:main"
