@@ -12,7 +12,7 @@ from kaos_lib import channel, cli, support
 from kaos_lib.errors import AuthError, ConfigError
 from packaging.requirements import Requirement
 
-AR = "https://europe-west1-python.pkg.dev/kaos-dev-511509"
+AR = "https://index.example.test/project"
 RC_WHEEL = f"{AR}/kaos-lib-rc/kaos-lib/kaos_lib-0.3.0rc2-py3-none-any.whl"
 STABLE_WHEEL = f"{AR}/kaos-lib/kaos-lib/kaos_lib-0.3.0-py3-none-any.whl"
 SHA256 = "0" * 64
