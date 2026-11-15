@@ -11,7 +11,7 @@ kaosctl lint --format json      # the same report for tools
 ```text
 pipeline.py:19:15: error L-E07 StepDeclaration: Step 'prepare' has no kind=, which every step declares: ...
     fix: Give every step a kind, name its dataset inputs in inputs=[...] and what it writes in produces=[...].
-    docs: https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html
+    docs: <the rule pages of your platform's guide>/lint/L-E07.html
 0 errors, 0 warnings, 2 infos; 2 rules skipped. Rule set 2.1.0; facts from: built-in default.
 ```
 

@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import json
 
-from .constants import (DEFAULT_LIMIT_MINUTES, DOC_BASE, LONG_GPU_STEP_MINUTES, MATRIX_MAX_ITEMS, RULESET_VERSION,
+from .constants import (DEFAULT_LIMIT_MINUTES, LONG_GPU_STEP_MINUTES, MATRIX_MAX_ITEMS, RULESET_VERSION,
                         STEP_NAME_PATTERN, STEP_PARAMS, TIME_PATTERN)
+from .registry import doc_base, doc_url
 
 # The shape of this document. Bump when a field an editor reads changes meaning or goes away.
 SCHEMA_VERSION = 1
@@ -20,7 +21,12 @@ SCHEMA_VERSION = 1
 # Where the step API is imported from in a pipeline.py (the linter follows `from <module>.authoring import step`).
 AUTHORING_MODULES = ("kubecore.authoring",)
 
-GUIDE_URL = DOC_BASE[: -len("lint/")] + "lint.html"
+
+
+def _guide_url() -> str:
+    """The lint guide, next to the rule pages folder; "" when that folder is not known."""
+    base = doc_base()
+    return base[: -len("lint/")] + "lint.html" if base and base.endswith("/lint/") else ""
 
 
 def _value(insert: str, doc: str) -> dict:
@@ -140,7 +146,7 @@ def _parameter(position: int, name: str) -> dict:
            "default": spec.pop("default", None), "gpu_only": spec.pop("gpu_only", False),
            "pattern": spec.pop("pattern", None), "doc": spec.pop("doc"), "snippet": spec.pop("snippet"),
            "values": spec.pop("values"),
-           "links": [{"title": rule, "url": f"{DOC_BASE}{rule}.html"} for rule in rules]}
+           "links": [{"title": rule, "url": doc_url(rule)} for rule in rules] if doc_base() else []}
     assert not spec, f"unused schema fields for {name}: {sorted(spec)}"
     return out
 
@@ -157,7 +163,7 @@ def build_schema() -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "ruleset_version": RULESET_VERSION,
-        "guide": GUIDE_URL,
+        "guide": _guide_url(),
         "authoring_modules": list(AUTHORING_MODULES),
         "step": {"function": "step", "parameters": [_parameter(i, n) for i, n in enumerate(STEP_PARAMS)]},
         "pipeline": {"function": "pipeline",

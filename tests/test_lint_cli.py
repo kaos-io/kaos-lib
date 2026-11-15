@@ -44,7 +44,8 @@ def test_exit_code_1_when_it_cannot_run(tmp_path, capsys):
     assert code == 1 and err.startswith("ERROR:")
 
 
-def test_text_json_and_markdown_forms(tmp_path, capsys):
+def test_text_json_and_markdown_forms(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("KAOS_LIB_LINT_DOC_BASE", "https://docs.example.test/lint/")
     root = write_repo(tmp_path / "r", CASES["L-E05"][0])
     _, text, _ = kaosctl(capsys, str(root))
     assert "pipeline.py:4:" in text and "fix:" in text and "docs:" in text and "Rule set" in text

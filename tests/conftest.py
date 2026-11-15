@@ -40,6 +40,8 @@ def clean_env(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
     monkeypatch.setenv("KAOS_LIB_RELEASES_BASE", "http://127.0.0.1:9")   # no test reaches the public bucket
     monkeypatch.chdir(tmp_path)
+    from kaos_lib.lint import registry
+    monkeypatch.setattr(registry, "_doc_base", "https://docs.example.test/lint/")   # the CLI resets it on every run
     from kaos_lib import config, lock, mlflow, peers
     config.load_config.cache_clear()
     peers.clear_cache()

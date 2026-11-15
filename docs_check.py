@@ -33,11 +33,20 @@ import unicodedata
 import urllib.error
 import urllib.request
 
-BUCKET = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/"
+# The release bucket of the platform this check runs for ($KAOS_LIB_RELEASE_BUCKET, the same name the docs build reads).
+# Empty: no bucket is known, so a link to a site is an ordinary external address (the guide's own pages still resolve
+# by file). No address of any platform is written in this file.
+def sites_of(bucket: str) -> tuple:
+    """The guide's addresses in a bucket: the current copy first, then the folder of a version or the old root."""
+    base = (bucket or "").strip().rstrip("/")
+    return (f"{base}/docs/current/", f"{base}/docs/") if base else ()
+
+
+BUCKET = (os.environ.get("KAOS_LIB_RELEASE_BUCKET") or "").strip().rstrip("/")
 REPOS = {
     "KAOS_LIB": {
         "repo": "kaos-io/kaos-lib", "trunk": "main",
-        "sites": (BUCKET + "docs/",),
+        "sites": sites_of(BUCKET),
         "generated": ("docs/generated/cli.md",),             # written by the build (docs_gen.py), not committed
         # Not client pages: the changelog records history, removed names included; docs/design/ is for the platform team.
         "not_client": ("CHANGELOG.md", "docs/design/"),
@@ -362,6 +371,8 @@ def on_pre_build(config, **kwargs):
 def self_test() -> int:
     """Every rule on a small made-up copy of the three repositories; an AssertionError names the case that broke."""
     top = pathlib.Path(tempfile.mkdtemp(prefix="docs-check-self-"))
+    bucket, real_sites = "https://bucket.example.test", REPOS["KAOS_LIB"]["sites"]
+    REPOS["KAOS_LIB"]["sites"] = sites_of(bucket)       # the cases name a bucket of their own, never the environment's
     try:
         for key, spec in REPOS.items():
             (top / key / "docs" / "img").mkdir(parents=True)
@@ -370,7 +381,7 @@ def self_test() -> int:
             (top / key / "README.md").write_text("# Readme\n")
         (top / "KAOS_LIB" / "mkdocs.yml").write_text(f"repo_name: {REPOS['KAOS_LIB']['repo']}\nnav:\n  - Home: index.md\n")
         (top / "KAOS_LIB" / "docs_check.py").write_text("line\n")
-        (top / "YOLO" / "docs" / "into-lib.md").write_text(f"[gone]({BUCKET}docs/gone.html)\n")
+        (top / "YOLO" / "docs" / "into-lib.md").write_text(f"[gone]({bucket}/docs/gone.html)\n")
         (top / "YOLO" / "README.md").write_text("Run kubectl. [broken](docs/nope.md)\n")
         lines = [
             "Open Argo.", "The argoproj project.", "Set ARGO_SERVER first.", '[the form](index.md "the Argo form")',
@@ -381,13 +392,13 @@ def self_test() -> int:
             "`src/kubecore/`, `.kubecore/dataset-config.yaml`, `~/.cache/kubecore/datasets` are fine.",          # 18: allowed
             "[no file](nope.md)", "[no heading](index.md#nope)", '<a href="nope-a.md">x</a>', '<img src="img/nope.png">',
             "[![a run](img/argo-run.png)](nope-outer.md)",
-            "[no page](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/nope.html)",
+            "[no page](https://bucket.example.test/docs/nope.html)",
             "[no file there](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/nope.md)",
             "[no heading there](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/index.md#nope)",  # 19-26: links
             "[ok](index.md#a-heading) <a href=\"index.md\">ok</a> [![a run](img/argo-run.png)](index.md)",
             "[lines](https://github.com/kaos-io/kaos-lib/blob/main/docs_check.py#L3-L9) "
             "[line](https://github.com/kaos-io/kaos-lib/blob/main/docs_check.py#L1)",
-            "[ok there](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html#a-heading)",      # 27-29: fine
+            "[ok there](https://bucket.example.test/docs/index.html#a-heading)",      # 27-29: fine
             "[ok in yolo](https://github.com/novelcore/yolo-pipelines-template/blob/dev/docs/index.md#a-heading)",
             "Open lakeFS.", "Set LAKEFS_ACCESS_KEY.", "Zitadel signs you in.", "kaos-promote FAILED.", "The pods of a run.",   # 31-35: words
             "Install `kaos-lib[zitadel]` for shared datasets.",                                                    # 36: allowed
@@ -422,6 +433,7 @@ def self_test() -> int:
         assert "cannot download novelcore/hera-pipeline-template" in failed and "DOCS_CHECK_OFFLINE=1" in failed, \
             f"fail closed: {failed!r}"
     finally:
+        REPOS["KAOS_LIB"]["sites"] = real_sites
         shutil.rmtree(top, True)
     return 0
 

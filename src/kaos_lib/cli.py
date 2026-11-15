@@ -29,7 +29,7 @@ from typing import Optional
 
 import requests
 
-from . import __version__, channel, credentials, datasets, editor, layouts, peers, support
+from . import __version__, addresses, channel, credentials, datasets, editor, layouts, peers, support
 from .lint import cli as lint_cli
 from .studio import cli as studio_cli
 from .config import resolve_endpoint
@@ -110,6 +110,11 @@ def _values(args, layout: layouts.Layout) -> dict:
 def cmd_login(args) -> int:
     url = resolve_endpoint(args.url)
     credentials.browser_login(url)
+    try:   # keep what the platform publishes about kaos-lib (its recommendation and addresses) for upgrade and the editor
+        _, value = _platform_support(url)
+        addresses.save_platform(url, value)
+    except KaosLibError:
+        pass
     print("Next: kaosctl dataset list")
     return 0
 
@@ -285,24 +290,36 @@ class _VersionAction(argparse.Action):
 
 def cmd_upgrade(args) -> int:
     """Install the kaos-lib spec the targeted platform recommends (its lakeFS ``/kaos/v1/ui``), else the newest
-    release of this install's channel (the public release.json)."""
+    release of this install's channel under the platform's ``releases_base`` (``kaos_lib.addresses``). With neither,
+    it says which is missing and installs nothing: there is no address of any platform inside this package."""
+    platform = None
     try:
         base, value = _platform_support(getattr(args, "url", None))
+        addresses.save_platform(base, value)
+        platform = base
         rec, where = channel.recommended(value), f"the platform at {base}"
     except KaosLibError as exc:
         rec, where = None, f"no platform ({exc})"
     if not rec:
         mine = channel.channel_of_version(__version__)
+        found = addresses.resolve(base_url=platform)
+        if not found.releases_base:
+            print(f"ERROR: {where} publishes no recommended kaos-lib, and this machine knows no release address "
+                  "to look for the newest one (no KAOS_LIB_RELEASES_BASE, and the platform has published none "
+                  "to this machine). Sign in to your platform with `kaosctl login` (it keeps the platform's addresses), "
+                  "or set KAOS_LIB_RELEASES_BASE; nothing was installed.", file=sys.stderr)
+            return EXIT_USER_ERROR
         newest = channel.public_release(mine if mine in channel.PREFIX else "stable") or {}
         rec = channel.recommended(newest)
         if not rec:
-            print(f"ERROR: {where} publishes no recommended kaos-lib, and no {mine} release is published yet "
-                  f"(index: {channel.INDEXES.get(mine, channel.INDEXES['stable'])}); nothing was installed.",
-                  file=sys.stderr)
+            print(f"ERROR: {where} publishes no recommended kaos-lib, and no {mine} release could be read from "
+                  f"{found.releases_base}/{channel.PREFIX.get(mine, 'stable')}/release.json (from "
+                  f"{found.describe('releases_base')}): it is unreachable or nothing is published there yet; "
+                  "nothing was installed.", file=sys.stderr)
             return EXIT_USER_ERROR
         print(f"NOTE: {where} publishes no recommended kaos-lib; using the newest {newest.get('channel', mine)} "
               f"release {newest.get('tag', '')}.", file=sys.stderr)
-        base = newest.get("index_url") or "the public channel"
+        base = found.releases_base
     req = channel.requirement(rec, channel.has_zitadel_extra())
     print(f"{base} recommends {req}")
     if channel.is_current(req, channel.installed(__version__), __version__):
@@ -449,6 +466,11 @@ def cmd_layout_publish(args) -> int:
 def cmd_vscode_install(args) -> int:
     """Install the VS Code extension that was published with this kaos-lib release (same version, same commit)."""
     record = channel.public_vscode(__version__)
+    if not record and not channel.releases_base():
+        print("ERROR: this machine knows no release address to download the VS Code extension from. Sign in to "
+              "your platform with `kaosctl login` (it keeps the platform's addresses), or set "
+              "KAOS_LIB_RELEASES_BASE.", file=sys.stderr)
+        return EXIT_USER_ERROR
     if not record:
         print(f"ERROR: no VS Code extension is published for kaos-lib {__version__}. It is published with every "
               "release from the public channels; a local or commit install has none. Run `kaosctl upgrade`, then "

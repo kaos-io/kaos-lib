@@ -21,6 +21,7 @@ def nav() -> list:
     class Loader(yaml.SafeLoader):
         pass
     Loader.add_multi_constructor("tag:yaml.org,2002:python/", lambda loader, suffix, node: None)
+    Loader.add_constructor("!ENV", lambda loader, node: None)       # mkdocs' own tag (site_url from the environment)
     return yaml.load((REPO / "mkdocs.yml").read_text(encoding="utf-8"), Loader)["nav"]
 
 

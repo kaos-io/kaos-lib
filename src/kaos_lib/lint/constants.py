@@ -9,8 +9,10 @@ rule-set version bump, never a literal buried in a rule.
 # the patch for a fix that changes no finding on valid input.
 RULESET_VERSION = "2.5.0"
 
-# Where a rule's page lives. The site is a plain public bucket, so every link names its .html file.
-DOC_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/"
+# Where a rule's page lives: no compiled address (one wheel runs on every platform). The platform's CI passes the
+# folder with --doc-base (or $KAOS_LIB_LINT_DOC_BASE); when it is unknown a finding carries no link (`doc` is "").
+# The site is a plain public bucket, so every link names its .html file: <doc base><rule>.html.
+DOC_BASE = None
 
 # Limits that keep a hostile repository from exhausting the linter (it fails with an error finding, never a crash).
 MAX_FILE_BYTES = 1024 * 1024          # one file read by the linter

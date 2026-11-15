@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable, Optional
 
 from .catalogue import Catalogue
-from .constants import DOC_BASE, TIME_PATTERN
+from . import constants
+from .constants import TIME_PATTERN
 from .model import ERROR, INFO, WARNING, Span
 from .pipeline_reader import UNKNOWN, PipelineFacts, Step
 from .project_reader import DatasetDefault, RunForm, StepSource, read_step_source
@@ -55,10 +56,30 @@ class Rule:
 
     @property
     def doc(self) -> str:
-        return f"{DOC_BASE}{self.id}.html"
+        return doc_url(self.id)
 
 
 RULES: list = []
+
+_doc_base: Optional[str] = constants.DOC_BASE
+
+
+def set_doc_base(url: Optional[str]) -> None:
+    """The folder of the rule pages (``https://.../lint/``) for this process, or None: no rule links. The caller
+    (the command line) decides; nothing here knows an address."""
+    global _doc_base
+    if url is not None and not url.startswith("https://"):
+        raise ValueError(f"the rule pages folder must be an https address, not {url!r}")
+    _doc_base = None if not url else (url if url.endswith("/") else url + "/")
+
+
+def doc_base() -> Optional[str]:
+    return _doc_base
+
+
+def doc_url(rule_id: str) -> str:
+    """The page of a rule, or "" when the folder is unknown."""
+    return f"{_doc_base}{rule_id}.html" if _doc_base else ""
 
 
 def rule(id: str, name: str, level: str, fix: str, requires: tuple = (), inactive: str = ""):

@@ -120,7 +120,7 @@ function toVsDiagnostic(d: MappedDiagnostic): vscode.Diagnostic {
     : d.severity === "warning" ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Information;
   const diag = new vscode.Diagnostic(new vscode.Range(d.startLine, d.startCharacter, d.endLine, d.endCharacter), d.message, severity);
   diag.source = DIAGNOSTIC_SOURCE;
-  diag.code = { value: d.rule, target: vscode.Uri.parse(d.doc) };
+  diag.code = d.doc ? { value: d.rule, target: vscode.Uri.parse(d.doc) } : d.rule;   // no link when the platform published no docs address
   return diag;
 }
 

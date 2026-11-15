@@ -35,7 +35,8 @@ def text(report: Report) -> str:
     for f in sorted(report.findings, key=Finding.sort_key):
         out.append(f"{f.file}:{f.span.line}:{f.span.column}: {f.level} {f.rule} {f.name}: {f.message}")
         out.append(f"    fix: {f.fix}")
-        out.append(f"    docs: {f.doc}")
+        if f.doc:
+            out.append(f"    docs: {f.doc}")
     for s in report.skipped:
         out.append(f"skipped {s.rule} {s.name}: {s.reason}")
     out.append(f"{summary_line(report)}. Rule set {report.ruleset_version}; facts from: "
@@ -59,8 +60,9 @@ def markdown(report: Report, file_link_base: Optional[str] = None) -> str:
             where = f"`{f.file}:{f.span.line}`"
             if file_link_base:
                 where = f"[{where}]({file_link_base}{f.file}#L{f.span.line})"
-            what = f"{_cell(f.message)}<br>**Fix:** {_cell(f.fix)} [Details]({f.doc})"
-            out.append(f"| {_ICON[f.level]} | [{f.rule}]({f.doc}) {f.name} | {where} | {what} |")
+            what = f"{_cell(f.message)}<br>**Fix:** {_cell(f.fix)}" + (f" [Details]({f.doc})" if f.doc else "")
+            rule = f"[{f.rule}]({f.doc})" if f.doc else f.rule
+            out.append(f"| {_ICON[f.level]} | {rule} {f.name} | {where} | {what} |")
         if len(findings) > MAX_COMMENT_FINDINGS:
             out.append(f"\n…and {len(findings) - MAX_COMMENT_FINDINGS} more. Run `kaosctl lint` to see them all.")
         out.append("")

@@ -11,11 +11,13 @@ import sys
 from typing import Optional
 
 from . import render
+from ..addresses import lint_doc_base
 from .graph import graph_json
 from .catalogue import CatalogueError, default_catalogue, empty_catalogue, read_context, read_file
 from .constants import MAX_FILE_BYTES, PIPELINE_FILE, RULESET_VERSION
 from .engine import MissingPipeline, lint_project
 from .model import Report
+from .registry import set_doc_base
 from .schema import schema_json
 
 EXIT_OK, EXIT_USAGE, EXIT_ERRORS = 0, 1, 2   # as kaosctl: 1 = cannot run, 2 = the thing checked is invalid
@@ -53,6 +55,10 @@ def add_arguments(sp: argparse.ArgumentParser) -> None:
                          "running it, and stop: editors draw it")
     sp.add_argument("--expect-ruleset", metavar="VERSION",
                     help="refuse to run unless the rule set is exactly this version")
+    sp.add_argument("--doc-base", metavar="URL",
+                    help="the https folder of the rule pages (for example https://<site>/<version>/lint/): each finding "
+                         "links to <URL><rule>.html. Default: $KAOS_LIB_LINT_DOC_BASE, else the docs address of "
+                         "$KAOS_LIB_DOCS_BASE or --context (+ lint/). With none of them a report carries no rule links")
     sp.add_argument("--file-link-base", metavar="URL", help="markdown output: link each file:line under this URL")
 
 
@@ -90,6 +96,7 @@ def run(args) -> int:
               f"different rule sets are never mixed: install the matching kaos-lib.", file=sys.stderr)
         return EXIT_USAGE
     try:
+        set_doc_base(args.doc_base or lint_doc_base(args.context))
         if args.schema:
             _emit(args, schema_json())
             return EXIT_OK
