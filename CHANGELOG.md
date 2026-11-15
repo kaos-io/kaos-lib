@@ -1,8 +1,8 @@
 # Changelog
 
 All notable changes to kaos-lib. Versions follow PEP 440; each release's support window is in its
-`release.json`. Packages: `https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/` (stable),
-`.../kaos-lib-rc/simple/` (prerelease).
+`release.json`. Packages: published to your platform's Python repositories (`kaos-lib` for stable, `kaos-lib-rc` for
+prerelease); the addresses are in each release's record, never in the package.
 
 ## 0.5.0 (unreleased)
 
@@ -153,6 +153,32 @@ template.** Nothing in kaos-lib converts an old app.
   file beside the folder (`<folder>.kubecore-dataset.json`, `<folder>.kaos-ready`), never a file in it, so a step sees
   only the files of the dataset.
 
+### Added in 0.5.0rc23: one wheel and one site for every platform (PRD novelcore/kaos#2017 F-55)
+- **No address of any platform is built into the wheel, the editor schema or the documentation site.** The release
+  bucket, the package index and the documentation address now come from the platform you work with
+  (`kaos_lib.addresses`). For each of `releases_base`, `index_url`, `docs_base` and `docs_current` the first of these
+  wins: the environment (`KAOS_LIB_RELEASES_BASE`, `KAOS_LIB_INDEX_URL`, `KAOS_LIB_DOCS_BASE`), `kaosLib.support.addresses`
+  of the context file, the `addresses` the platform publishes (`kaos_lib_support` at `/kaos/v1/ui`; `kaosctl login` and
+  `kaosctl upgrade` keep it next to your login), else none. With none, a command says what it could not find; it never
+  uses another platform's address.
+- `kaosctl upgrade` installs what the platform recommends, else the newest release under its `releases_base`; with
+  neither it stops and names the missing piece. `kaosctl vscode install` reads the extension's record from the
+  same `releases_base`.
+- `kaosctl dev`, `step run` and `build` choose the kaos-lib in this order: `--kaos-lib`, the context file's
+  `kaosLib.spec`, the version the platform recommends (kept at login), the Dockerfile's `ARG KAOS_LIB_PACKAGE` default,
+  then kaosctl's own version from the platform's package index (`index_url`); with no index known the last step stops
+  with a message.
+- `kaosctl lint --doc-base URL` (or `KAOS_LIB_LINT_DOC_BASE`; else `<KAOS_LIB_DOCS_BASE>lint/`, else the context file's
+  `docs_base`) sets the folder of the rule pages. Without one a finding carries no link (`"doc": ""`), and the markdown
+  and text reports leave the link out. The editor's bundled `step-schema.json` is regenerated without links, and the
+  extension shows a rule code without a link when a finding has none. The rule set stays `2.5.0`: no rule, level,
+  message or fix changes.
+- The documentation build reads `KAOS_LIB_SITE_URL` (default empty: no canonical link, an empty sitemap) and
+  `KAOS_LIB_RELEASE_BUCKET` (the full bucket address, only for `docs_check.py`'s link checks). The install page names no
+  index and reads nothing at build time: it says to install with pip from your platform's index and to use `kaosctl upgrade`.
+- The guide, the examples and the README name no platform address. A test fails if the dev project's name appears in
+  the package source, the built wheel or the built documentation site.
+
 ## 0.4.0 (unreleased)
 
 PRD novelcore/kaos#1147 F-05, F-07, F-18 (D-03, D-13); dataset layouts: the formats become declarative,
@@ -267,7 +293,7 @@ user-definable layouts.
   No API or environment variable changes.
 
 ### Added
-- The documentation site (`mkdocs.yml`, `docs/`), <https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html>,
+- The documentation site (`mkdocs.yml`, `docs/`),
   republished with every rc: guides for datasets, outputs, MLflow, the run context, the data lock and layouts, an API
   reference from the docstrings, and pages generated on every build by `docs_gen.py` (the CLI reference from the
   parser, the version, each channel's install command).
@@ -300,7 +326,7 @@ user-definable layouts.
   `dataset push` validates with the layout of the repository's label.
 - The schema, the built-in layouts and the test fixtures (`tests/layout_fixtures`) are shared byte for byte with
   kaos-lake, pinned by `SHA256SUMS`; both implementations pass the same fixtures.
-- Guide: [Make your own dataset layout](https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/reference.html#dataset-layouts).
+- Guide: Make your own dataset layout (guide page `reference`, section "Dataset layouts").
 
 ### Changed
 - The command is `kaosctl` (it was `kaos-cli`, which keeps working as a hidden alias for one release, as does
@@ -328,7 +354,7 @@ The package is renamed and moves to its own repository, `kaos-io/kaos-lib` (it w
 ### Changed
 - Distribution `kubecore` → `kaos-lib` (extra `kaos-lib[zitadel]`); import `kubecore` → `kaos_lib`; command
   `kubecore` → `kaosctl`. Published by the platform's CI to public Python repositories (Artifact Registry), not
-  PyPI: `pip install --index-url https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/
+  PyPI: `pip install --index-url <your platform's package index>
   --extra-index-url https://pypi.org/simple/ "kaos-lib[zitadel]==0.3.0"`.
 - `KubecoreError` → `KaosLibError`.
 - New dependency: `packaging` (PEP 440 support checks).

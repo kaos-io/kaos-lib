@@ -34,7 +34,7 @@
       },
       "message": "The dataset 'demo@latest' follows the newest data: two runs of the same code can read different data.",
       "fix": "Pin a version: use <dataset>@v1 (a released version) instead of @latest, so a run always reads the same data.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W03.html"
+      "doc": "https://docs.example.test/lint/L-W03.html"
     },
     {
       "rule": "L-I01",
@@ -53,7 +53,7 @@
       },
       "message": "Step 'train' has its time limit chosen on the run form (the field '<step>-walltime'), which starts at 4 hours because pipeline.py sets no walltime=. A GPU step joins a node that is already running only if that node has the step's limit and a few minutes left, so a limit close to what the step needs shares more often.",
       "fix": "Nothing to fix. Choose the time limit on the run form (<step>-walltime). If this step always needs about the same time, put it in walltime= so the form starts with a good default.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
+      "doc": "https://docs.example.test/lint/L-I01.html"
     },
     {
       "rule": "L-E06",
@@ -72,7 +72,7 @@
       },
       "message": "step() no longer takes 'hpc_time_limit'. This app was made before the current pipelines. Create it again from the template.",
       "fix": "Remove the argument or write it as the message says; step() raises on it when the pipeline is rendered.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+      "doc": "https://docs.example.test/lint/L-E06.html"
     },
     {
       "rule": "L-W02",
@@ -91,7 +91,7 @@
       },
       "message": "Step 'train' turns the idle limit off. A hung step keeps its GPU, and its budget, until the time limit.",
       "fix": "Remove idle_timeout=0 to keep the default (a step with no GPU use and no new log line for 20 minutes is ended), or raise it, for example idle_timeout='40m'.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
+      "doc": "https://docs.example.test/lint/L-W02.html"
     }
   ],
   "skipped": [
@@ -99,13 +99,13 @@
       "rule": "L-E03",
       "name": "UnknownClass",
       "reason": "the catalogue has no list of compute classes (give --context, the project's platform context)",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E03.html"
+      "doc": "https://docs.example.test/lint/L-E03.html"
     },
     {
       "rule": "L-I03",
       "name": "Schedules",
       "reason": "pipelines cannot declare a schedule yet, so there is nothing to check",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I03.html"
+      "doc": "https://docs.example.test/lint/L-I03.html"
     }
   ]
 }

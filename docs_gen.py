@@ -5,28 +5,20 @@ Run by the mkdocs hook `docs/hooks.py` on every build (so `mkdocs build` alone k
 
 - `cli.md`: every `kaosctl` command's `--help`, taken from the argparse parser itself (`kaos_lib.cli.build_parser`);
 - `built.md`: the kaos-lib version and commit this site was built from;
-- `install.md`: the install command of each channel's newest release, from its public `release.json`.
+- `install.md`: how to get kaosctl from your platform. It names no package index, no bucket and no release: a site
+  built once is read on every platform, so the page points at `kaosctl upgrade` and the console.
 
-The release metadata is read over the network; when it cannot be read the page says so instead of failing the
-build, because the docs of a pull request must build offline as well.
+Nothing here reads the network or the clock, so the same commit builds the same pages (with `SOURCE_DATE_EPOCH`).
 """
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import pathlib
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from typing import Callable, Optional
 
-BUCKET = os.environ.get("KAOS_LIB_RELEASE_BUCKET", "https://storage.googleapis.com/kaos-dev-511509-kaos-lib")
-CHANNELS = (("prerelease", "rc", "published on every merge to `main`"),
-            ("stable", "stable", "published only by the platform's release train, from an rc that passed the dev e2e"))
-MISSING = "missing"   # the channel has no release.json (HTTP 404): nothing published yet
-PYPI = "https://pypi.org/simple/"
 
 
 def _subparsers(parser: argparse.ArgumentParser):
@@ -58,38 +50,15 @@ def cli_reference(parser: argparse.ArgumentParser) -> str:
     return "\n".join(out)
 
 
-def _fetch(url: str, timeout: float = 10):
-    """The release metadata as a dict, MISSING when the channel has none (404), None when it cannot be read."""
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 - fixed public https URL
-            return json.load(resp)
-    except urllib.error.HTTPError as exc:
-        return MISSING if exc.code == 404 else None
-    except Exception:  # noqa: BLE001 - offline or a bad answer: the page says so, the build goes on
-        return None
-
-
-def install_page(fetch: Callable[[str], Optional[dict]] = _fetch) -> str:
-    out = ["The newest release of each channel, read from its public release metadata when this site was built.", ""]
-    for channel, folder, made_by in CHANNELS:
-        meta = fetch(f"{BUCKET}/{folder}/release.json")
-        out += [f"**{channel}** ({made_by}):", ""]
-        if meta == MISSING:
-            out += ["No release of this channel is published yet.", ""]
-            continue
-        if not isinstance(meta, dict) or not meta.get("version"):
-            out += [f"Its release metadata could not be read when this site was built ({BUCKET}/{folder}/release.json).", ""]
-            continue
-        index = meta.get("index_url", "")
-        out += [f"Version **{meta['version']}** (tag `{meta.get('tag', '')}`, commit `{str(meta.get('commit', ''))[:12]}`).",
-                "", "```bash",
-                f"pip install --index-url {index} \\",
-                f"    --extra-index-url {PYPI} \"kaos-lib[zitadel]=={meta['version']}\"",
-                "```", ""]
-        if meta.get("recommended"):
-            out += ["The exact file, as platform images install it:", "", "```bash",
-                    f"pip install \"{meta['recommended']}\"", "```", ""]
-    return "\n".join(out)
+def install_page(fetch: Optional[Callable] = None) -> str:
+    """How to install kaosctl, the same on every platform: no address, no release read at build time.
+    (``fetch`` is accepted and ignored: older callers passed one.)"""
+    return "\n".join([
+        "Install `kaosctl` with pip from your platform's package index. Your platform admin, or the console of "
+        "your platform, gives you the index and the version to install.", "",
+        "- To move to a newer version later, run `kaosctl upgrade`. It installs the version your platform "
+        "recommends when the platform publishes one. `kaosctl --version` shows what you have.",
+        "- To add the editor extension for VS Code, run `kaosctl vscode install`.", ""])
 
 
 def built_page(version: str, commit: str) -> str:
@@ -108,7 +77,7 @@ def _commit(root: pathlib.Path) -> str:
         return ""
 
 
-def generate(docs_dir: pathlib.Path, fetch: Callable[[str], Optional[dict]] = _fetch) -> list:
+def generate(docs_dir: pathlib.Path, fetch: Optional[Callable] = None) -> list:
     root = docs_dir.resolve().parent
     sys.path.insert(0, str(root / "src"))
     from kaos_lib import __version__, cli  # the checkout's own code, not whatever is installed

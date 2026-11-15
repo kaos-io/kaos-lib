@@ -12,7 +12,7 @@ from kaos_lib import channel, cli, support
 from kaos_lib.errors import AuthError, ConfigError
 from packaging.requirements import Requirement
 
-AR = "https://europe-west1-python.pkg.dev/kaos-dev-511509"
+AR = "https://index.example.test/project"
 RC_WHEEL = f"{AR}/kaos-lib-rc/kaos-lib/kaos_lib-0.3.0rc2-py3-none-any.whl"
 STABLE_WHEEL = f"{AR}/kaos-lib/kaos-lib/kaos_lib-0.3.0-py3-none-any.whl"
 SHA256 = "0" * 64
@@ -278,8 +278,16 @@ def test_upgrade_when_already_on_the_recommendation(capsys, platform, pip):
 def test_upgrade_without_any_recommendation_installs_nothing(capsys, platform, pip):
     code, _, err = run(capsys, "upgrade")
     assert code == 1 and pip == []
-    assert "publishes no recommended kaos-lib" in err and "release is published yet" in err
-    assert "python.pkg.dev/kaos-dev-511509/" in err
+    assert "publishes no recommended kaos-lib" in err and "no stable release could be read" in err or "no prerelease release could be read" in err
+    assert "KAOS_LIB_RELEASES_BASE" in err and "kaos-dev-511509" not in err
+
+
+def test_upgrade_with_no_address_at_all_names_the_cause_and_never_falls_back_to_dev(capsys, platform, pip, monkeypatch):
+    monkeypatch.delenv("KAOS_LIB_RELEASES_BASE")
+    code, _, err = run(capsys, "upgrade")
+    assert code == 1 and pip == []
+    assert "knows no release address" in err and "kaosctl login" in err and "KAOS_LIB_RELEASES_BASE" in err
+    assert "kaos-dev-511509" not in err and "storage.googleapis.com" not in err
 
 
 def test_upgrade_falls_back_to_the_newest_release_of_the_own_channel(capsys, platform, pip, releases):

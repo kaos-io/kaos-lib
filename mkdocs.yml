@@ -1,8 +1,10 @@
 site_name: kaos-lib
 site_description: The KAOS platform library and the kaosctl command — datasets, run outputs, MLflow, the run context and the data lock
 site_author: Novelcore
-site_url: https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/
-# A plain public bucket, no web server: every link names its .html file (https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/index.html).
+# The site is built once and read on every platform, so it names no host: site_url is empty unless the build sets
+# KAOS_LIB_SITE_URL (a local preview, for example). With it empty there is no canonical link and no sitemap address.
+site_url: !ENV [KAOS_LIB_SITE_URL, '']
+# A plain public bucket, no web server: every link names its .html file (<site>/index.html).
 use_directory_urls: false
 
 repo_name: kaos-io/kaos-lib

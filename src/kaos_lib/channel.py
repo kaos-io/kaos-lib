@@ -1,12 +1,14 @@
 """Which release channel this kaos-lib is, and the recommended spec (``kaosctl upgrade``).
 
-kaos-lib is published by the platform's CI to two PUBLIC Python repositories (Artifact Registry), not PyPI:
+kaos-lib is published by the platform's CI to two Python repositories (Artifact Registry), not PyPI:
 
 - prerelease ``X.Y.ZrcN`` in ``kaos-lib-rc``: every merge to ``main``;
 - stable ``X.Y.Z`` in ``kaos-lib``: only what the platform's release train promoted from an rc that passed.
 
 The channel follows from the version (PEP 440: an rc is a pre-release). Each channel's newest release metadata is
-public at ``<RELEASES_BASE>/<rc|stable>/release.json`` (support window, ``recommended`` spec, channel).
+at ``<releases_base>/<rc|stable>/release.json`` (support window, ``recommended`` spec, channel). Where
+``releases_base`` is comes from ``kaos_lib.addresses`` (environment, context file, the platform); this module has
+no address of its own, so a platform that publishes none gives "no release found", never another platform's.
 
 Each platform's lakeFS also publishes ``kaos_lib_support`` at ``/kaos/v1/ui``; its ``recommended`` key is the pip
 spec that platform wants (``==X.Y.Z``, ``@ <url>``, or a whole ``kaos-lib[...] @ <url>`` requirement). The
@@ -15,7 +17,6 @@ platform's word wins; the public channel metadata is the fallback.
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from importlib import metadata
@@ -26,12 +27,13 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
 
+from . import addresses
 from .errors import ConfigError
 
 DIST = "kaos-lib"
-RELEASES_BASE = "https://storage.googleapis.com/kaos-dev-511509-kaos-lib"
-INDEXES = {"prerelease": "https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib-rc/simple/",
-           "stable": "https://europe-west1-python.pkg.dev/kaos-dev-511509/kaos-lib/simple/"}
+# No compiled address of any platform: see kaos_lib.addresses. (Kept as None so nothing can mistake a default for one.)
+RELEASES_BASE = None
+INDEXES = None
 PREFIX = {"prerelease": "rc", "stable": "stable"}
 _COMMIT_IN_URL = re.compile(r"/archive/([0-9a-f]{7,40})\.(?:zip|tar\.gz)$")
 _WHEEL_VERSION = re.compile(r"/kaos_lib-([^-/]+)-py3-none-any\.whl$")
@@ -89,16 +91,24 @@ def describe(info: dict) -> str:
     return f"{info['channel']} {info['tag']}" if info.get("tag") else info["channel"]
 
 
-def public_release(channel: str) -> Optional[dict]:
-    """The channel's newest release.json from the public bucket, or None (offline, not published yet)."""
+def releases_base(context: Optional[str] = None) -> Optional[str]:
+    """Where the platform's release records are (no trailing slash), or None when no source names one."""
+    return addresses.resolve(context).releases_base
+
+
+def public_release(channel: str, context: Optional[str] = None) -> Optional[dict]:
+    """The channel's newest release.json under the platform's ``releases_base``, or None (no address known,
+    offline, not published yet)."""
     if channel not in PREFIX:
         return None
-    return _public_json(f"{PREFIX[channel]}/release.json")
+    return _public_json(f"{PREFIX[channel]}/release.json", context)
 
 
-def _public_json(name: str) -> Optional[dict]:
-    """One JSON object of the public release bucket, or None (offline, not there, not an object)."""
-    base = os.environ.get("KAOS_LIB_RELEASES_BASE") or RELEASES_BASE
+def _public_json(name: str, context: Optional[str] = None) -> Optional[dict]:
+    """One JSON object of the release bucket, or None (no address, offline, not there, not an object)."""
+    base = releases_base(context)
+    if not base:
+        return None
     try:
         resp = requests.get(f"{base.rstrip('/')}/{name}", timeout=TIMEOUT, headers={"Cache-Control": "no-cache"})
         body = resp.json() if resp.status_code == 200 else None
@@ -111,18 +121,18 @@ VSCODE_EXTENSION = "kaos-pipeline"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
-def public_vscode(version: str) -> Optional[dict]:
+def public_vscode(version: str, context: Optional[str] = None) -> Optional[dict]:
     """The VS Code extension published with this kaos-lib release (``<rc|stable>/<tag>/vscode.json``:
     ``{name, version, url, sha256, ...}``), or None: not a release (a local or commit install), offline, a release
     from before the extension was published, or a record that does not name an https file with a SHA-256."""
     tag = tag_of(version)
     if tag is None:
         return None
-    record = _public_json(f"{PREFIX[channel_of_version(version)]}/{tag}/vscode.json")
+    record = _public_json(f"{PREFIX[channel_of_version(version)]}/{tag}/vscode.json", context)
     if not record:
         return None
     url, sha = record.get("url"), record.get("sha256")
-    trusted = ("https://", os.environ.get("KAOS_LIB_RELEASES_BASE") or "https://")   # the override also serves the file
+    trusted = ("https://", releases_base(context) or "https://")   # a base the person set also serves the file
     if (record.get("name") != VSCODE_EXTENSION or not isinstance(url, str) or not url.startswith(trusted)
             or not isinstance(sha, str) or not _SHA256.match(sha) or not isinstance(record.get("version"), str)):
         return None

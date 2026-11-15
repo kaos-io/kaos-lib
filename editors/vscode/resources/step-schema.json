@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "ruleset_version": "2.5.0",
-  "guide": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint.html",
+  "guide": "",
   "authoring_modules": [
     "kubecore.authoring"
   ],
@@ -19,16 +19,7 @@
         "doc": "The step's name. It becomes the step's template in the pipeline, its `steps/<folder>` (hyphens as underscores) and its image, so use lowercase letters, digits and hyphens, with no hyphen at the start or end, for example `model-evaluation`. Every step needs its own name.",
         "snippet": "\"${1:step-name}\"",
         "values": [],
-        "links": [
-          {
-            "title": "L-E05",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
-          },
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "kind",
@@ -72,12 +63,7 @@
             "doc": "Decides or coordinates; does no data work itself."
           }
         ],
-        "links": [
-          {
-            "title": "L-E07",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "reads",
@@ -90,12 +76,7 @@
         "doc": "The config sections the step reads (the files and folders of `config/`, for example `\"train\"`). A section that does not exist is refused when the pipeline is rendered.",
         "snippet": "[\"${1:train}\"]",
         "values": [],
-        "links": [
-          {
-            "title": "L-E05",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "inputs",
@@ -108,12 +89,7 @@
         "doc": "The names of the config values that hold a dataset reference, for example `\"dataset\"` for `dataset: dataset-my-data@latest`. The platform pins each to one exact version when the run starts, and the step reads it with `step.input(\"dataset\")`. Step code never names a version.",
         "snippet": "[\"${1:dataset}\"]",
         "values": [],
-        "links": [
-          {
-            "title": "L-E07",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "needs",
@@ -126,12 +102,7 @@
         "doc": "The steps that must finish first. Give the step variables (`needs=[prepare]`), not their names, and define each step above the steps that need it.",
         "snippet": "[${1:previous_step}]",
         "values": [],
-        "links": [
-          {
-            "title": "L-E05",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "produces",
@@ -160,12 +131,7 @@
             "doc": "The step writes a version of the dataset `clean`."
           }
         ],
-        "links": [
-          {
-            "title": "L-E07",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "gpu",
@@ -189,20 +155,7 @@
             "doc": "A CPU step (the default)."
           }
         ],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          },
-          {
-            "title": "L-W01",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
-          },
-          {
-            "title": "L-W02",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "when",
@@ -215,12 +168,7 @@
         "doc": "A condition in plain words: the name of a run-form field, `==` or `!=`, and a value, for example `\"mode != off\"`. Join comparisons with `and` / `or`. The step runs only when it is true. A step that needs a conditional step is still started when the conditional step is skipped.",
         "snippet": "\"${1:field} != ${2:off}\"",
         "values": [],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "walltime",
@@ -254,28 +202,7 @@
             "doc": "24 hours."
           }
         ],
-        "links": [
-          {
-            "title": "L-E01",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
-          },
-          {
-            "title": "L-E02",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
-          },
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          },
-          {
-            "title": "L-W01",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
-          },
-          {
-            "title": "L-I02",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I02.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "resumable",
@@ -309,28 +236,7 @@
             "doc": "Resumable, told to save 1 hour before its time limit."
           }
         ],
-        "links": [
-          {
-            "title": "L-E01",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
-          },
-          {
-            "title": "L-E02",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
-          },
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          },
-          {
-            "title": "L-W01",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
-          },
-          {
-            "title": "L-W05",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W05.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "checkpoint_every",
@@ -359,12 +265,7 @@
             "doc": "Do not copy the checkpoint folder."
           }
         ],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "idle_timeout",
@@ -393,16 +294,7 @@
             "doc": "Never end the step as idle."
           }
         ],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          },
-          {
-            "title": "L-W02",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "matrix",
@@ -426,12 +318,7 @@
             "doc": "Four runs: every learning rate with every batch size."
           }
         ],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          }
-        ]
+        "links": []
       },
       {
         "name": "matrix_allow_failed",
@@ -450,16 +337,7 @@
             "doc": "Let the step after it run when some runs failed."
           }
         ],
-        "links": [
-          {
-            "title": "L-E06",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
-          },
-          {
-            "title": "L-W08",
-            "url": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W08.html"
-          }
-        ]
+        "links": []
       }
     ]
   },
@@ -473,210 +351,210 @@
       "name": "NotAnalysable",
       "level": "error",
       "fix": "Fix the file so it can be read, then run the check again.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E00.html"
+      "doc": ""
     },
     {
       "id": "L-D01",
       "name": "MissingKaosLibArg",
       "level": "error",
       "fix": "Add `ARG KAOS_LIB_PACKAGE=\"kaos-lib[zitadel]==<the version you tested>\"` before the install and install with `RUN pip install --no-cache-dir \"${KAOS_LIB_PACKAGE}\"`.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D01.html"
+      "doc": ""
     },
     {
       "id": "L-D02",
       "name": "KaosLibNotInstalled",
       "level": "error",
       "fix": "Install it from the argument: `RUN pip install --no-cache-dir \"${KAOS_LIB_PACKAGE}\"`.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D02.html"
+      "doc": ""
     },
     {
       "id": "L-D03",
       "name": "WrongArchitecture",
       "level": "error",
       "fix": "Remove `--platform=` from FROM (the build picks the platform's architecture), or use `--platform=$BUILDPLATFORM`.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D03.html"
+      "doc": ""
     },
     {
       "id": "L-D04",
       "name": "CopyOutsideContext",
       "level": "error",
       "fix": "Copy only files inside the step's folder (the build context). Files of the repository root are available to the compose-and-validate step only.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D04.html"
+      "doc": ""
     },
     {
       "id": "L-D05",
       "name": "StepContract",
       "level": "error",
       "fix": "Put the step's code in steps/<name>/app/entry.py and start it with `ENTRYPOINT [\"python\", \"-m\", \"app.entry\"]`.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D05.html"
+      "doc": ""
     },
     {
       "id": "L-D06",
       "name": "HugeLayers",
       "level": "warning",
       "fix": "Copy only what the step needs, add --no-cache-dir to pip, and remove /var/lib/apt/lists in the same RUN as apt-get install.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D06.html"
+      "doc": ""
     },
     {
       "id": "L-D07",
       "name": "RootUser",
       "level": "info",
       "fix": "Add `RUN useradd --create-home app` and `USER app` before the ENTRYPOINT if your step does not need root.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D07.html"
+      "doc": ""
     },
     {
       "id": "L-D08",
       "name": "NoCudaForGpuStep",
       "level": "warning",
       "fix": "Use a CUDA-enabled base image, or depend on a library whose wheel bundles CUDA (for example torch), so the step can use its GPU; on a plain base image also set ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/nvidia/lib and ENV PATH=/usr/local/nvidia/bin:${PATH}. This check is a heuristic: it searches the image and the dependency files.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-D08.html"
+      "doc": ""
     },
     {
       "id": "L-E01",
       "name": "TooLongNotResumable",
       "level": "error",
       "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set the default walltime= to the longest run or less (the run form's <step>-walltime starts with it).",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E01.html"
+      "doc": ""
     },
     {
       "id": "L-E02",
       "name": "TooLongBeyondContinuations",
       "level": "error",
       "fix": "Shorten the default walltime= (the person who starts the run can still set a limit on the run form, and the same rule applies), or split the work into steps that each fit within the runs allowed.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E02.html"
+      "doc": ""
     },
     {
       "id": "L-E03",
       "name": "UnknownClass",
       "level": "error",
       "fix": "Pin one of the classes your project offers (the step's class dropdown lists them), or remove the pin.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E03.html"
+      "doc": ""
     },
     {
       "id": "L-E04",
       "name": "ClientIdentity",
       "level": "error",
       "fix": "Remove it: the platform chooses the account every step runs as and places the pod. Use step(...) arguments and compute classes instead.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E04.html"
+      "doc": ""
     },
     {
       "id": "L-E05",
       "name": "DependencyOrProducer",
       "level": "error",
       "fix": "Define each step before the steps that need it, pass the step variables in needs=[...], give each step a unique lowercase name, and read only sections that exist in config/.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E05.html"
+      "doc": ""
     },
     {
       "id": "L-E06",
       "name": "RefusedArgument",
       "level": "error",
       "fix": "Remove the argument or write it as the message says; step() raises on it when the pipeline is rendered.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E06.html"
+      "doc": ""
     },
     {
       "id": "L-E07",
       "name": "StepDeclaration",
       "level": "error",
       "fix": "Give every step a kind, name its dataset inputs in inputs=[...] and what it writes in produces=[...].",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E07.html"
+      "doc": ""
     },
     {
       "id": "L-E08",
       "name": "OldStepCode",
       "level": "error",
       "fix": "Create the app again from the template.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E08.html"
+      "doc": ""
     },
     {
       "id": "L-E09",
       "name": "PlatformConfigGroup",
       "level": "error",
       "fix": "Create the app again from the template.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-E09.html"
+      "doc": ""
     },
     {
       "id": "L-I01",
       "name": "NodeSharing",
       "level": "info",
       "fix": "Nothing to fix. Choose the time limit on the run form (<step>-walltime). If this step always needs about the same time, put it in walltime= so the form starts with a good default.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I01.html"
+      "doc": ""
     },
     {
       "id": "L-I02",
       "name": "LearnedLimits",
       "level": "info",
       "fix": "Nothing to fix. A limit of 2 hours or more is kept exactly as you set it.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I02.html"
+      "doc": ""
     },
     {
       "id": "L-I04",
       "name": "StepsBuiltInALoop",
       "level": "info",
       "fix": "Nothing to fix. To have every check read a step, write it out with a literal name; or run the pipeline file through kaosctl render, which builds the steps.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I04.html"
+      "doc": ""
     },
     {
       "id": "L-I03",
       "name": "Schedules",
       "level": "info",
       "fix": "Nothing to fix.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-I03.html"
+      "doc": ""
     },
     {
       "id": "L-W01",
       "name": "LongGpuStepNotResumable",
       "level": "warning",
       "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten the default walltime= (the run form's <step>-walltime starts with it).",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W01.html"
+      "doc": ""
     },
     {
       "id": "L-W02",
       "name": "IdleTimeoutOff",
       "level": "warning",
       "fix": "Remove idle_timeout=0 to keep the default (a step with no GPU use and no new log line for 20 minutes is ended), or raise it, for example idle_timeout='40m'.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W02.html"
+      "doc": ""
     },
     {
       "id": "L-W03",
       "name": "DatasetVersionInCode",
       "level": "warning",
       "fix": "Declare the dataset in inputs=[...] in pipeline.py and read it with step.input(): the version is chosen on the run form, never in step code.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W03.html"
+      "doc": ""
     },
     {
       "id": "L-W04",
       "name": "NoMlflowOrModelNotRegistered",
       "level": "warning",
       "fix": "Log the run to MLflow in the training step (kaos_lib.mlflow.mlflow()) and register the model you keep. This check is a heuristic: it searches the step's code.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W04.html"
+      "doc": ""
     },
     {
       "id": "L-W05",
       "name": "DeclaredResumableDidNotResume",
       "level": "warning",
       "fix": "Make the step load its checkpoint and continue from it: save into $KAOS_CHECKPOINT_DIR (or with kaos_lib.checkpoint) and load it when the step starts, so a continuation gets past the checkpoint it started from.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W05.html"
+      "doc": ""
     },
     {
       "id": "L-W06",
       "name": "TrainTimeLimitNotResumable",
       "level": "warning",
       "fix": "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its time limit then continues instead of starting over (see the page 'Long jobs' of the guide).",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W06.html"
+      "doc": ""
     },
     {
       "id": "L-W07",
       "name": "DatasetProducerStaysOnCluster",
       "level": "warning",
       "fix": "Nothing is wrong, but the step will run on the cluster, not on an HPC (Slurm) site. To use HPC for the heavy work, make it an artifact (or a model) in one step and copy it into the dataset in a cheap second step.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W07.html"
+      "doc": ""
     },
     {
       "id": "L-W08",
       "name": "AllowedFailureReachesDataset",
       "level": "warning",
       "fix": "Remove matrix_allow_failed=True from the step, or make the step that writes the dataset read step.upstream(...) and call step.skip(reason) when too few items are ok.",
-      "doc": "https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/lint/L-W08.html"
+      "doc": ""
     }
   ]
 }

@@ -8,7 +8,7 @@ This template ships two example steps:
 
 Every setting lives in config/ and reaches the run form by itself. The version of each dataset is chosen on
 the run form, never here. Add your own steps under steps/<name>/ and declare them below
-(https://storage.googleapis.com/kaos-dev-511509-kaos-lib/docs/first-step.html).
+(guide page: first-step).
 """
 
 from pathlib import Path

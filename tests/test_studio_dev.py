@@ -109,8 +109,17 @@ def test_should_choose_the_kaos_lib_flag_first_then_the_context_then_the_dockerf
     assert "0.4.0rc1" in kaoslib.resolve(None, None, "kaos-lib==0.4.0rc1").requirement
 
 
-def test_should_use_the_prerelease_index_for_an_rc_pin_and_none_for_a_url(tmp_path):
-    assert "kaos-lib-rc" in kaoslib.resolve("kaos-lib==0.4.0rc20").index_urls[0]
+INDEX = "https://index.example.test/simple/"
+
+
+@pytest.fixture(autouse=True)
+def platform_index(monkeypatch):
+    monkeypatch.setenv("KAOS_LIB_INDEX_URL", INDEX)       # kaosctl carries no index: the platform names one
+
+
+def test_should_use_the_platforms_index_for_a_pin_and_none_for_a_url(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAOS_LIB_INDEX_URL", INDEX)
+    assert kaoslib.resolve("kaos-lib==0.4.0rc20").index_urls == [INDEX]
     assert kaoslib.resolve("kaos-lib @ https://example.org/kaos_lib-0.4.0-py3-none-any.whl").index_urls == []
 
 
@@ -122,12 +131,13 @@ def test_should_refuse_a_spec_that_is_not_kaos_lib():
 
 # --- the command ------------------------------------------------------------------------------------------------------
 
-def test_should_set_up_a_venv_per_step_with_the_requirements_and_kaos_lib_where_used(repo, venv_stub, capsys):
+def test_should_set_up_a_venv_per_step_with_the_requirements_and_kaos_lib_where_used(repo, venv_stub, capsys, monkeypatch):
+    monkeypatch.setenv("KAOS_LIB_INDEX_URL", INDEX)
     assert cli.main(["dev", str(repo), "--kaos-lib", "kaos-lib[zitadel]==0.4.0rc20"]) == 0
     summary = requirements_of(repo, "data_summary")
     assert "PyYAML" in summary and summary[-1] == "kaos-lib[zitadel]==0.4.0rc20"
     lib = requirements_of(repo, "dataset_loading")
-    assert lib[-1] == "kaos-lib[zitadel]==0.4.0rc20" and lib[0].startswith("--extra-index-url") and "kaos-lib-rc" in lib[0]
+    assert lib[-1] == "kaos-lib[zitadel]==0.4.0rc20" and lib[0] == f"--extra-index-url {INDEX}"
     assert not pyenv.step_env(repo / "steps/model_training").exists()                         # torch: skipped by default
     out = capsys.readouterr().out
     assert "model-training: skipped, its dependencies are large (torch" in out and "kaosctl dev --step model-training" in out
@@ -239,3 +249,35 @@ def test_should_install_a_kaos_lib_from_a_path_on_this_machine(tmp_path):
     wheel.write_bytes(b"x")
     assert kaoslib.resolve(str(wheel)).requirement.endswith(wheel.resolve().as_uri())
     assert kaoslib.resolve("kaos-lib==0.5.0").requirement.endswith("==0.5.0")           # a requirement stays one
+
+
+def _plain_step(repo, dockerfile):
+    step = repo / "steps" / "data_summary"
+    (step / "Dockerfile").write_text(dockerfile)
+    (step / "app").mkdir(exist_ok=True)
+    (step / "app" / "entry.py").write_text("print('no library here')\n")
+    return step
+
+
+def test_should_set_up_a_step_that_never_uses_kaos_lib_with_no_index_known(repo, venv_stub, monkeypatch):
+    """No ARG KAOS_LIB_PACKAGE and no kaos_lib import: there is nothing to resolve, so no address is needed."""
+    monkeypatch.delenv("KAOS_LIB_INDEX_URL")
+    _plain_step(repo, "FROM python:3.11\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\n")
+    assert cli.main(["dev", str(repo), "--step", "data-summary"]) == 0
+    text = requirements_of(repo, "data_summary")
+    assert not any("kaos-lib" in line or line.startswith("--extra-index-url") for line in text)
+
+
+def test_should_treat_an_empty_arg_default_as_no_default_and_take_the_platforms_index(repo, venv_stub):
+    """The yolo data-summary Dockerfile: ARG KAOS_LIB_PACKAGE="" declares the argument without a default."""
+    _plain_step(repo, 'FROM python:3.11\nARG KAOS_LIB_PACKAGE=""\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\n')
+    assert cli.main(["dev", str(repo), "--step", "data-summary"]) == 0
+    text = requirements_of(repo, "data_summary")
+    assert text[0] == f"--extra-index-url {INDEX}" and text[-1].startswith("kaos-lib[zitadel]==")
+
+
+def test_should_say_what_is_missing_for_a_step_that_declares_the_arg_when_no_index_is_known(repo, venv_stub, monkeypatch, capsys):
+    monkeypatch.delenv("KAOS_LIB_INDEX_URL")
+    _plain_step(repo, 'FROM python:3.11\nARG KAOS_LIB_PACKAGE=""\n')
+    assert cli.main(["dev", str(repo), "--step", "data-summary"]) == 1
+    assert "KAOS_LIB_INDEX_URL" in capsys.readouterr().err

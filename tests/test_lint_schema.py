@@ -5,7 +5,7 @@ import pathlib
 import re
 
 from kaos_lib import cli
-from kaos_lib.lint import ALL_RULES, RULESET_VERSION
+from kaos_lib.lint import ALL_RULES, RULESET_VERSION, registry
 from kaos_lib.lint.constants import REMOVED_STEP_PARAMS, STEP_PARAMS, TIME_PATTERN
 from kaos_lib.lint.graph import build_graph
 from kaos_lib.lint.schema import SCHEMA_VERSION, build_schema, schema_json
@@ -82,6 +82,7 @@ def test_schema_output_goes_to_a_file_with_output(tmp_path, capsys):
 
 def test_the_extensions_bundled_fallback_equals_the_generated_schema():
     """Regenerate with: kaosctl lint --schema --output editors/vscode/resources/step-schema.json"""
+    registry.set_doc_base(None)         # the bundled copy names no platform: no links
     assert BUNDLED.read_text() == schema_json()
 
 
