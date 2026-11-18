@@ -10,6 +10,10 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; ev
 template.** Nothing in kaos-lib converts an old app.
 
 ### Added
+- A step can sign in to MLflow as its own app: when the platform sets `KAOS_APP_TOKEN_FILE`, `kaos_lib.mlflow` sends the
+  token in that file, read again for every request, instead of the project's machine key (PRD novelcore/kaos#1911 AC-43).
+  A file that is missing or empty is an error; the step never goes on with another credential. As its own app a step
+  may create an experiment or a model named `<your app>` or `<your app>.<x>` only.
 - A job on HPC can sign in to the data store with the key pair of its own app from a file (`LAKEFS_KEY_FILE`, JSON with
   `access_key_id`, `secret_access_key` and `expiration`). The file is read again when it changes or the key is near its
   end, so a long step goes on with a refreshed key. A key pair is used before a bearer token, and a step that started on the bearer (the file was not there yet) changes to the key pair as soon as the file holds one (PRD novelcore/kaos#1911 AC-14).
