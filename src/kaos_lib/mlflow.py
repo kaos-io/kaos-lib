@@ -8,11 +8,13 @@ provider ships with kaos-lib (entry point ``mlflow.request_auth_provider``: ``zi
 The bearer comes from the first link of the chain that has one:
 
   1. an explicit token: ``mlflow(token=...)``, else ``$MLFLOW_TRACKING_TOKEN`` (HPC (Slurm) jobs get one);
-  2. the step's own machine key: ``ZITADEL_MACHINE_KEY_FILE`` + ``ZITADEL_DOMAIN`` +
+  2. the token of the step's own app: the file ``$KAOS_APP_TOKEN_FILE`` names, read again for every request
+     because the platform replaces it before it expires;
+  3. the step's own machine key: ``ZITADEL_MACHINE_KEY_FILE`` + ``ZITADEL_DOMAIN`` +
      ``ZITADEL_MLFLOW_PROJECT_ID``, minted with the org project's audience scope
      (``urn:zitadel:iam:org:project:id:<id>:aud``) and minted again ``REFRESH_LEEWAY`` seconds before it
      expires, so a long run never sends an expired token;
-  3. the laptop session of ``kaosctl login`` (the same browser login as for lakeFS), which carries the org
+  4. the laptop session of ``kaosctl login`` (the same browser login as for lakeFS), which carries the org
      project's audience when it was made inside an app clone.
 
 Project MLflow accepts only tokens whose audience is the organisation's Zitadel project (``OIDC_AUDIENCE``).
@@ -37,6 +39,7 @@ from .errors import AuthError, ConfigError, KaosLibError
 
 PROVIDER = "zitadel"
 TRACKING_URI_ENV, TOKEN_ENV, AUTH_ENV = "MLFLOW_TRACKING_URI", "MLFLOW_TRACKING_TOKEN", "MLFLOW_TRACKING_AUTH"
+APP_TOKEN_FILE_ENV = "KAOS_APP_TOKEN_FILE"
 REFRESH_LEEWAY = 120          # seconds before expiry at which a machine-key token is minted again
 DEFAULT_LIFETIME = 300        # assumed lifetime when Zitadel's answer carries no expires_in
 
@@ -82,6 +85,9 @@ class TokenSource:
         explicit = self.explicit or os.environ.get(TOKEN_ENV)
         if explicit:
             return explicit
+        app_file = os.environ.get(APP_TOKEN_FILE_ENV)
+        if app_file:
+            return self._app(app_file)
         if os.environ.get(zitadel.KEY_FILE_ENV):
             return self._machine()
         session = self._session()
@@ -91,6 +97,17 @@ class TokenSource:
             "no MLflow credential: set MLFLOW_TRACKING_TOKEN, or (pipeline steps) "
             f"{zitadel.KEY_FILE_ENV} with {zitadel.DOMAIN_ENV} and {zitadel.PROJECT_ENV}, "
             "or run `kaosctl login` inside your app clone.")
+
+    @staticmethod
+    def _app(path: str) -> str:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                found = handle.read().strip()
+        except OSError as exc:
+            raise AuthError(f"cannot read the app's token ({APP_TOKEN_FILE_ENV}={path}): {exc.strerror or exc}.") from None
+        if not found:
+            raise AuthError(f"the app's token file is empty ({APP_TOKEN_FILE_ENV}={path}).")
+        return found
 
     def _machine(self) -> str:
         settings = zitadel.env_settings()

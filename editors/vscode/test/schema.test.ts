@@ -88,10 +88,16 @@ test("should_show_hover_docs_for_an_argument_name_and_its_value", () => {
   assert.ok(onValue && onValue.markdown.includes("**resumable**"));
 });
 
-test("should_link_the_rule_pages_in_hover_docs", () => {
+test("should_link_the_rule_pages_in_hover_docs_when_the_schema_has_their_address", () => {
   const line = 'step("a", gpu=True, walltime="12h")';
-  const h = hoverFor(schema, "", line, line.indexOf("walltime") + 2);
-  assert.ok(h && /\[L-E01\]\(https:\/\/.*L-E01\.html\)/.test(h.markdown));
+  const at = line.indexOf("walltime") + 2;
+  const none = hoverFor(schema, "", line, at);
+  assert.ok(none && !none.markdown.includes("]("), "the bundled schema has no docs address, so no link");
+  const raw = JSON.parse(bundledSchemaText());
+  raw.step.parameters.find((p: { name: string }) => p.name === "walltime").links =
+    [{ title: "L-E01", url: "https://docs.example/lint/L-E01.html" }];
+  const h = hoverFor(parseSchema(JSON.stringify(raw)), "", line, at);
+  assert.ok(h && h.markdown.includes("[L-E01](https://docs.example/lint/L-E01.html)"));
 });
 
 test("should_explain_an_argument_on_hover", () => {
