@@ -489,6 +489,7 @@ def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Pat
     layout = local.staged_info(staged).get("layout") if staged else None
     if layout:     # the copy says which layout it is: nothing to ask lakeFS
         entry = layouts.load(layout).entry_of(staged, local.cache_dir(read.repo, read.commit, owner=read.owner))
+        _view_of(staged, entry)
         lock.record(read.repo, read.ref, read.commit, read.owner, read.name)
     else:
         if os.environ.get(local.STAGED_ENV) and not staged:
@@ -496,6 +497,23 @@ def _dataset(run: _Running, datasets, name: str, read: lock.Read) -> pathlib.Pat
         ref = datasets.DatasetRef(read.repo, read.ref, owner=read.owner)
         entry = datasets.materialize(ref, client=run.client, commit=read.commit)
     return entry if entry.is_dir() else entry.parent
+
+
+def _view_of(data: pathlib.Path, entry: pathlib.Path) -> None:
+    """A staged copy is read-only, so a layout writes its entry file (yolo: ``data.yaml``) into another folder and
+    ``input()`` returns that folder. Every other top-level name of the copy is linked into it, so a path below the
+    input (``step.input("dataset") / "images"``) is there beside an HPC (Slurm) job as it is on a pod."""
+    folder = entry.parent
+    if not entry.is_file() or folder.resolve() == data.resolve():
+        return
+    for child in data.iterdir():
+        link = folder / child.name
+        if child.name == entry.name or link.is_symlink() or link.exists():
+            continue
+        try:
+            link.symlink_to(child, target_is_directory=child.is_dir())
+        except FileExistsError:      # another process of the step made it in the meantime
+            pass
 
 
 def _item_prefix(prefix: str, index: Optional[int]) -> str:

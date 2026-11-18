@@ -349,6 +349,30 @@ def test_a_whole_staged_copy_is_used_and_anything_else_is_downloaded_with_a_line
     assert step.input("raw") == staged and capsys.readouterr().out == ""
 
 
+def test_the_input_folder_of_a_staged_yolo_dataset_holds_the_data_as_on_a_pod(monkeypatch, lake, tmp_path):
+    """Beside an HPC (Slurm) job the staged copy is read-only: data.yaml is written elsewhere, and the folder
+    input() returns held nothing else, so `step.input("raw") / "images"` found nothing there (kaos-lib#66)."""
+    import yaml
+    begin(monkeypatch, lake.context("context-no-upstream"), lake.client())
+    staged = tmp_path / "staged" / "raw"
+    (staged / "images" / "train").mkdir(parents=True)
+    (staged / "images" / "train" / "a.jpg").write_bytes(b"a")
+    (staged / "notes.txt").write_text("n")
+    (staged / "data.yaml").write_text("path: .\ntrain: images/train\nnames: [x]\n")
+    monkeypatch.setenv("KAOS_STAGED_ROOT", str(tmp_path / "staged"))
+    local.staged_marker(staged).write_text(json.dumps(
+        {"repo": "dataset-raw-images", "commit": lake.commit_of["raw"], "full": True, "layout": "yolo"}))
+    before = sorted(p.name for p in staged.iterdir())
+    folder = step.input("raw")
+    assert folder != staged
+    assert yaml.safe_load((folder / "data.yaml").read_text())["path"] == str(staged.resolve())
+    assert (folder / "images" / "train" / "a.jpg").read_bytes() == b"a"
+    assert (folder / "notes.txt").read_text() == "n"
+    assert not (folder / "data.yaml").is_symlink()                    # the rewritten one, not the staged one
+    assert sorted(p.name for p in staged.iterdir()) == before          # nothing was written into the staged copy
+    assert step.input("raw") == folder                                 # asked again: the same folder, no error
+
+
 # ----------------------------------------------------------------------------------------------------- upstream
 def test_a_step_that_is_not_upstream(monkeypatch):
     begin(monkeypatch, wire("context-one-upstream"))
