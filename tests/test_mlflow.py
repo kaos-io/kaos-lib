@@ -58,6 +58,43 @@ def test_tracking_token_env_comes_before_the_machine_key(zitadel_env, monkeypatc
     assert zitadel_env.requests == []
 
 
+def test_should_send_the_token_of_the_steps_own_app_before_the_machine_key(zitadel_env, monkeypatch, tmp_path):
+    held = tmp_path / "token"
+    held.write_text("app-token\n")
+    monkeypatch.setenv("KAOS_APP_TOKEN_FILE", str(held))
+    assert kmlflow.token() == "app-token"
+    assert zitadel_env.requests == []
+
+
+def test_should_read_the_apps_token_again_for_every_request(monkeypatch, tmp_path):
+    held = tmp_path / "token"
+    held.write_text("first")
+    monkeypatch.setenv("KAOS_APP_TOKEN_FILE", str(held))
+    auth = kmlflow.BearerAuth()
+    assert bearer(auth) == "Bearer first"
+    held.write_text("second")
+    assert bearer(auth) == "Bearer second"
+
+
+def test_should_prefer_an_explicit_token_to_the_apps_token_file(monkeypatch, tmp_path):
+    held = tmp_path / "token"
+    held.write_text("app-token")
+    monkeypatch.setenv("KAOS_APP_TOKEN_FILE", str(held))
+    monkeypatch.setenv("MLFLOW_TRACKING_TOKEN", "env-token")
+    assert kmlflow.token() == "env-token"
+
+
+@pytest.mark.parametrize("content, said", [(None, "cannot read the app's token"), ("  \n", "token file is empty")])
+def test_should_refuse_a_missing_or_empty_app_token_file_and_not_fall_back(zitadel_env, monkeypatch, tmp_path, content, said):
+    held = tmp_path / "token"
+    if content is not None:
+        held.write_text(content)
+    monkeypatch.setenv("KAOS_APP_TOKEN_FILE", str(held))
+    with pytest.raises(AuthError, match=said):
+        kmlflow.token()
+    assert zitadel_env.requests == []
+
+
 def test_machine_key_comes_before_the_laptop_session(zitadel_env, laptop):
     laptop(session_token(aud=["321"]))
     assert kmlflow.token() == "minted-token"
