@@ -1,5 +1,6 @@
 """Layouts as a mechanism: sources (built-in, installed, project, local), a team's own layout end to end, hooks, CLI."""
 import json
+import os
 import re
 import sys
 import textwrap
@@ -363,3 +364,29 @@ def test_the_guide_layout_is_valid_and_works(tmp_path):
     (root / "clips/train/b.mp3").write_bytes(b"x")
     assert lay.validate(root).errors == ["clips/train/b.mp3: extension .mp3 is not allowed here (.wav)",
                                          "clips/train/b.mp3 has no labels/train/b.json"]
+
+
+def test_should_never_show_an_empty_or_cut_data_yaml_while_another_step_writes_it(tmp_path, monkeypatch):
+    """Steps of several jobs on one machine share the folder the entry file is written to (PRD kaos#1911, the
+    e2e run of 2026-11-18: a step read the file while another wrote it and found no `path:`)."""
+    import pathlib
+
+    from kaos_lib.layouts import yolo
+    data, out = tmp_path / "data", tmp_path / "view"
+    data.mkdir()
+    out.mkdir()
+    (data / "data.yaml").write_text("path: .\ntrain: images/train\nnames: [x]\n")
+    (out / "data.yaml").write_text("path: /old\n")
+    seen = []
+    real = os.replace
+
+    def replace(src, dst):
+        seen.append((pathlib.Path(dst).read_text(), pathlib.Path(src).parent))   # what a reader finds just before
+        real(src, dst)
+
+    monkeypatch.setattr(yolo.os, "replace", replace)
+    entry = yolo.materialize(data, out, None)
+    assert seen == [("path: /old\n", out)]                    # the old file whole until the new one is in place
+    assert yaml.safe_load(entry.read_text())["path"] == str(data.resolve())
+    assert sorted(p.name for p in out.iterdir()) == ["data.yaml"]   # no temporary file is left
+
