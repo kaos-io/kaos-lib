@@ -9,8 +9,10 @@ already refuses are skipped here, so each problem is reported once.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import re
+import tempfile
 from typing import Optional
 
 import yaml
@@ -132,5 +134,14 @@ def materialize(data_dir: pathlib.Path, out_dir: pathlib.Path, layout) -> pathli
     text = yaml.safe_dump(data, sort_keys=False)
     if not out.is_file() or out.read_text() != text:
         out_dir.mkdir(parents=True, exist_ok=True)
-        out.write_text(text)
+        # Steps of several jobs on one machine share this folder: the file is put in place whole, so a step that
+        # reads it while another writes it never sees it empty or cut.
+        fd, tmp = tempfile.mkstemp(dir=out_dir, prefix=".data.yaml.")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(text)
+            os.replace(tmp, out)
+        except BaseException:
+            pathlib.Path(tmp).unlink(missing_ok=True)
+            raise
     return out
