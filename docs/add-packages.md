@@ -1,7 +1,6 @@
 # Add Python packages to a step
 
-**You want** a step to import a package that the template's image does not have, for example `pandas` or the MLflow
-client.
+**You want** a step to import a package that the template's image does not have, for example `pandas`.
 
 Each step has its own image, built from `steps/<name>/Dockerfile`. A package is installed there with one more `RUN`
 line, between the two lines for kaos-lib and the `COPY`:
@@ -14,7 +13,8 @@ line, between the two lines for kaos-lib and the `COPY`:
   version it chooses by replacing the value of the argument. `kaosctl lint` reports a step that loses them (`L-D01`,
   `L-D02`).
 - Pin each package (`pandas==2.2.3`), so that two builds give the same image.
-- For the MLflow client of [See your results](see-your-results.md), install `mlflow-skinny>=3,<4` the same way.
+- The MLflow client of [See your results](see-your-results.md) comes with kaos-lib (`mlflow-skinny`, version 3). Add no
+  line for it. A pin of your own, such as `mlflow-skinny==2.22.0`, makes the install fail.
 - A GPU step needs a CUDA-enabled `torch`: [Bigger machines](bigger-machines.md#when-the-gpu-is-not-there).
 
 The image is built from the folder `steps/<name>/` alone, so `COPY` only files inside it (`L-D04`), keep data out of

@@ -15,6 +15,9 @@ dependencies = [
     "requests>=2.31",
     "PyYAML>=6,<7",
     "packaging>=21",
+    "PyJWT>=2.8",                # machine-key tokens (kaos_lib.zitadel)
+    "cryptography>=41",
+    "mlflow-skinny>=3,<4",       # kaos_lib.mlflow, kaos_lib.lock.write/load, run --lock
 ]
 
 [project.urls]
@@ -24,8 +27,10 @@ Issues = "https://github.com/kaos-io/kaos-lib/issues"
 Changelog = "https://github.com/kaos-io/kaos-lib/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-zitadel = ["PyJWT>=2.8", "cryptography>=41"]   # machine-key tokens for datasets shared by other projects
-mlflow = ["mlflow-skinny>=3,<4", "PyJWT>=2.8", "cryptography>=41"]   # kaos_lib.mlflow, kaos_lib.lock.write/load, run --lock
+# Empty since 0.5.0: their packages are plain dependencies now. Kept so that `kaos-lib[zitadel]`, which every
+# platform spec and step Dockerfile names, still installs.
+zitadel = []
+mlflow = []
 test = ["pytest>=7", "PyJWT>=2.8", "cryptography>=41", "mlflow-skinny>=3,<4",
         # the guards of tests/test_env_neutral.py build the wheel and the docs site; in CI they fail rather than skip
         "build>=1", "setuptools>=77", "wheel",

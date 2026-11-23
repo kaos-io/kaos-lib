@@ -252,9 +252,31 @@ def test_mlflow_without_a_tracking_uri(fake_mlflow_module, monkeypatch):
         kmlflow.mlflow()
 
 
-def test_missing_mlflow_names_the_extra(monkeypatch):
+def test_mlflow_takes_the_uri_from_the_app_clone(fake_mlflow_module, monkeypatch, tmp_path):
+    (tmp_path / ".kubecore").mkdir()
+    (tmp_path / ".kubecore" / "dataset-config.yaml").write_text('mlflowUrl: "https://mlflow-b.example"\n')
+    monkeypatch.chdir(tmp_path)
+    assert kmlflow.mlflow(token="t").tracking_uri == "https://mlflow-b.example"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://mlflow.ml-b.svc:5000")     # what the platform sets wins
+    assert kmlflow.mlflow(token="t").tracking_uri == "http://mlflow.ml-b.svc:5000"
+
+
+def test_the_clients_are_plain_dependencies():
+    """`pip install kaos-lib`, with no extra, brings the MLflow client and the token packages."""
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+    project = tomllib.loads((pathlib.Path(__file__).parent.parent / "pyproject.toml").read_text())["project"]
+    plain, extras = project["dependencies"], project["optional-dependencies"]
+    assert extras["zitadel"] == [] and extras["mlflow"] == []      # the names stay: every platform spec uses one
+    for name in ("mlflow-skinny", "PyJWT", "cryptography"):
+        assert any(r.startswith(name) for r in plain), (name, plain)
+
+
+def test_missing_mlflow_says_how_to_get_it(monkeypatch):
     monkeypatch.setitem(sys.modules, "mlflow", None)   # import mlflow -> ImportError
-    with pytest.raises(KaosLibError, match=r"pip install 'kaos-lib\[mlflow\]'"):
+    with pytest.raises(KaosLibError, match="install kaos-lib again without --no-deps"):
         kmlflow.mlflow("http://mlflow", token="t")
 
 

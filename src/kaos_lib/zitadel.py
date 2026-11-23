@@ -5,7 +5,7 @@ Pipeline steps get ``ZITADEL_MACHINE_KEY_FILE`` (Zitadel's JSON key: ``type``, `
 ``mint_wallet`` does it: an RS256 assertion ``iss = sub = userId``, ``aud = https://<domain>``, header
 ``kid = keyId``, POSTed to ``https://<domain>/oauth/v2/token`` with the project-audience scope.
 
-Needs the optional extra ``kaos-lib[zitadel]`` (PyJWT + cryptography), imported only when a token is minted.
+PyJWT and cryptography are installed with kaos-lib and imported only when a token is minted.
 """
 from __future__ import annotations
 
@@ -33,8 +33,8 @@ def _jwt():
     try:
         import jwt
     except ImportError:
-        raise AuthError("minting a Zitadel token needs the zitadel extra: "
-                        "pip install 'kaos-lib[zitadel]' (PyJWT and cryptography).") from None
+        raise AuthError("minting a Zitadel token needs PyJWT and cryptography, which kaos-lib installs: "
+                        "install kaos-lib again without --no-deps.") from None
     return jwt
 
 
@@ -85,7 +85,7 @@ def grant(key_file, domain: str, project_id: str, session: Optional[requests.Ses
     that fails in a way that can pass (no connection, a timeout, HTTP 502/503/504) is tried again after a growing
     wait, for about 2.5 minutes (``RETRY_WAITS``); a refusal (4xx) is raised at once.
     """
-    _jwt()   # the missing extra is reported first, before any key-file problem
+    _jwt()   # the missing package is reported first, before any key-file problem
     key = load_key(key_file)
     url = f"https://{domain}/oauth/v2/token"
     for wait in (*RETRY_WAITS, None):

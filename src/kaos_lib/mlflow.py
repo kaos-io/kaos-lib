@@ -1,6 +1,7 @@
 """MLflow for KAOS: the project's tracking server, authenticated by one credential chain.
 
-``mlflow()`` points the ``mlflow`` module at the tracking URI (``$MLFLOW_TRACKING_URI``), selects the
+``mlflow()`` points the ``mlflow`` module at the tracking URI (``$MLFLOW_TRACKING_URI``, else ``mlflowUrl`` of
+the app clone's ``.kubecore/dataset-config.yaml``), selects the
 ``zitadel`` request-auth provider (``MLFLOW_TRACKING_AUTH=zitadel``) and returns an ``MlflowClient``. The
 provider ships with kaos-lib (entry point ``mlflow.request_auth_provider``: ``zitadel``), so any step with
 ``MLFLOW_TRACKING_AUTH=zitadel`` in its environment is authenticated without calling anything.
@@ -21,8 +22,8 @@ The bearer comes from the first link of the chain that has one:
 
 Project MLflow accepts only tokens whose audience is the organisation's Zitadel project (``OIDC_AUDIENCE``).
 
-Needs the optional extra ``kaos-lib[mlflow]`` (mlflow-skinny, PyJWT, cryptography); ``mlflow`` is imported
-only when ``mlflow()`` is called.
+The MLflow client (mlflow-skinny) is installed with kaos-lib; ``mlflow`` is imported only when ``mlflow()`` is
+called.
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ from typing import Callable, Optional
 from requests.auth import AuthBase
 
 from . import credentials, trackertoken, zitadel
-from .config import oidc_settings, resolve_endpoint
+from .config import config_value, oidc_settings, resolve_endpoint
 from .errors import AuthError, ConfigError, KaosLibError
 
 PROVIDER = "zitadel"
@@ -51,7 +52,8 @@ def _import_mlflow():
     try:
         import mlflow
     except ImportError:
-        raise KaosLibError("kaos_lib.mlflow needs the mlflow extra: pip install 'kaos-lib[mlflow]'.") from None
+        raise KaosLibError("kaos_lib.mlflow needs the MLflow client, which kaos-lib installs: "
+                           "install kaos-lib again without --no-deps.") from None
     return mlflow
 
 
@@ -179,14 +181,16 @@ class ZitadelRequestAuthProvider:
 def mlflow(tracking_uri: Optional[str] = None, token: Optional[str] = None):
     """Point the ``mlflow`` module at project MLflow with the chain's auth; return an ``MlflowClient``.
 
-    ``tracking_uri`` defaults to ``$MLFLOW_TRACKING_URI``; ``token`` is chain link 1. The chain is asked once
+    ``tracking_uri`` defaults to ``$MLFLOW_TRACKING_URI``, then to ``mlflowUrl`` of the app clone's
+    ``.kubecore/dataset-config.yaml`` (a run on your machine); ``token`` is chain link 1. The chain is asked once
     here, so a missing credential fails before any work starts. Sets ``MLFLOW_TRACKING_AUTH=zitadel`` in the
     environment, which child processes inherit.
     """
     module = _import_mlflow()
-    uri = tracking_uri or os.environ.get(TRACKING_URI_ENV)
+    uri = tracking_uri or os.environ.get(TRACKING_URI_ENV) or config_value("mlflowUrl")
     if not uri:
-        raise ConfigError("cannot determine the MLflow tracking URI: pass tracking_uri= or set MLFLOW_TRACKING_URI.")
+        raise ConfigError("cannot determine the MLflow tracking URI: pass tracking_uri=, set MLFLOW_TRACKING_URI, "
+                          "or run inside your app clone (it carries .kubecore/dataset-config.yaml).")
     if token:
         _source.explicit = token
     _source.token()
