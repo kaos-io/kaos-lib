@@ -4,9 +4,9 @@ import pathlib
 
 import pytest
 
-from kaos_lib.lint import (MixedRulesetVersions, RULESET_VERSION, Report, default_catalogue, empty_catalogue,
+from kaos_lib.lint import (MixedRulesetVersions, RULESET_VERSION, Report, empty_catalogue,
                            from_context, lint_project, merge_reports, read_context)
-from lint_corpus import CASES, CONFIG, HEADER, repo, write_repo
+from lint_corpus import CASES, repo, write_repo
 
 DOCS = pathlib.Path(__file__).resolve().parent.parent / "docs" / "lint"
 
@@ -16,17 +16,16 @@ def lint(tmp_path, files, catalogue=None):
 
 
 def test_should_skip_rules_that_need_the_catalogue_when_there_is_none(tmp_path):
-    """AC-29: with no catalogue the L-E01 and L-E03 fixtures are reported skipped, never passed."""
-    for rule_id in ("L-E01", "L-E03"):
-        report = lint(tmp_path / rule_id, CASES[rule_id][0], empty_catalogue())
-        assert not [f for f in report.findings if f.rule == rule_id]
-        assert rule_id in {s.rule for s in report.skipped}
-        assert all(s.reason for s in report.skipped)
+    """AC-29: with no catalogue the L-E03 fixture is reported skipped, never passed."""
+    report = lint(tmp_path, CASES["L-E03"][0], empty_catalogue())
+    assert not [f for f in report.findings if f.rule == "L-E03"]
+    assert "L-E03" in {s.rule for s in report.skipped}
+    assert all(s.reason for s in report.skipped)
 
 
 def test_should_skip_the_class_rule_with_the_built_in_default_catalogue(tmp_path):
     report = lint(tmp_path, CASES["L-E03"][0])
-    assert "L-E03" in {s.rule for s in report.skipped} and "L-E01" not in {s.rule for s in report.skipped}
+    assert "L-E03" in {s.rule for s in report.skipped} 
 
 
 def test_every_finding_has_a_level_a_fix_and_a_doc_link_that_resolves(tmp_path):
@@ -88,41 +87,17 @@ hpc:
 """
 
 
-def test_the_catalogue_from_a_context_lists_classes_and_the_project_limit():
+def test_the_catalogue_from_a_context_lists_the_classes():
     cat = from_context(__import__("yaml").safe_load(CONTEXT))
-    assert cat.classes == ("cpu-standard", "gpu-t4", "slurm-gpu") and cat.hpc.lane_max_minutes == 600
+    assert cat.classes == ("cpu-standard", "gpu-t4", "slurm-gpu")
     assert cat.to_dict()["source"] == "platform context"
-
-
-def test_the_longest_class_limit_is_used_when_the_project_sets_none():
-    cat = from_context({"hpc": {"enabled": True, "classes": [{"name": "a", "maxTimeLimitMinutes": 100},
-                                                              {"name": "b", "maxTimeLimitMinutes": 300}]}})
-    assert cat.hpc.lane_max_minutes == 300
-
-
-def test_a_project_without_an_hpc_site_skips_the_hpc_rules(tmp_path):
-    cat = from_context({"computeClasses": {"all": [{"name": "gpu-a"}]}, "hpc": {"enabled": False}})
-    report = lint(tmp_path, CASES["L-E01"][0], cat)
-    skipped = {s.rule: s.reason for s in report.skipped}
-    assert "no HPC (Slurm) site" in skipped["L-E01"] and "L-E02" in skipped
-    assert not [f for f in report.findings if f.rule == "L-E01"]
-
-
-def test_a_context_without_an_hpc_block_gets_the_default_lane():
-    assert from_context({}).hpc.lane_max_minutes == default_catalogue().hpc.lane_max_minutes
 
 
 def test_the_context_may_be_a_configmap(tmp_path):
     cm = {"kind": "ConfigMap", "data": {"context.yaml": CONTEXT}}
     p = tmp_path / "cm.yaml"
     p.write_text(__import__("yaml").safe_dump(cm))
-    assert read_context(str(p)).hpc.lane_max_minutes == 600
-
-
-def test_the_catalogue_follows_the_project_limit_for_l_e01(tmp_path):
-    cat = from_context(__import__("yaml").safe_load(CONTEXT))   # 600 minutes
-    files = repo('    t = step("t", kind="evaluate", gpu=True, walltime="12h", resumable=False)\n', {"t": "x = 1\n"})
-    assert [f.rule for f in lint(tmp_path, files, cat).findings if f.rule == "L-E01"] == ["L-E01"]
+    assert read_context(str(p)).classes == ("cpu-standard", "gpu-t4", "slurm-gpu")
 
 
 # --- limits and unreadable input ---------------------------------------------------------------------------------

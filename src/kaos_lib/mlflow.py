@@ -7,7 +7,9 @@ provider ships with kaos-lib (entry point ``mlflow.request_auth_provider``: ``zi
 
 The bearer comes from the first link of the chain that has one:
 
-  1. an explicit token: ``mlflow(token=...)``, else ``$MLFLOW_TRACKING_TOKEN`` (HPC (Slurm) jobs get one);
+  1. an explicit token: ``mlflow(token=...)``, else ``$MLFLOW_TRACKING_TOKEN`` (HPC (Slurm) jobs get one). When
+     ``$MLFLOW_TRACKING_TOKEN_FILE`` names a readable file, its content is that token, read again at every call
+     (see ``kaos_lib.trackertoken``);
   2. the token of the step's own app: the file ``$KAOS_APP_TOKEN_FILE`` names, read again for every request
      because the platform replaces it before it expires;
   3. the step's own machine key: ``ZITADEL_MACHINE_KEY_FILE`` + ``ZITADEL_DOMAIN`` +
@@ -33,12 +35,13 @@ from typing import Callable, Optional
 
 from requests.auth import AuthBase
 
-from . import credentials, zitadel
+from . import credentials, trackertoken, zitadel
 from .config import oidc_settings, resolve_endpoint
 from .errors import AuthError, ConfigError, KaosLibError
 
 PROVIDER = "zitadel"
-TRACKING_URI_ENV, TOKEN_ENV, AUTH_ENV = "MLFLOW_TRACKING_URI", "MLFLOW_TRACKING_TOKEN", "MLFLOW_TRACKING_AUTH"
+TRACKING_URI_ENV, AUTH_ENV = "MLFLOW_TRACKING_URI", "MLFLOW_TRACKING_AUTH"
+TOKEN_ENV = trackertoken.TOKEN_ENV
 APP_TOKEN_FILE_ENV = "KAOS_APP_TOKEN_FILE"
 REFRESH_LEEWAY = 120          # seconds before expiry at which a machine-key token is minted again
 DEFAULT_LIFETIME = 300        # assumed lifetime when Zitadel's answer carries no expires_in
@@ -82,6 +85,7 @@ class TokenSource:
 
     def token(self) -> str:
         """A bearer for project MLflow; AuthError saying what to do when the chain is empty."""
+        trackertoken.refresh()
         explicit = self.explicit or os.environ.get(TOKEN_ENV)
         if explicit:
             return explicit
@@ -186,6 +190,7 @@ def mlflow(tracking_uri: Optional[str] = None, token: Optional[str] = None):
     if token:
         _source.explicit = token
     _source.token()
+    trackertoken.watch()
     os.environ[AUTH_ENV] = PROVIDER
     module.set_tracking_uri(uri)
     from mlflow.tracking import MlflowClient

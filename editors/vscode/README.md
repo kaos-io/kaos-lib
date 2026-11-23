@@ -52,7 +52,7 @@ An editor never updates an extension installed from a file by itself, so one of 
 
 | What | How |
 | --- | --- |
-| Suggestions | In `pipeline.py`, type inside `step(` and press `Ctrl+Space`. After `resumable=` it lists the allowed values. |
+| Suggestions | In `pipeline.py`, type inside `step(` and press `Ctrl+Space`. After `idle_timeout=` it lists the allowed values. |
 | Hover docs | Hold the mouse over an argument name or its value. |
 | Findings | Type or save. Open the Problems view (`Ctrl+Shift+M`) to see all of them. |
 | Check now | `Ctrl+Shift+P`, then **KAOS: Check pipeline**. The full JSON report is written to the **KAOS** output panel. |

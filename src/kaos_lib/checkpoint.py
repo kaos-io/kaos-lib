@@ -46,7 +46,6 @@ import time
 import types
 from typing import Any, Callable, List, Optional, Tuple
 
-from . import runtime
 
 STOP_SIGNAL = signal.SIGUSR1
 CONTINUE_EXIT_CODE = 85            # "saved, continue me"
@@ -490,12 +489,8 @@ class _Registration:
         self.framework = False
 
     def interval_seconds(self) -> Optional[float]:
-        """Seconds between periodic checkpoints. The run form's `<step>-checkpoint-every` wins (its default is the
-        step's `checkpoint_every=`, or the engine's for a resumable step); a step without that field has the value
-        passed to ``register``, and without one ten times the slowest save so far, kept in bounds."""
-        asked = runtime.checkpoint_every_minutes()      # the run form's `<step>-checkpoint-every`
-        if asked:
-            return float(asked) * 60
+        """Seconds between periodic checkpoints: the value passed to ``register`` or ``attach``, and without one ten
+        times the slowest save so far, kept in bounds. Nothing outside the step's code sets it."""
         if self.every is False or self.every == 0:
             return None
         if self.every is not None:
@@ -552,8 +547,7 @@ def register(save: Callable[[pathlib.Path], Any], load: Callable[[pathlib.Path],
 
     Loads the newest verified checkpoint when this step continues from one and returns its progress (None on a first
     run), and arms ``tick()``. ``checkpoint_every`` is the
-    number of minutes between periodic checkpoints, None for the adaptive default, False to turn them off. It is a
-    default of the code: the run form's ``<step>-checkpoint-every``, when the step has one, wins over it.
+    number of minutes between periodic checkpoints, None for the library's adaptive default, False to turn them off.
     """
     global _reg
     if checkpoint_every not in (None, False) and not (

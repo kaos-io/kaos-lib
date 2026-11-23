@@ -10,6 +10,11 @@ PRD novelcore/kaos#1911 F-02: one step contract. **Breaking: no app is moved; ev
 template.** Nothing in kaos-lib converts an old app.
 
 ### Added
+- The tracker's bearer can come from a file (PRD novelcore/kaos#1911 D-76): when `MLFLOW_TRACKING_TOKEN_FILE` names a
+  readable file, `kaos_lib.mlflow` sends its content, read again for every call of its own, and keeps
+  `MLFLOW_TRACKING_TOKEN` equal to it (for code that uses the `mlflow` client directly; a thread checks the file every
+  minute while a step runs). A file that is missing, unreadable or empty leaves the last good value in place. Without
+  the variable nothing changes.
 - A step can sign in to MLflow as its own app: when the platform sets `KAOS_APP_TOKEN_FILE`, `kaos_lib.mlflow` sends the
   token in that file, read again for every request, instead of the project's machine key (PRD novelcore/kaos#1911 AC-43).
   A file that is missing or empty is an error; the step never goes on with another credential. As its own app a step
@@ -147,6 +152,12 @@ template.** Nothing in kaos-lib converts an old app.
   not written that way and a field the run form does not have. Rule set 2.1.0.
 
 ### Removed
+- Nothing about time is set by a person (PRD novelcore/kaos#1911 D-75). `kaosctl lint` refuses `walltime=`, `resumable=`
+  and `checkpoint_every=` on `step()` (`L-E06`, "<keyword>= is gone: the platform sets the time of a step and finds out
+  by itself whether it saves progress. Delete it."). The rules that asked for them are gone: `L-E01`, `L-E02`, `L-W01`,
+  `L-W05`, `L-W06`, `L-I01`, `L-I02`; the rule set is 3.0.0, and a catalogue's `hpc`, `maxContinuations` and
+  `resumableSteps` are ignored. `kaos_lib.checkpoint` takes its interval from the library (about 15 minutes, adapting
+  to the time a save takes) or from the `every=` a step passes to `register`; the run form no longer sets it.
 - `hpc_time_limit=` (use `walltime=`) and `outputs=` (use `step.result()`), with no alias.
 - The `kubecore` import shim, the `kubecore` and `kaos-cli` commands, `kaos_lib.errors.KubecoreError`.
 - `lock.write()` and writing `data.lock.json` (reading one, for a run made with 0.4, stays).

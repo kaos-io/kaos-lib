@@ -948,3 +948,15 @@ def test_the_record_of_the_fixture_is_the_envelope_of_the_contract(monkeypatch, 
 def test_an_instance_that_is_not_text_is_refused(capsys, monkeypatch):
     err = refused(capsys, monkeypatch, changed("context-no-upstream", instance=3))
     assert "the step context has an instance that is not text" in err
+
+
+def test_the_tracker_token_file_is_watched_while_the_step_runs(tmp_path, monkeypatch):
+    import threading
+    from kaos_lib import trackertoken
+    path = tmp_path / "tracker-token"
+    path.write_text("made-up-token")
+    monkeypatch.setenv(trackertoken.FILE_ENV, str(path))
+    begin(monkeypatch, fixture("context-no-upstream"))
+    assert any(t.name == trackertoken.THREAD_NAME for t in threading.enumerate())
+    step.stop()
+    assert not any(t.name == trackertoken.THREAD_NAME for t in threading.enumerate())

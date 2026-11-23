@@ -7,14 +7,14 @@ that explains it.
 
 The six values of `kind=`, side by side. [Step types](step-types.md) helps you pick one, and each kind has its own page.
 
-| type | for | `inputs=` | must produce | may produce | must not | runs on | GPU | resumable | what the platform does for this type |
-|---|---|---|---|---|---|---|---|---|---|
-| [`ingest`](step-type-ingest.md) | bringing data in from outside | yes | a dataset | a model, an artifact | | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class |
-| [`transform`](step-type-transform.md) | turning data into other data | yes | something: a dataset, a model or an artifact | any of the three | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | allowed | seals a version of each dataset it makes; offers HPC only when it makes no dataset |
-| [`train`](step-type-train.md) | training a model | yes | a model | a dataset, an artifact | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | allowed | keeps the model per run; `kaosctl lint` warns when a time limit has no way to continue (`L-W06`) |
-| [`evaluate`](step-type-evaluate.md) | measuring a model or a dataset | yes | nothing | an artifact | a dataset, a model | the platform's own machines or HPC (Slurm) | `gpu=True` allowed | allowed | keeps reports per run; its values can decide later steps |
-| [`publish`](step-type-publish.md) | delivering a result | yes | nothing | nothing | any `produces=` | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class |
-| [`control`](step-type-control.md) | steering the run | no | nothing | nothing | `inputs=`, any `produces=` | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class; a failure stops the steps that need it |
+| type | for | `inputs=` | must produce | may produce | must not | runs on | GPU | what the platform does for this type |
+|---|---|---|---|---|---|---|---|---|
+| [`ingest`](step-type-ingest.md) | bringing data in from outside | yes | a dataset | a model, an artifact | | the platform's own machines | `gpu=True` allowed | never offers an HPC (Slurm) class |
+| [`transform`](step-type-transform.md) | turning data into other data | yes | something: a dataset, a model or an artifact | any of the three | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | seals a version of each dataset it makes; offers HPC only when it makes no dataset |
+| [`train`](step-type-train.md) | training a model | yes | a model | a dataset, an artifact | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | keeps the model per run |
+| [`evaluate`](step-type-evaluate.md) | measuring a model or a dataset | yes | nothing | an artifact | a dataset, a model | the platform's own machines or HPC (Slurm) | `gpu=True` allowed | keeps reports per run; its values can decide later steps |
+| [`publish`](step-type-publish.md) | delivering a result | yes | nothing | nothing | any `produces=` | the platform's own machines | `gpu=True` allowed | never offers an HPC (Slurm) class |
+| [`control`](step-type-control.md) | steering the run | no | nothing | nothing | `inputs=`, any `produces=` | the platform's own machines | `gpu=True` allowed | never offers an HPC (Slurm) class; a failure stops the steps that need it |
 
 ## `step(name, ...)` in `pipeline.py`
 
@@ -30,9 +30,6 @@ The six values of `kind=`, side by side. [Step types](step-types.md) helps you p
 | `produces=` | what the step makes: `dataset("n")`, `model("n")`, `artifact("n")` | [Reference](data-writes.md#what-a-step-writes) |
 | `gpu=` | `True` offers the step the GPU classes; how many GPUs it gets on HPC is in [GPUs on HPC (Slurm)](gpus-on-hpc.md) | [Bigger machines](bigger-machines.md) |
 | `when=` | a run-form field or a value of a needed step, compared with a text: `"extra-mode != off"`, `"evaluate.passed == true"`; the step is skipped when it is false | [Conditions and skipping](conditions-and-skipping.md) |
-| `walltime=` | the default of the run-form field `<step>-walltime`: `"90m"`, `"12h"` | [The limits](contract.md#the-limits) |
-| `resumable=` | how long before the limit the step is told to save: `True`, `"20m"`, `False` | [HPC (Slurm)](hpc.md#when-the-limit-is-reached) |
-| `checkpoint_every=` | how often the platform copies the checkpoint your step saved: `"20m"`, `False`; the default of the run-form field `<step>-checkpoint-every` | [Long jobs](long-jobs.md) |
 | `idle_timeout=` | minutes without GPU use before a GPU step ends as idle; `0` for never | [Reference](reference.md#pipelinepy) |
 | `matrix=` | values to try, `{"lr": [0.01, 0.001]}`: the step runs once for each combination and reads `params["lr"]`; the next step gets a list | [Sweeps](sweeps.md) |
 | `matrix_allow_failed=` | `True` on a step with `matrix=`: the step after it runs when some runs failed and sees which; by default one failed run fails the step | [Sweeps](sweeps.md#pick-the-best) |

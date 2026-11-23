@@ -39,7 +39,7 @@ every output: `name`, `type`, `repo`, `commit`.
 ## `pipeline.py`
 
 `from kubecore.authoring import artifact, dataset, model, pipeline, step` gives `pipeline(name)` and
-`step(name, *, kind, reads, inputs, needs, produces, gpu, when, walltime, resumable, checkpoint_every, idle_timeout, matrix, matrix_allow_failed)`.
+`step(name, *, kind, reads, inputs, needs, produces, gpu, when, idle_timeout, matrix, matrix_allow_failed)`.
 
 | keyword | meaning | the platform refuses |
 |---|---|---|
@@ -51,14 +51,11 @@ every output: `name`, `type`, `repo`, `commit`.
 | `produces=` | `model("n")`, `artifact("n")`, `dataset("n")` | a dataset with two producing steps; `dataset(n, of=...)`; a type that may not produce what is listed ([Step types](step-types.md)) |
 | `gpu=True` | the step is offered the GPU classes. On the platform's own machines it gets the GPU of its class; on HPC (Slurm) it gets one GPU when node sharing is on, and the whole node's GPUs when it is off ([GPUs on HPC (Slurm)](gpus-on-hpc.md)) | |
 | `when="..."` | a name compared with a text, written `"<name> == text"` or with `!=`. The name is a field of the run form (`"mode != off"`) or a value of a step in `needs=` (`"evaluate.passed == true"`: the keyword of that step's `step.result(passed=...)`). Join comparisons with `and` / `or` (`and` first, no parentheses, no `<` or `>`); a text with spaces is quoted. A value that was never set stops the run, and a value of a skipped step makes the condition false ([Conditions and skipping](conditions-and-skipping.md)) | a `when=` that is not written that way; a field the run form does not have; a value of a step that is not in `needs=` |
-| `walltime=` | the longest the step may run, wherever it runs: `"90m"`, `"12h"`, `"720"` (minutes). It is the default of the run-form field `<step>-walltime` ([the limits](contract.md#the-limits)) | a wrong form |
-| `resumable=` | `True` (stop signal 10 minutes before the limit), a lead time `"20m"`, or `False` | a wrong form |
-| `checkpoint_every=` | how often the platform copies the checkpoint your step saved: `"20m"`, `"1h"`, `20`, `False`; GPU steps default to ten minutes. It is the default of the run-form field `<step>-checkpoint-every` (a `resumable=True` step has the field too, with ten minutes as the default), and the form value wins over `register(checkpoint_every=...)` in code ([the table](long-jobs.md#the-time-limit)). On HPC (Slurm) copies are at least five minutes apart | a wrong form |
 | `idle_timeout=` | minutes without GPU use and log lines before a GPU step ends as idle: `"40m"`, `40`, `0` for never; the default is in [the limits](contract.md#the-limits) | a wrong form |
 | `matrix=` | values to try, `{"lr": [0.01, 0.001], "batch": [16, 32]}`: the step runs once for each combination, at most 32; it reads a value as `params["lr"]`, and the step after it gets a list ([Sweeps](sweeps.md)). It is the default of the run-form field `<step>-matrix` | not a dictionary of non-empty lists; a name that is not `[a-z][a-z0-9_]*` or is also a section in `reads=`; a value that is not a number, a boolean or a short text; more than 32 combinations; the kinds `ingest`, `publish`, `control`; a dataset in `produces=`; a whole number beyond 2^53; more than 4 things in `inputs=` and `produces=` together; a step that needs a step with `matrix=`, two of them, or more than 4 steps in all when one has `matrix=`; a `when=` that reads a value of a step with `matrix=`. The limits are in [Sweeps](sweeps.md#limits) |
 | `matrix_allow_failed=` | `True` on a step with `matrix=`: the step after it runs when some items failed and sees which ([Sweeps](sweeps.md#pick-the-best)) | not `True` or `False`; without `matrix=` |
 
-Refused at render, as well: `outputs=`, `hpc_time_limit=` and `disk=`; a step that produces a dataset and is pinned to
+Refused at render, as well: `outputs=`, `hpc_time_limit=`, `walltime=`, `resumable=`, `checkpoint_every=` and `disk=`; a step that produces a dataset and is pinned to
 a Slurm class; a `plan` or `pipeline-version` in `config/`; a step definition over 24 KiB; an app name over the limit;
 a copy of the platform's pipeline code in the app; the `platform` group in `config/config.yaml`. An app from before the current pipelines
 is created again from the template.
@@ -75,7 +72,7 @@ address, such as `dataset-<name>@v1`, are in [Names and addresses](data-contract
 | `checkpoint.dir()`, `load(name="state", default=None)`, `save(obj, name="state")`, `progress(n)`, `stop_requested()`, `exit_for_restart()` | [Long jobs](long-jobs.md); exit code 85 means saved, run again |
 | the hooks for Ultralytics, PyTorch Lightning and Hugging Face | importing `kaos_lib` attaches them. The environment variable `KAOS_CHECKPOINT_HOOKS=0` turns them off |
 | `progress.report(done, total=None, unit="step")` | one line the run page reads from the log, at most one every ten seconds; never fails |
-| `mlflow.mlflow(tracking_uri=None, token=None)` | signs the step in to the project's MLflow and returns an `MlflowClient` |
+| `mlflow.mlflow(tracking_uri=None, token=None)` | signs the step in to the project's MLflow and returns an `MlflowClient`. On HPC (Slurm) the step's token is kept fresh from a file (`MLFLOW_TRACKING_TOKEN_FILE`), so a long step needs nothing from you |
 | `runtime.usable_cpus()`, `runtime.context()`, `runtime.run_id()` | the cores the step may use (its share of a shared Slurm node); where the step runs |
 | `datasets.list_datasets()`, `versions(repo)`, `release(repo)` | the datasets you can read, their versions, a new version, outside a step |
 
@@ -135,8 +132,8 @@ addresses and tokens the platform gives a running step are not passed, even if y
 
 | the step ended because | with a checkpoint | without one |
 |---|---|---|
-| its machine was lost (reclaimed, failed, drained) | continues from the newest good copy | runs again from the start, as often as the limit allows ([the limits](contract.md#the-limits)) |
-| the time limit was reached, on the platform's own machines or on HPC ([Long jobs](long-jobs.md#the-time-limit)) | continues in a new run | ends |
+| its machine was lost (reclaimed, failed, drained) | continues from the newest good copy | runs again from the start, at most twice |
+| the job ended at its time (the platform sets it) ([Long jobs](long-jobs.md#how-a-step-can-end)) | continues in a new run | ends |
 | a GPU step showed no GPU use and no new log line for the idle time ([the limits](contract.md#the-limits)) | ends as idle, and is not run again | ends as idle |
 | your code failed (non-zero exit) | ends as failed | ends as failed |
 

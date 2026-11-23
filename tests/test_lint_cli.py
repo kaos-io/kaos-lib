@@ -58,11 +58,11 @@ def test_text_json_and_markdown_forms(tmp_path, capsys, monkeypatch):
 def test_status_form_is_one_line_with_the_counts_and_the_rule_set(tmp_path, capsys):
     root = write_repo(tmp_path / "r", CASES["L-E06"][0])
     code, out, _ = kaosctl(capsys, str(root), "--format", "status")
-    assert code == 2 and out == "1 error, 0 warnings, 0 infos; 2 rules skipped (rule set 2.5.0)\n"
+    assert code == 2 and out == "1 error, 0 warnings, 0 infos; 2 rules skipped (rule set 3.0.0)\n"
 
 
 def test_markdown_lists_skipped_rules_and_caps_long_lists(tmp_path, capsys):
-    many = "".join(f'    a{i} = step("a{i}", kind="evaluate", walltime="x")\n' for i in range(60))
+    many = "".join(f'    a{i} = step("a{i}", kind="evaluate", idle_timeout="x")\n' for i in range(60))
     root = write_repo(tmp_path / "r", repo(many))
     _, md, _ = kaosctl(capsys, str(root), "--format", "markdown")
     assert "and 10 more" in md and "Rules that did not run" in md
@@ -94,7 +94,7 @@ def test_should_refuse_a_different_rule_set(tmp_path, capsys):
     assert code == 1 and "9.9.9" in err
 
 
-@pytest.mark.parametrize("case", ["L-E01", "L-E05", "L-W03", "L-I01"])
+@pytest.mark.parametrize("case", ["L-E05", "L-W03", "L-W04"])
 @pytest.mark.parametrize("with_context", [False, True])
 def test_the_gate_and_the_local_command_give_byte_identical_json(tmp_path, capsys, case, with_context):
     """AC-24: the same files and catalogue give the same bytes from the gate's standalone entry (run isolated, with

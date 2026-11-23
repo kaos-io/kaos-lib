@@ -6,7 +6,7 @@ import re
 
 from kaos_lib import cli
 from kaos_lib.lint import ALL_RULES, RULESET_VERSION, registry
-from kaos_lib.lint.constants import REMOVED_STEP_PARAMS, STEP_PARAMS, TIME_PATTERN
+from kaos_lib.lint.constants import REMOVED_STEP_PARAMS, STEP_PARAMS
 from kaos_lib.lint.graph import build_graph
 from kaos_lib.lint.schema import SCHEMA_VERSION, build_schema, schema_json
 from lint_corpus import repo, write_repo
@@ -34,11 +34,6 @@ def test_schema_is_versioned_with_the_rule_set():
     assert schema["schema_version"] == SCHEMA_VERSION and schema["ruleset_version"] == RULESET_VERSION
 
 
-def test_schema_patterns_are_the_ones_the_rules_use():
-    by_name = {p["name"]: p for p in build_schema()["step"]["parameters"]}
-    assert by_name["walltime"]["pattern"] == TIME_PATTERN
-
-
 def test_every_argument_has_documentation_and_every_link_has_a_page():
     for p in build_schema()["step"]["parameters"]:
         assert len(p["doc"]) > 40, p["name"]
@@ -59,7 +54,7 @@ def test_the_schema_has_no_removed_argument():
 
 def test_allowed_values_match_what_the_library_accepts():
     by_name = {p["name"]: p for p in build_schema()["step"]["parameters"]}
-    for name in ("walltime", "resumable"):
+    for name in ("idle_timeout",):
         pattern = re.compile(by_name[name]["pattern"])
         for v in by_name[name]["values"]:
             text = v["insert"]
@@ -87,7 +82,7 @@ def test_the_extensions_bundled_fallback_equals_the_generated_schema():
 
 
 # ---------------------------------------------------------------- graph
-BODY = ('    a = step("prepare", kind="evaluate")\n    b = step("train", kind="evaluate", needs=[a], gpu=True, walltime="12h")\n'
+BODY = ('    a = step("prepare", kind="evaluate")\n    b = step("train", kind="evaluate", needs=[a], gpu=True)\n'
         '    step("evaluate", kind="evaluate", needs=[a, b])\n')
 
 
@@ -98,7 +93,7 @@ def test_graph_has_the_steps_and_their_dependencies(tmp_path):
     assert [n["name"] for n in block["nodes"]] == ["prepare", "train", "evaluate"]
     assert [(e["from"], e["to"]) for e in block["edges"]] == [("s0", "s1"), ("s0", "s2"), ("s1", "s2")]
     train = block["nodes"][1]
-    assert train["gpu"] is True and train["walltime"] == "12h" and train["line"] == 5 and train["variable"] == "b"
+    assert train["gpu"] is True and "walltime" not in train and train["line"] == 5 and train["variable"] == "b"
 
 
 def test_graph_marks_loop_steps_dynamic_and_wires_nothing(tmp_path):

@@ -20,27 +20,27 @@ test("should_refuse_a_schema_of_an_unknown_version_and_garbage", () => {
 
 test("should_offer_argument_names_inside_a_step_call", () => {
   const got = names('with pipeline("p") as p:\n    step("train", ');
-  assert.ok(got.includes("resumable") && got.includes("walltime") && got.includes("idle_timeout"));
+  assert.ok(got.includes("gpu") && got.includes("idle_timeout") && !got.includes("walltime") && !got.includes("resumable"));
   assert.ok(!got.includes("name"), "name is already given as the first positional argument");
 });
 
 test("should_filter_argument_names_by_the_typed_prefix", () => {
-  assert.deepEqual(names('step("t", re'), ["reads", "resumable"]);
+  assert.deepEqual(names('step("t", idl'), ["idle_timeout"]);
 });
 
 test("should_not_offer_an_argument_that_was_already_given", () => {
   assert.ok(!names('step("t", gpu=True, ').includes("gpu"));
 });
 
-test("should_offer_the_schema_values_after_resumable_equals", () => {
-  const items = completionsFor(schema, 'step("train", gpu=True, resumable=');
-  assert.deepEqual(items.map((i) => i.label), ["True", "False", '"20m"', '"1h"']);
+test("should_offer_the_schema_values_after_idle_timeout_equals", () => {
+  const items = completionsFor(schema, 'step("train", gpu=True, idle_timeout=');
+  assert.deepEqual(items.map((i) => i.label), ['"40m"', '"1h"', "0"]);
   assert.ok(items.every((i) => i.documentation.length > 10), "each value carries inline docs");
 });
 
 test("should_narrow_value_completions_by_what_is_typed_and_report_the_replace_length", () => {
-  const items = completionsFor(schema, 'step("train", gpu=True, walltime="1');
-  assert.deepEqual(items.map((i) => i.label), ['"12h"']);
+  const items = completionsFor(schema, 'step("train", gpu=True, idle_timeout="4');
+  assert.deepEqual(items.map((i) => i.label), ['"40m"']);
   assert.equal(items[0].replaceLength, 2);
 });
 
@@ -80,30 +80,30 @@ test("should_analyse_the_context_kind", () => {
 
 test("should_show_hover_docs_for_an_argument_name_and_its_value", () => {
   const before = 'with pipeline("p") as p:\n';
-  const line = '    step("train", gpu=True, resumable=True)';
-  const onName = hoverFor(schema, before, line, line.indexOf("resumable") + 3);
-  assert.ok(onName !== null && onName.markdown.includes("**resumable**") && onName.markdown.includes("checkpoint"));
-  assert.equal(onName.start, line.indexOf("resumable"));
-  const onValue = hoverFor(schema, before, line, line.lastIndexOf("True") + 1);
-  assert.ok(onValue && onValue.markdown.includes("**resumable**"));
+  const line = '    step("train", gpu=True, idle_timeout="40m")';
+  const onName = hoverFor(schema, before, line, line.indexOf("idle_timeout") + 3);
+  assert.ok(onName !== null && onName.markdown.includes("**idle_timeout**"));
+  assert.equal(onName.start, line.indexOf("idle_timeout"));
+  const onValue = hoverFor(schema, before, line, line.indexOf("True") + 1);
+  assert.ok(onValue && onValue.markdown.includes("**gpu**"));
 });
 
 test("should_link_the_rule_pages_in_hover_docs_when_the_schema_has_their_address", () => {
-  const line = 'step("a", gpu=True, walltime="12h")';
-  const at = line.indexOf("walltime") + 2;
+  const line = 'step("a", gpu=True, idle_timeout="40m")';
+  const at = line.indexOf("idle_timeout") + 2;
   const none = hoverFor(schema, "", line, at);
   assert.ok(none && !none.markdown.includes("]("), "the bundled schema has no docs address, so no link");
   const raw = JSON.parse(bundledSchemaText());
-  raw.step.parameters.find((p: { name: string }) => p.name === "walltime").links =
-    [{ title: "L-E01", url: "https://docs.example/lint/L-E01.html" }];
+  raw.step.parameters.find((p: { name: string }) => p.name === "idle_timeout").links =
+    [{ title: "L-W02", url: "https://docs.example/lint/L-W02.html" }];
   const h = hoverFor(parseSchema(JSON.stringify(raw)), "", line, at);
-  assert.ok(h && h.markdown.includes("[L-E01](https://docs.example/lint/L-E01.html)"));
+  assert.ok(h && h.markdown.includes("[L-W02](https://docs.example/lint/L-W02.html)"));
 });
 
 test("should_explain_an_argument_on_hover", () => {
-  const line = 'step("a", gpu=True, walltime="12h")';
-  const h = hoverFor(schema, "", line, line.indexOf("walltime") + 1);
-  assert.ok(h && h.markdown.includes("walltime"));
+  const line = 'step("a", gpu=True, idle_timeout="40m")';
+  const h = hoverFor(schema, "", line, line.indexOf("idle_timeout") + 1);
+  assert.ok(h && h.markdown.includes("idle_timeout"));
 });
 
 test("should_give_no_hover_on_ordinary_words", () => {

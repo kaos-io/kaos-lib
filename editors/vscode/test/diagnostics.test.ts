@@ -21,7 +21,7 @@ test("should_map_levels_to_severities", () => {
   const sev = Object.fromEntries(report.findings.map((f) => [f.rule, mapFinding(f).severity]));
   assert.equal(sev["L-E06"], "error");
   assert.equal(sev["L-W02"], "warning");
-  assert.equal(sev["L-I01"], "information");
+  assert.equal(sev["L-I04"], "information");
 });
 
 test("should_carry_the_fix_hint_and_the_doc_link", () => {

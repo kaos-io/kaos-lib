@@ -64,7 +64,7 @@ without its folder is refused, and the message names the folder to create (`L-E0
    kaos-lib the platform chooses (that is why `ARG KAOS_LIB_PACKAGE` stays). A run uses the images the platform built.
    They are not on the run form: nobody who starts a run can choose the image a step runs.
 3. **It reads the run form.** The values you gave and the settings of `config/` become the settings of the run. A value
-   that cannot work (a time limit that is not minutes or hours, a class the step is not offered) refuses the run before
+   that cannot work (a class the step is not offered) refuses the run before
    the first step, with a sentence that names the field.
 4. **It pins every input to one exact version.** Each dataset choice on the form becomes one version, once, before the
    first step. Every step of the run reads that version, even if `latest` moves while the run is going
@@ -118,8 +118,6 @@ This table says, for each field: who makes it, who sets its value and when, and 
 | `<section>-<key>`, one for each plain value | you, in the files of `config/` listed in `config/config.yaml`. A list is not a field. The comment next to the value is the text of the field | whoever starts the run, on the form | the value in the file |
 | a dataset field, named like the input | you: a top-level value in `config/` that `inputs=` names | whoever starts the run picks one of your project's datasets and versions. The platform pins it to one exact version when the run starts | the reference in the file |
 | `<step>-class` | the platform, for every step. You choose what it offers with `gpu=True` | whoever starts the run. A class the form does not offer is refused before the first step. GPU classes only with `gpu=True`, on the platform's machines and on HPC (Slurm) alike; HPC (Slurm) classes only for a step that may run there ([where it runs](step-types.md)) | the step's default class, chosen by the platform |
-| `<step>-walltime` | the platform, for every step | whoever starts the run. Minutes or hours (`90`, `90m`, `12h`), at least one minute, at most 30 days, longer than the lead of `resumable=` | `walltime=` on the step, else `4h` |
-| `<step>-checkpoint-every` | the platform, for a step that declares `checkpoint_every=` or `resumable=` (not `checkpoint_every=False`) | whoever starts the run. Minutes or hours, at least one minute, at most 30 days. On HPC (Slurm) copies are at least five minutes apart | `checkpoint_every=` on the step, else 10 minutes for a `resumable=` step |
 | `<step>-matrix` | the platform, for a step with `matrix=` | whoever starts the run. A JSON list of objects, one name for each name of `matrix=`; at most 32; a value is a number, `true`/`false` or a text of 1 to 64 letters, digits, spaces and `. _ + / : = @ , ( ) [ ] # % ^ ~ * -`; a whole number beyond 2^53 must be text ([Sweeps](sweeps.md#choose-values-on-the-run-form)) | every combination of the values in `matrix=`, in the order written, the first name changing slowest |
 | `<step>-parallel` | the platform, for a step with `matrix=` | whoever starts the run. `all` or a whole number from 1 to 32: how many items run at the same time ([Sweeps](sweeps.md#run-fewer-at-once)) | `4`, the 1-GPU steps one HPC (Slurm) node holds, so that the items share a node |
 | `reuse-from-run` and `start-from-step` | the platform, always | whoever starts the run. Both empty is a normal run. Both filled: the name of an earlier run of this app, and the step the new run runs first, which and every step after it run again; the steps before are taken from the earlier run. One without the other is refused ([Re-running](rerun.md)) | empty |
@@ -138,20 +136,10 @@ step again, and the step must give a correct result when it is run again. Two th
   `checkpoint.save` and `checkpoint.load` ([Long jobs](long-jobs.md)). For Ultralytics, PyTorch Lightning and Hugging
   Face it is automatic: importing `kaos_lib` is enough.
 
-What the platform does when a step is stopped, today:
-
-| the step | stopped by | what the platform does |
-|---|---|---|
-| any step, on the platform's own machines | its machine is lost | runs it again from the start, at most twice. A step that fails by itself, or ends as idle, is not run again |
-| any step, on HPC (Slurm) | its node is lost | runs it again from the start, at most twice. A step that left a verified checkpoint copy continues from it instead, also when it reaches its limit |
-| declares `resumable=` | its machine is lost, its time limit, or exit code 85 | runs it again from its newest checkpoint copy, up to 5 times by default. Each run has the whole limit again |
-
-The full table is in [Long jobs](long-jobs.md#the-time-limit). Nothing runs a step again when its own code fails: fix the step.
-
-**Today, a step must still declare `resumable=` to be continued at its time limit on the platform's own machines, and a step
-on HPC (Slurm) with a time limit above 11 hours 30 minutes is refused without it (a step's access to its data and to
-tracking lasts 12 hours there and is not renewed). A resumable step runs at most 6 times, so its limit may be up to 4140
-minutes (69 hours).**
+What the platform does when a step is stopped: a step that saved progress through `kaos_lib.checkpoint` continues from it
+in a new run; a step that saved none is run again from the start when its machine was lost, at most twice, and ends
+when it only ran out of time. Nothing runs a step again when its own code fails: fix the step. You set no time limit
+and no checkpoint interval ([Long jobs](long-jobs.md#nothing-to-set)).
 
 ## What the platform refuses
 
@@ -164,7 +152,7 @@ pipeline, and the third when a run starts.
 | you see | it means | do this |
 |---|---|---|
 | `step 'x': outputs= is gone. Declare what the step writes with produces=[...] and hand it on with step.result().` | `outputs=` is gone | declare what a step makes in `produces=`, and hand values on with `step.result(...)` |
-| `step 'x': hpc_time_limit= is gone. Use walltime=, for example walltime="12h".` | `hpc_time_limit=` is gone | write `walltime="12h"` |
+| `step 'x': hpc_time_limit= is gone: the platform sets the time of a step and finds out by itself whether it saves progress. Delete it.` | `hpc_time_limit=`, `walltime=` or `resumable=` is written (the sentence names the one you wrote) | delete it |
 | `step 'x': disk= is gone. The step gets the disk of the machine class it runs on.` | a step is not told its disk | pick a bigger class on the run form |
 | `L-E06 ... when='...' is not a condition the platform can read. A condition compares one name with a text, with == or != and nothing else`, or `... names 'x', which is not a field of the run form` | `when=` is not a name, `==` or `!=`, and a text, or the field is not on the run form | write `when="mode != off"` or `when="evaluate.passed == true"`: [Conditions and skipping](conditions-and-skipping.md) |
 | `L-E06 ... when= reads a value of step 'x', which this step does not need` | the step `x` is not in `needs=` | add it to `needs=` |
@@ -201,11 +189,6 @@ A step that breaks the contract of its type is refused with one sentence. The pl
 
 | you see | it means | do this |
 |---|---|---|
-| `x-walltime is '1d'. Write minutes or hours, for example 90, 90m or 12h: at least one minute, at most 30 days, no other unit.` | the time limit of step `x` is not minutes or hours | write `90`, `90m` or `12h` in the field |
-| `x-walltime is 15 minutes, which is not longer than the 20 minutes before its limit that the step is told to save (resumable= in pipeline.py). Give the step more time.` | the limit is shorter than the time the step needs to save | raise the field, or lower the lead in `resumable=` |
-| `step 'x': x-walltime is 720 minutes (12 hours), but a step keeps its access to its data and to tracking for at most 11.5 hours and this one is not resumable ...` | on HPC (Slurm), the step's limit is above 11 hours 30 minutes and it does not declare `resumable=` | declare `resumable=True` and make the step continue from its checkpoints, or shorten the limit in the field |
-| `step 'x': x-walltime is 5000 minutes (83.3 hours). As a resumable step it runs in runs of up to 11.5 hours and at most 6 runs ...` | on HPC (Slurm), the limit needs more runs than the cap allows | shorten the limit to 4140 minutes or less |
-| `x-checkpoint-every is 'often'. Write minutes or hours, ...` | the checkpoint interval is not minutes or hours | write `10m` or `1h` |
 | `promote-clean is 'maybe'. Choose true or false.` | the choice of a dataset to promote is not `true` or `false` | choose one of the two |
 | `'plan.promote' is no longer read. Tick the field promote-<dataset> of the run form, one for each dataset a step produces.` | the extra settings of the run still hold `plan:` | remove it and set the field `promote-<name>` to `true` |
 | `step 'x' cannot run on class 'gpu-t4': it is a GPU machine and the step does not declare gpu=True. Add gpu=True to the step in pipeline.py to run it on a GPU machine.` | the run asked for a class the step is not offered | pick a class the form offers, or add `gpu=True` |
@@ -266,8 +249,8 @@ What a run keeps and removes, and when, is in [What is kept, and for how long](d
 | Edit files of an input | `step.input("x", writable=True)` | [Reference](reference.md#step-api-kaos_libstep) |
 | Use a scratch folder that is never saved | `step.workdir()` | [Cheat sheet](cheat-sheet.md) |
 | Ask for a GPU | `gpu=True` | [Bigger machines](bigger-machines.md) |
-| Set the longest a step may run, anywhere | the field `<step>-walltime` of the run form; `walltime="12h"` in code only sets its default | [Long jobs](long-jobs.md#the-time-limit) |
-| Continue after an interruption | `checkpoint.load/save`, `resumable=`, `checkpoint_every=` | [Long jobs](long-jobs.md) |
+| Set the time of a step | nothing: the platform sets it | [Long jobs](long-jobs.md#nothing-to-set) |
+| Continue after an interruption | `checkpoint.load/save` | [Long jobs](long-jobs.md) |
 | End a GPU step that sits idle sooner or later | `idle_timeout=` | [Reference](reference.md#pipelinepy) |
 | Run a step many times, once for each combination of values | see [Sweeps](sweeps.md) | [Sweeps](sweeps.md) |
 | Move `latest` of a dataset you make | the field `promote-<name>` of the run form | [Move `latest`](flow-datasets.md#move-latest) |
@@ -294,9 +277,5 @@ Every number of the guide is in this table.
 | the extra settings of a run | 16 KiB |
 | the definition of one step in `pipeline.py` | 24 KiB |
 | a dataset version in a reference | 255 characters |
-| the time limit of a step that sets no `walltime=` | 4 hours, on the platform's own machines and on HPC (Slurm). `walltime=` sets the default, and the field `<step>-walltime` of the run form sets the limit of a run. Waiting for a machine does not count |
-| the longest time limit | 30 days, in the field `<step>-walltime` of the run form. On HPC (Slurm), a limit above 11 hours 30 minutes needs `resumable=`, and the longest is 4140 minutes (69 hours) at the delivered setting of 5 continuations ([A step can be stopped and started again](#a-step-can-be-stopped-and-started-again)) |
-| the longest run on HPC (Slurm) | set by the site. `kaosctl lint` assumes 2 days when it has no project facts, and checks only that one; it does not report the 11 hours 30 minutes rule above, which the platform checks when the run starts |
-| continuations of a resumable step, on the platform's own machines and on HPC (Slurm) | up to 5 by default, which is the platform's delivered setting; the project and the site can set another cap. The time limit applies to each run of the step |
 | a step without a checkpoint whose machine was lost | runs again from the start at most twice |
 | a GPU step with no GPU use and no new log line | ends as idle after 20 minutes (`idle_timeout=` changes it, `0` turns it off) |

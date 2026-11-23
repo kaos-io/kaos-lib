@@ -2,7 +2,6 @@
 periodic interval, resume (PRD-HPC-1461 D-74, D-75)."""
 import json
 import os
-import pathlib
 import signal
 
 import pytest
@@ -298,40 +297,21 @@ def test_the_platform_folder_receives_the_checkpoints_and_is_where_a_continuatio
     assert other.epoch == 3
 
 
-# ------------------------------------------------------------- the run form's interval (step context)
+# ------------------------------------------------------------- the interval comes from the library only
 
-def test_the_interval_of_the_run_form_wins_over_the_one_passed_to_register(tmp_path, clean, monkeypatch):
+def test_a_step_context_cannot_set_the_interval(tmp_path, clean, monkeypatch):
     monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"version": 1, "checkpoint_every": 20}))
     m = Model(1)
     checkpoint.register(save=m.save, load=m.load)
-    clean.now += 19 * 60
-    assert checkpoint.tick() is False
-    clean.now += 2 * 60
-    assert checkpoint.tick() is True          # 20 minutes, from the context
-    checkpoint.register(save=m.save, load=m.load, checkpoint_every=5)
-    clean.now += 6 * 60
-    assert checkpoint.tick() is False         # the form's 20 minutes win over the code's 5
-    clean.now += 14 * 60
-    assert checkpoint.tick() is True
+    clean.now += 16 * 60
+    assert checkpoint.tick() is True          # the library's default of 15 minutes, not the 20 of the context
 
 
-def test_without_a_form_value_the_value_passed_to_register_and_off_still_work(tmp_path, clean, monkeypatch):
-    monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"version": 1}))
+def test_the_value_passed_to_register_and_off_still_work(tmp_path, clean):
     m = Model(1)
     checkpoint.register(save=m.save, load=m.load, checkpoint_every=5)
     clean.now += 6 * 60
     assert checkpoint.tick() is True
     checkpoint.register(save=m.save, load=m.load, checkpoint_every=False)
     clean.now += 3600
-    assert checkpoint.tick() is False         # off, with no form value to say otherwise
-
-
-def test_without_an_interval_in_the_context_the_adaptive_default_stays(tmp_path, clean, monkeypatch):
-    from kaos_lib import runtime
-    monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"version": 1}))
-    assert runtime.checkpoint_every_minutes() is None
-    for bad in (0, -3, "10", True, None):
-        monkeypatch.setenv("KAOS_STEP_CONTEXT", json.dumps({"checkpoint_every": bad}))
-        assert runtime.checkpoint_every_minutes() is None, bad
-    monkeypatch.delenv("KAOS_STEP_CONTEXT")
-    assert runtime.checkpoint_every_minutes() is None
+    assert checkpoint.tick() is False

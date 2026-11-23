@@ -4,7 +4,7 @@ from pathlib import Path
 from kubecore.authoring import model, pipeline, step  # provided by the platform
 
 with pipeline("ml-pipeline") as p:
-    train = step("train", kind="train", reads=["train"], inputs=["dataset"], gpu=True, walltime="6h", resumable=True,
+    train = step("train", kind="train", reads=["train"], inputs=["dataset"], gpu=True,
                  produces=[model("model")])
 
 if __name__ == "__main__":

@@ -75,7 +75,6 @@ count each time and keeps nothing about it in the checkpoint.
 
 - `gpu=True` on the step, so that the run form offers it the GPU classes. Without it the form offers the CPU classes only.
 - `<step>-class` on the run form: the class of the GPU partition. Each class names its machine in its description.
-- `<step>-walltime` on the run form: the time limit. Every step has one. `walltime=` in `pipeline.py` is only the default of this field ([the limits](contract.md#the-limits)).
 
 ## Mistakes and what you see
 
@@ -86,6 +85,5 @@ count each time and keeps nothing about it in the checkpoint.
 | a GPU step that produces a dataset | `kaosctl lint` warns: `L-W07` |
 | the number of GPUs written in the code (`device_count()` replaced by `4`) | with sharing on the step sees one GPU and fails, or touches a GPU that is not its own |
 | a data loader sized by `os.cpu_count()` | on a shared node it starts as many workers as the whole node has cores |
-| a limit longer than the site allows, and the step cannot continue | `TooLongNotResumable` ([Long jobs](long-jobs.md)) |
 
 Next: [HPC (Slurm)](hpc.md) and [Bigger machines](bigger-machines.md).

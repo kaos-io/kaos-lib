@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import json
 
-from .constants import (DEFAULT_LIMIT_MINUTES, LONG_GPU_STEP_MINUTES, MATRIX_MAX_ITEMS, RULESET_VERSION,
-                        STEP_NAME_PATTERN, STEP_PARAMS, TIME_PATTERN)
+from .constants import MATRIX_MAX_ITEMS, RULESET_VERSION, STEP_NAME_PATTERN, STEP_PARAMS
 from .registry import doc_base, doc_url
 
 # The shape of this document. Bump when a field an editor reads changes meaning or goes away.
@@ -64,7 +63,7 @@ _PARAMS = {
                 _value('[artifact("report")]', "The step writes files that belong to this run."),
                 _value('[dataset("clean")]', "The step writes a version of the dataset `clean`.")]),
     "gpu": dict(
-        type="bool", rules=("L-E06", "L-W01", "L-W02"), snippet="True",
+        type="bool", rules=("L-E06", "L-W02"), snippet="True",
         doc="Run the step on a GPU class. Without it the step runs on a CPU machine. How many GPUs it gets on HPC depends on node sharing.",
         default="False",
         values=[_value("True", "The step is offered the GPU classes."), _value("False", "A CPU step (the default).")]),
@@ -85,33 +84,6 @@ _PARAMS = {
             "`\"mode != off\"`. Join comparisons with `and` / `or`. The step runs only when it is true. A step that "
             "needs a conditional step is still started when the conditional step is skipped.",
         values=[]),
-    "walltime": dict(
-        type="str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-I02"), snippet='"${1:12h}"',
-        doc="The default time limit of the step, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` "
-            "(minutes). The person who starts the run sets the limit on the run form (`<step>-walltime`, at most 30 "
-            f"days); this value is what the form starts with. Without it the form starts with {DEFAULT_LIMIT_MINUTES // 60} "
-            f"hours. A step with a limit above {LONG_GPU_STEP_MINUTES // 60} hours should be resumable.",
-        pattern=TIME_PATTERN,
-        values=[_value('"90m"', "90 minutes."), _value('"4h"', "4 hours."), _value('"12h"', "12 hours."),
-                _value('"24h"', "24 hours.")]),
-    "resumable": dict(
-        type="bool|str", rules=("L-E01", "L-E02", "L-E06", "L-W01", "L-W05"), snippet="True",
-        doc="Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save "
-            "10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says "
-            "the step never continues. Save with `kaos_lib.checkpoint`.",
-        pattern=TIME_PATTERN,
-        values=[_value("True", "Resumable: the step saves a checkpoint 10 minutes before its time limit."),
-                _value("False", "Not resumable: the step is never continued from a checkpoint."),
-                _value('"20m"', "Resumable, told to save 20 minutes before its time limit."),
-                _value('"1h"', "Resumable, told to save 1 hour before its time limit.")]),
-    "checkpoint_every": dict(
-        type="bool|str|int", rules=("L-E06",), snippet='"${1:20m}"',
-        doc="The default for how often the platform copies the step's checkpoint folder (`KAOS_CHECKPOINT_DIR`): "
-            "minutes such as `\"20m\"`, `\"1h\"` or `20`. `False` turns the copies off. The person who starts the run "
-            "can change it on the run form (`<step>-checkpoint-every`). GPU steps copy every 10 minutes by default.",
-        pattern=r"^[0-9]+[mh]?$",
-        values=[_value('"20m"', "Copy every 20 minutes."), _value('"1h"', "Copy every hour."),
-                _value("False", "Do not copy the checkpoint folder.")]),
     "idle_timeout": dict(
         type="bool|str|int", rules=("L-E06", "L-W02"), snippet='"${1:40m}"',
         doc="How long a GPU step may show no GPU use and no new log line before the platform ends it as idle: "

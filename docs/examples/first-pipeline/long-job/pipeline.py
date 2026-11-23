@@ -21,7 +21,7 @@ with pipeline("ml-pipeline") as p:
     hello = step("hello-world", kind="evaluate", reads=["hello"], inputs=["reference"], needs=[prepare],
                  produces=[artifact("report")])
     gpu_check = step("gpu-check", kind="evaluate", reads=["experiment"], gpu=True)
-    train = step("train", kind="train", reads=["train"], needs=[prepare], checkpoint_every="10m",
+    train = step("train", kind="train", reads=["train"], needs=[prepare],
                  produces=[model("model")])
 
 if __name__ == "__main__":

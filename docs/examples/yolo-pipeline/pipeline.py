@@ -25,11 +25,7 @@ with pipeline("ml-pipeline") as p:
     validate = step("config-validation", kind="control", reads=["experiment", "model", "quantization", "registration"])
     prepare = step("prepare-data", kind="transform", needs=[validate], reads=["data"], inputs=["dataset"],
                    produces=[dataset("prepared")])
-    # walltime: the default time limit of the step, here 12h. The person who starts a run sets the limit on the run
-    # form (`model-training-walltime`); this value is what the run form starts with. A step lost with its machine is run again and
-    # continues from the checkpoints Ultralytics writes. Today a limit above 11 h 30 is refused on an HPC (Slurm) class
-    # unless the step declares resumable=.
-    train = step("model-training", kind="train", gpu=True, needs=[prepare], walltime="12h",
+    train = step("model-training", kind="train", gpu=True, needs=[prepare],
                  reads=["experiment", "model", "train", "image_processing", "logging"],
                  produces=[model("checkpoints")])
     qat = step("qat-finetune", kind="train", gpu=True, needs=[prepare, train],

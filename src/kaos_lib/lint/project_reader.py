@@ -14,7 +14,7 @@ from typing import Optional
 
 import yaml
 
-from .constants import (CHECKPOINT_DIR_ENV, CHECKPOINT_FRAMEWORKS, CHECKPOINT_STATE_NAMES, CONFIG_DIR, MAX_FILE_BYTES,
+from .constants import (CONFIG_DIR, MAX_FILE_BYTES,
                         MAX_STEP_BYTES, MAX_STEP_FILES, OLD_ENTRY_ARGUMENT, OLD_ENTRY_VARIABLES, PIPELINE_FILE,
                         STEPS_DIR)
 
@@ -30,8 +30,6 @@ PLATFORM_SECTION = "platform"   # the platform-owned group: not a section a step
 class StepSource:
     """What the Python files of one step folder do. `found` is False when the folder does not exist."""
     found: bool = False
-    uses_checkpoint: bool = False      # static evidence: kaos_lib.checkpoint, KAOS_CHECKPOINT_DIR, save_state/load_state,
-                                       # or a framework the library hooks automatically
     uses_mlflow: bool = False
     registers_model: bool = False
     version_refs: list = field(default_factory=list)  # (file, Span) of a string naming a dataset and a version
@@ -201,23 +199,16 @@ def _scan_python(src: SourceFile, out: StepSource) -> None:
         else:
             mods = []
         for m in mods:
-            top = m.split(".")[0]
-            out.uses_checkpoint |= m.endswith("kaos_lib.checkpoint") or top in CHECKPOINT_FRAMEWORKS \
-                or m == "kubecore.checkpoint_helper"
             out.uses_mlflow |= "mlflow" in m.lower()
         if isinstance(n, ast.Name) and "mlflow" in n.id.lower():
             out.uses_mlflow = True
-        if isinstance(n, ast.Name):
-            out.uses_checkpoint |= n.id in CHECKPOINT_STATE_NAMES
         if isinstance(n, ast.Attribute):
-            out.uses_checkpoint |= n.attr in CHECKPOINT_STATE_NAMES
             out.uses_mlflow |= "mlflow" in n.attr.lower()
             out.registers_model |= "register_model" in n.attr or "registered_model" in n.attr
         if isinstance(n, ast.keyword) and n.arg and "registered_model" in n.arg:
             out.registers_model = True
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docstrings:
             out.uses_mlflow |= "mlflow" in n.value.lower()
-            out.uses_checkpoint |= CHECKPOINT_DIR_ENV in n.value
             out.registers_model |= n.value.startswith("models:/")
             if VERSION_REF.search(n.value):
                 out.version_refs.append((src.rel, src.span(n)))

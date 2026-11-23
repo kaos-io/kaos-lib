@@ -58,8 +58,7 @@ field are in the [run form table](contract.md#the-run-form).
 |---|---|---|
 | `<step>-parallel` | `all`, or a whole number from 1 to 32: how many runs go at the same time | `4` |
 
-With `2` the six runs go two at a time. The class of machine (`<step>-class`) and the time limit (`<step>-walltime`) are
-the step's, and every run gets them: the limit is for one run, not for all.
+With `2` the six runs go two at a time. The class of machine (`<step>-class`) is the step's, and every run gets it.
 
 ## On HPC (Slurm) the items share a node
 
