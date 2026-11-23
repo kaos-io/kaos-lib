@@ -143,3 +143,37 @@ def test_the_mlflow_client_used_directly_sends_the_replaced_token(token_file, mo
         server.shutdown()
         server.server_close()
     assert _Recorder.seen[0] == f"Bearer {FIRST}" and _Recorder.seen[-1] == f"Bearer {SECOND}"
+
+
+def test_a_value_the_environment_refuses_never_raises_and_leaves_the_last_good_value(token_file):
+    trackertoken.refresh()
+    assert os.environ["MLFLOW_TRACKING_TOKEN"] == FIRST
+    replace(token_file, "made-up\x00token")
+    trackertoken.refresh()
+    assert os.environ["MLFLOW_TRACKING_TOKEN"] == FIRST
+
+
+def test_the_watcher_thread_survives_a_value_the_environment_refuses(token_file, monkeypatch):
+    monkeypatch.setattr(trackertoken, "EVERY_SECONDS", 0.05)
+    replace(token_file, "made-up\x00token")
+    assert trackertoken.watch() is True
+    time.sleep(0.3)
+    assert trackertoken._thread.is_alive()
+    replace(token_file, SECOND)
+    deadline = time.time() + 5
+    while os.environ.get("MLFLOW_TRACKING_TOKEN") != SECOND and time.time() < deadline:
+        time.sleep(0.05)
+    assert os.environ["MLFLOW_TRACKING_TOKEN"] == SECOND
+
+
+def test_the_environment_is_written_only_when_the_value_changed(token_file, monkeypatch):
+    trackertoken.refresh()
+    writes = []
+    real = os.putenv
+    monkeypatch.setattr(os, "putenv", lambda k, v: writes.append((k, v)) or real(k, v))
+    trackertoken.refresh()
+    trackertoken.refresh()
+    assert writes == []
+    replace(token_file, SECOND)
+    trackertoken.refresh()
+    assert len(writes) == 1

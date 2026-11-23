@@ -3,8 +3,8 @@
 When ``MLFLOW_TRACKING_TOKEN_FILE`` names a readable file, its content is the bearer. ``refresh()`` reads it and
 sets ``MLFLOW_TRACKING_TOKEN`` to it, so the library's own calls and code that uses the ``mlflow`` client directly
 (which reads that variable at every request) send the current one. The library calls ``refresh()`` before each call
-of its own, and a daemon thread calls it every minute while a step runs. A file that is missing, unreadable or empty
-leaves the last good value in place. Without the file variable nothing here does anything.
+of its own, and a daemon thread calls it every minute while a step runs. A file that is missing, unreadable, empty or not a value
+the environment takes leaves the last good value in place, and the variable is written only when the value changed. Without the file variable nothing here does anything.
 
 Python standard library only.
 """
@@ -23,17 +23,17 @@ _thread = None
 
 
 def refresh() -> None:
-    """Set ``MLFLOW_TRACKING_TOKEN`` to the content of the file ``MLFLOW_TRACKING_TOKEN_FILE`` names, when it holds one."""
+    """Set ``MLFLOW_TRACKING_TOKEN`` to the content of the file ``MLFLOW_TRACKING_TOKEN_FILE`` names, when it holds one. Never raises."""
     path = os.environ.get(FILE_ENV)
     if not path:
         return
     try:
         with open(path, encoding="utf-8") as handle:
             found = handle.read().strip()
-    except (OSError, ValueError):       # not there, not readable, not text: the last good value stays
+        if found and found != os.environ.get(TOKEN_ENV):
+            os.environ[TOKEN_ENV] = found
+    except (OSError, ValueError):       # not there, not readable, not text, not a value the environment takes: the last good value stays
         return
-    if found:
-        os.environ[TOKEN_ENV] = found
 
 
 def _keep_fresh(stop: threading.Event) -> None:
