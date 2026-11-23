@@ -41,15 +41,15 @@ const kaosChecks: Record<string, () => Promise<void>> = {
     assert.ok(doc.isDirty, "the buffer is unsaved");
     await until("a finding for the unsaved line", () => vscode.languages.getDiagnostics(doc.uri).find((x) => /no longer takes 'disk'/.test(x.message)));
   },
-  async should_complete_values_from_the_schema_after_resumable_equals() {
+  async should_complete_values_from_the_schema_after_idle_timeout_equals() {
     const doc = await pipelineDoc();
     const edit = new vscode.WorkspaceEdit();
-    edit.insert(doc.uri, new vscode.Position(doc.lineCount, 0), '\nx = step("t", gpu=True, resumable=');
+    edit.insert(doc.uri, new vscode.Position(doc.lineCount, 0), '\nx = step("t", gpu=True, idle_timeout=');
     await vscode.workspace.applyEdit(edit);
     const end = doc.positionAt(doc.getText().length);
     const list = await vscode.commands.executeCommand<vscode.CompletionList>("vscode.executeCompletionItemProvider", doc.uri, end);
     const labels = list.items.map((i) => (typeof i.label === "string" ? i.label : i.label.label));
-    assert.ok(["True", "False", '"20m"', '"1h"'].every((l) => labels.includes(l)), labels.join(","));
+    assert.ok(['"40m"', '"1h"', "0"].every((l) => labels.includes(l)), labels.join(","));
   },
   async should_open_the_step_graph_without_error() {
     await vscode.commands.executeCommand("kaos.showStepGraph");

@@ -39,8 +39,6 @@ def _node(facts: PipelineFacts, step: Step, index: int) -> dict:
         "dynamic": step.dynamic,
         "gpu": None if step.is_gpu is None else step.is_gpu,
         "kind": _text(step.value("kind", None)),
-        "walltime": _text(step.value("walltime", None)),
-        "resumable": _text(step.value("resumable", None)),
         "matrix_items": _matrix_items(step),
     }
 

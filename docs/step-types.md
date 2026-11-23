@@ -10,17 +10,17 @@ contract, where it runs, what the platform does, a complete example, and the mis
 
 ## The six types side by side
 
-| type | for | `inputs=` | must produce | may produce | must not | runs on | GPU | resumable | what the platform does for this type |
-|---|---|---|---|---|---|---|---|---|---|
-| [`ingest`](step-type-ingest.md) | bringing data in from outside | yes | a dataset | a model, an artifact | | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class |
-| [`transform`](step-type-transform.md) | turning data into other data | yes | something: a dataset, a model or an artifact | any of the three | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | allowed | seals a version of each dataset it makes; offers HPC only when it makes no dataset |
-| [`train`](step-type-train.md) | training a model | yes | a model | a dataset, an artifact | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | allowed | keeps the model per run; `kaosctl lint` warns when a time limit has no way to continue (`L-W06`) |
-| [`evaluate`](step-type-evaluate.md) | measuring a model or a dataset | yes | nothing | an artifact | a dataset, a model | the platform's own machines or HPC (Slurm) | `gpu=True` allowed | allowed | keeps reports per run; its values can decide later steps |
-| [`publish`](step-type-publish.md) | delivering a result | yes | nothing | nothing | any `produces=` | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class |
-| [`control`](step-type-control.md) | steering the run | no | nothing | nothing | `inputs=`, any `produces=` | the platform's own machines | `gpu=True` allowed | allowed | never offers an HPC (Slurm) class; a failure stops the steps that need it |
+| type | for | `inputs=` | must produce | may produce | must not | runs on | GPU | what the platform does for this type |
+|---|---|---|---|---|---|---|---|---|
+| [`ingest`](step-type-ingest.md) | bringing data in from outside | yes | a dataset | a model, an artifact | | the platform's own machines | `gpu=True` allowed | never offers an HPC (Slurm) class |
+| [`transform`](step-type-transform.md) | turning data into other data | yes | something: a dataset, a model or an artifact | any of the three | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | seals a version of each dataset it makes; offers HPC only when it makes no dataset |
+| [`train`](step-type-train.md) | training a model | yes | a model | a dataset, an artifact | | the platform's own machines or HPC (Slurm); a step that produces a dataset: the platform's own machines | `gpu=True` allowed | keeps the model per run |
+| [`evaluate`](step-type-evaluate.md) | measuring a model or a dataset | yes | nothing | an artifact | a dataset, a model | the platform's own machines or HPC (Slurm) | `gpu=True` allowed | keeps reports per run; its values can decide later steps |
+| [`publish`](step-type-publish.md) | delivering a result | yes | nothing | nothing | any `produces=` | the platform's own machines | `gpu=True` allowed | never offers an HPC (Slurm) class |
+| [`control`](step-type-control.md) | steering the run | no | nothing | nothing | `inputs=`, any `produces=` | the platform's own machines | `gpu=True` allowed | never offers an HPC (Slurm) class; a failure stops the steps that need it |
 
 Every type keeps to the rules that every step keeps to: a name and a folder, `step.start()` first and `step.result()`
-last ([Your contract with the platform](contract.md#what-you-write)). Every type has a time limit that is chosen on the run form (`walltime=` only sets its default), can use `when=`, and can
+last ([Your contract with the platform](contract.md#what-you-write)). Every type can use `when=`, and can
 end itself with `step.skip("reason")` ([Conditions and skipping](conditions-and-skipping.md)). A step that produces a
 dataset runs on the platform's own machines, whatever its type ([Produce a dataset](produce-a-dataset.md#where-it-runs)).
 

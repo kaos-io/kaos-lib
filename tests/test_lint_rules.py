@@ -77,11 +77,8 @@ def test_should_report_a_cycle_in_raw_hera_depends(tmp_path):
 
 
 @pytest.mark.parametrize("body,expect", [
-    ('    a = step("a", kind="evaluate", hpc_time_limit="2h", gpu=True)\n', "hpc_time_limit= is gone. Use walltime="),
+    ('    a = step("a", kind="evaluate", hpc_time_limit="2h", gpu=True)\n', "hpc_time_limit= is gone: the platform sets the time of a step"),
     ('    a = step("a", kind="evaluate", outputs=["metrics"])\n', "outputs= is gone. Declare what the step writes with produces="),
-    ('    a = step("a", kind="evaluate", walltime="2 hours", gpu=True)\n', "must be minutes or hours"),
-    ('    a = step("a", kind="evaluate", resumable="soon", gpu=True)\n', "resumable='soon'"),
-    ('    a = step("a", kind="evaluate", checkpoint_every=0, gpu=True)\n', "checkpoint_every=0"),
     ('    a = step("a", kind="evaluate", idle_timeout="never", gpu=True)\n', "idle_timeout='never'"),
     ('    a = step()\n', "without a name"),
 ])
@@ -90,8 +87,8 @@ def test_should_report_each_argument_step_refuses(tmp_path, body, expect):
 
 
 def test_should_accept_the_arguments_step_accepts(tmp_path):
-    body = ('    a = step("a", kind="evaluate", gpu=True, walltime="12h", resumable="20m", checkpoint_every="1h", '
-            'idle_timeout=0, when="experiment-name != x")\n    b = step("b", kind="evaluate", resumable=False, checkpoint_every=False)\n')
+    body = ('    a = step("a", kind="evaluate", gpu=True, idle_timeout=0, when="experiment-name != x")\n'
+            '    b = step("b", kind="evaluate")\n')
     assert not messages(tmp_path, body, rule="L-E06")
 
 
@@ -108,28 +105,6 @@ def test_should_report_each_client_identity_form(tmp_path, body, expect):
 
 def test_should_not_flag_the_same_reserved_name_twice(tmp_path):
     assert len(messages(tmp_path, '    c = step(name="hpc-follower")\n', rule="L-E04")) == 1
-
-
-def test_l_e01_does_not_fire_when_the_step_is_resumable_or_its_code_uses_checkpoints(tmp_path):
-    from lint_corpus import CHECKPOINT_STEP, NO_PROGRESS, with_evidence
-    body = '    t = step("work", kind="evaluate", gpu=True, walltime="72h")\n'
-    failing = with_evidence(("work", False, NO_PROGRESS))
-    assert messages(tmp_path / "a", body, {"work": "def f(): pass\n"}, failing, rule="L-E01")
-    assert not messages(tmp_path / "b", body, {"work": CHECKPOINT_STEP}, rule="L-E01")
-    assert not messages(tmp_path / "c", '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=True)\n',
-                        {"work": "def f(): pass\n"}, failing, rule="L-E01")
-
-
-def test_l_e01_follows_the_catalogues_lane_maximum(tmp_path):
-    from lint_corpus import with_lane
-    body = '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=False)\n'
-    assert not messages(tmp_path / "a", body, {"work": "x = 1\n"}, with_lane(5 * 1440), rule="L-E01")
-    assert messages(tmp_path / "b", body, {"work": "x = 1\n"}, with_lane(60), rule="L-E01")
-
-
-def test_w01_stays_quiet_when_l_e01_already_reports_the_step(tmp_path):
-    body = '    t = step("work", kind="evaluate", gpu=True, walltime="72h", resumable=False)\n'
-    assert not messages(tmp_path, body, {"work": "x = 1\n"}, rule="L-W01")
 
 
 def test_w04_reports_a_pipeline_that_never_registers_a_model(tmp_path):
@@ -155,7 +130,7 @@ def test_w03_leaves_the_default_version_in_config_alone(tmp_path, config):
     assert got == []
 
 
-@pytest.mark.parametrize("kw", ['walltime="2h"', "resumable=True", 'checkpoint_every="20m"', 'idle_timeout="40m"'])
+@pytest.mark.parametrize("kw", ['idle_timeout="40m"'])
 def test_a_step_without_a_gpu_may_declare_what_the_engine_accepts_for_every_step(tmp_path, kw):
     assert messages(tmp_path, f'    a = step("a", kind="evaluate", {kw})\n', rule="L-E06") == []
 
@@ -201,16 +176,6 @@ def test_a_config_file_with_several_top_level_keys_gives_each_one_as_a_section(t
     assert not messages(tmp_path / "a", body, {"a": ""}, rule="L-E05", config=config)
     assert any("does not exist in config/" in m for m in
                messages(tmp_path / "b", '    a = step("a", kind="evaluate", reads=["nope"])\n', {"a": ""}, rule="L-E05", config=config))
-
-
-def test_a_train_step_that_declares_checkpoint_every_is_not_told_it_is_not_resumable(tmp_path):
-    body = '    t = step("work", kind="train", walltime="12h", checkpoint_every="10m", produces=[model("m")])\n'
-    assert not messages(tmp_path, body, {"work": PLAIN_STEP}, rule="L-W06")
-
-
-def test_a_step_built_in_a_loop_is_named_by_its_line_not_by_a_python_object(tmp_path):
-    out = messages(tmp_path, '    for i in range(2):\n        step(f"t-{i}", kind="evaluate", gpu=True)\n', rule="L-I01")
-    assert out and all("The step built at line 5 has its time limit chosen on the run form" in m and "object" not in m for m in out), out
 
 
 @pytest.mark.parametrize("when,expect", [
@@ -268,21 +233,25 @@ def test_a_step_that_writes_a_name_a_needed_step_writes_is_refused(tmp_path):
                for m in out), out
 
 
-@pytest.mark.parametrize("walltime", ["721h", "43201", "43201m", "0m", "0"])
-def test_a_walltime_the_form_would_refuse_is_refused_by_lint_with_composes_sentence(tmp_path, walltime):
-    body = f'    a = step("train", kind="evaluate", walltime="{walltime}")\n'
-    out = messages(tmp_path, body, {"train": ""}, rule="L-E06")
-    assert any(f"train-walltime is '{walltime}'. Write minutes or hours, for example 90, 90m or 12h: at least one minute, "
-               "at most 30 days, no other unit." in m for m in out), out
+# --- D-75: nothing about time is set in pipeline.py -------------------------------------------------------------
+
+@pytest.mark.parametrize("keyword,value,sentence", [
+    ("walltime", '"12h"', "walltime= is gone: the platform sets the time of a step and finds out by itself whether "
+                          "it saves progress. Delete it."),
+    ("resumable", "True", "resumable= is gone: the platform sets the time of a step and finds out by itself whether "
+                          "it saves progress. Delete it."),
+    ("checkpoint_every", '"20m"', "checkpoint_every= is gone: the platform sets the time of a step and the library "
+                                  "chooses how often to save. Delete it."),
+])
+def test_a_step_that_sets_time_or_resume_fails_lint_with_the_fix(tmp_path, keyword, value, sentence):
+    found = messages(tmp_path, f'    a = step("a", kind="train", gpu=True, {keyword}={value}, produces=[model("m")])\n',
+                     {"a": PLAIN_STEP}, rule="L-E06")
+    assert [m for m in found if sentence in m], found
 
 
-@pytest.mark.parametrize("walltime", ["720h", "43200", "1m"])
-def test_a_walltime_up_to_thirty_days_is_accepted_by_lint(tmp_path, walltime):
-    body = f'    a = step("train", kind="evaluate", walltime="{walltime}")\n'
-    assert not [m for m in messages(tmp_path, body, {"train": ""}, rule="L-E06") if "walltime" in m]
-
-
-def test_a_checkpoint_interval_over_thirty_days_is_refused_by_lint(tmp_path):
-    body = '    a = step("train", kind="evaluate", checkpoint_every="721h")\n'
-    out = messages(tmp_path, body, {"train": ""}, rule="L-E06")
-    assert any("train-checkpoint-every is '721h'. Write minutes or hours" in m for m in out), out
+def test_a_step_that_sets_no_time_is_not_asked_for_one(tmp_path):
+    body = '    t = step("work", kind="train", gpu=True, produces=[model("m")])\n'
+    report = run(tmp_path, repo(body, {"work": PLAIN_STEP}), None)
+    asked = [f for f in report.findings if "walltime" in f.message or "resumable" in f.message]
+    assert asked == []
+    assert not {"L-E01", "L-E02", "L-W01", "L-W05", "L-W06", "L-I01", "L-I02"} & {r.id for r in ALL_RULES}

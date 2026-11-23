@@ -15,7 +15,7 @@ from .constants import MAX_FILE_BYTES, PIPELINE_FILE, RULESET_VERSION
 from .model import ERROR, Finding, Report, Skipped, Span
 from .pipeline_reader import read_pipeline
 from .project_reader import config_sections, config_values, dataset_default, run_form
-from .registry import (REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, RULES, Hit, LintContext, Rule)
+from .registry import (REQUIRES_CLASSES, RULES, Hit, LintContext, Rule)
 from .source import TooLarge, buffer_source, parse_python, read_text
 
 NOT_ANALYSABLE = Rule("L-E00", "NotAnalysable", ERROR, "Fix the file so it can be read, then run the check again.",
@@ -34,10 +34,6 @@ def _missing_facts(rule: Rule, catalogue: Catalogue) -> Optional[str]:
     for need in rule.requires:
         if need == REQUIRES_CLASSES and catalogue.classes is None:
             return "the catalogue has no list of compute classes (give --context, the project's platform context)"
-        if need == REQUIRES_HPC and catalogue.hpc is None:
-            return catalogue.hpc_note or "the catalogue has no HPC (Slurm) site facts"
-        if need == REQUIRES_CONTINUATIONS and catalogue.max_continuations is None:
-            return "the catalogue has no continuation cap"
     return None
 
 

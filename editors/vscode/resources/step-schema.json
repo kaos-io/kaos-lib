@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "ruleset_version": "2.5.0",
+  "ruleset_version": "3.0.0",
   "guide": "",
   "authoring_modules": [
     "kubecore.authoring"
@@ -171,105 +171,8 @@
         "links": []
       },
       {
-        "name": "walltime",
-        "position": 8,
-        "type": "str",
-        "required": false,
-        "default": null,
-        "gpu_only": false,
-        "pattern": "^[0-9]+[mh]?$",
-        "doc": "The default time limit of the step, as minutes or hours in text: `\"90m\"`, `\"12h\"` or `\"720\"` (minutes). The person who starts the run sets the limit on the run form (`<step>-walltime`, at most 30 days); this value is what the form starts with. Without it the form starts with 4 hours. A step with a limit above 4 hours should be resumable.",
-        "snippet": "\"${1:12h}\"",
-        "values": [
-          {
-            "insert": "\"90m\"",
-            "label": "\"90m\"",
-            "doc": "90 minutes."
-          },
-          {
-            "insert": "\"4h\"",
-            "label": "\"4h\"",
-            "doc": "4 hours."
-          },
-          {
-            "insert": "\"12h\"",
-            "label": "\"12h\"",
-            "doc": "12 hours."
-          },
-          {
-            "insert": "\"24h\"",
-            "label": "\"24h\"",
-            "doc": "24 hours."
-          }
-        ],
-        "links": []
-      },
-      {
-        "name": "resumable",
-        "position": 9,
-        "type": "bool|str",
-        "required": false,
-        "default": null,
-        "gpu_only": false,
-        "pattern": "^[0-9]+[mh]?$",
-        "doc": "Whether the step can continue from a checkpoint after the site stops it. `True` tells the step to save 10 minutes before its time limit; a lead time such as `\"20m\"` or `\"1h\"` changes that. `False` says the step never continues. Save with `kaos_lib.checkpoint`.",
-        "snippet": "True",
-        "values": [
-          {
-            "insert": "True",
-            "label": "True",
-            "doc": "Resumable: the step saves a checkpoint 10 minutes before its time limit."
-          },
-          {
-            "insert": "False",
-            "label": "False",
-            "doc": "Not resumable: the step is never continued from a checkpoint."
-          },
-          {
-            "insert": "\"20m\"",
-            "label": "\"20m\"",
-            "doc": "Resumable, told to save 20 minutes before its time limit."
-          },
-          {
-            "insert": "\"1h\"",
-            "label": "\"1h\"",
-            "doc": "Resumable, told to save 1 hour before its time limit."
-          }
-        ],
-        "links": []
-      },
-      {
-        "name": "checkpoint_every",
-        "position": 10,
-        "type": "bool|str|int",
-        "required": false,
-        "default": null,
-        "gpu_only": false,
-        "pattern": "^[0-9]+[mh]?$",
-        "doc": "The default for how often the platform copies the step's checkpoint folder (`KAOS_CHECKPOINT_DIR`): minutes such as `\"20m\"`, `\"1h\"` or `20`. `False` turns the copies off. The person who starts the run can change it on the run form (`<step>-checkpoint-every`). GPU steps copy every 10 minutes by default.",
-        "snippet": "\"${1:20m}\"",
-        "values": [
-          {
-            "insert": "\"20m\"",
-            "label": "\"20m\"",
-            "doc": "Copy every 20 minutes."
-          },
-          {
-            "insert": "\"1h\"",
-            "label": "\"1h\"",
-            "doc": "Copy every hour."
-          },
-          {
-            "insert": "False",
-            "label": "False",
-            "doc": "Do not copy the checkpoint folder."
-          }
-        ],
-        "links": []
-      },
-      {
         "name": "idle_timeout",
-        "position": 11,
+        "position": 8,
         "type": "bool|str|int",
         "required": false,
         "default": null,
@@ -298,7 +201,7 @@
       },
       {
         "name": "matrix",
-        "position": 12,
+        "position": 9,
         "type": "dict[str, list]",
         "required": false,
         "default": null,
@@ -322,7 +225,7 @@
       },
       {
         "name": "matrix_allow_failed",
-        "position": 13,
+        "position": 10,
         "type": "bool",
         "required": false,
         "default": false,
@@ -410,20 +313,6 @@
       "doc": ""
     },
     {
-      "id": "L-E01",
-      "name": "TooLongNotResumable",
-      "level": "error",
-      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set the default walltime= to the longest run or less (the run form's <step>-walltime starts with it).",
-      "doc": ""
-    },
-    {
-      "id": "L-E02",
-      "name": "TooLongBeyondContinuations",
-      "level": "error",
-      "fix": "Shorten the default walltime= (the person who starts the run can still set a limit on the run form, and the same rule applies), or split the work into steps that each fit within the runs allowed.",
-      "doc": ""
-    },
-    {
       "id": "L-E03",
       "name": "UnknownClass",
       "level": "error",
@@ -473,20 +362,6 @@
       "doc": ""
     },
     {
-      "id": "L-I01",
-      "name": "NodeSharing",
-      "level": "info",
-      "fix": "Nothing to fix. Choose the time limit on the run form (<step>-walltime). If this step always needs about the same time, put it in walltime= so the form starts with a good default.",
-      "doc": ""
-    },
-    {
-      "id": "L-I02",
-      "name": "LearnedLimits",
-      "level": "info",
-      "fix": "Nothing to fix. A limit of 2 hours or more is kept exactly as you set it.",
-      "doc": ""
-    },
-    {
       "id": "L-I04",
       "name": "StepsBuiltInALoop",
       "level": "info",
@@ -498,13 +373,6 @@
       "name": "Schedules",
       "level": "info",
       "fix": "Nothing to fix.",
-      "doc": ""
-    },
-    {
-      "id": "L-W01",
-      "name": "LongGpuStepNotResumable",
-      "level": "warning",
-      "fix": "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten the default walltime= (the run form's <step>-walltime starts with it).",
       "doc": ""
     },
     {
@@ -526,20 +394,6 @@
       "name": "NoMlflowOrModelNotRegistered",
       "level": "warning",
       "fix": "Log the run to MLflow in the training step (kaos_lib.mlflow.mlflow()) and register the model you keep. This check is a heuristic: it searches the step's code.",
-      "doc": ""
-    },
-    {
-      "id": "L-W05",
-      "name": "DeclaredResumableDidNotResume",
-      "level": "warning",
-      "fix": "Make the step load its checkpoint and continue from it: save into $KAOS_CHECKPOINT_DIR (or with kaos_lib.checkpoint) and load it when the step starts, so a continuation gets past the checkpoint it started from.",
-      "doc": ""
-    },
-    {
-      "id": "L-W06",
-      "name": "TrainTimeLimitNotResumable",
-      "level": "warning",
-      "fix": "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its time limit then continues instead of starting over (see the page 'Long jobs' of the guide).",
       "doc": ""
     },
     {

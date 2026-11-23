@@ -2,13 +2,7 @@
   "ruleset_version": "1.1.0",
   "catalogue": {
     "source": "built-in default",
-    "classes": null,
-    "hpc": {
-      "laneMaxMinutes": 2880,
-      "defaultLimitMinutes": 240
-    },
-    "maxContinuations": 5,
-    "resumableSteps": null
+    "classes": null
   },
   "summary": {
     "errors": 1,
@@ -37,8 +31,8 @@
       "doc": "https://docs.example.test/lint/L-W03.html"
     },
     {
-      "rule": "L-I01",
-      "name": "NodeSharing",
+      "rule": "L-I04",
+      "name": "StepsBuiltInALoop",
       "level": "info",
       "file": "pipeline.py",
       "range": {
@@ -51,9 +45,9 @@
           "column": 85
         }
       },
-      "message": "Step 'train' has its time limit chosen on the run form (the field '<step>-walltime'), which starts at 4 hours because pipeline.py sets no walltime=. A GPU step joins a node that is already running only if that node has the step's limit and a few minutes left, so a limit close to what the step needs shares more often.",
-      "fix": "Nothing to fix. Choose the time limit on the run form (<step>-walltime). If this step always needs about the same time, put it in walltime= so the form starts with a good default.",
-      "doc": "https://docs.example.test/lint/L-I01.html"
+      "message": "Step 'train' is built in a loop, so the check cannot follow it.",
+      "fix": "Nothing to fix.",
+      "doc": "https://docs.example.test/lint/L-I04.html"
     },
     {
       "rule": "L-E06",

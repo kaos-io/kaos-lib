@@ -8,28 +8,10 @@ from __future__ import annotations
 import ast
 from typing import Iterable
 
-from .constants import LONG_GPU_STEP_MINUTES
 from .model import WARNING
 from .pipeline_reader import UNKNOWN
-from .registry import (DECLARED, NOT_VERIFIED, OFF, UNKNOWN_STATE, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes, rule, step_label)
+from .registry import Hit, LintContext, gpu_steps, rule, step_label
 from .rules_errors import _needed_steps, _produced_types
-
-
-@rule("L-W01", "LongGpuStepNotResumable", WARNING,
-      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint), or shorten the "
-      "default walltime= (the run form's <step>-walltime starts with it).")
-def long_gpu_step_not_resumable(ctx: LintContext) -> Iterable[Hit]:
-    hpc = ctx.catalogue.hpc
-    for step in gpu_steps(ctx):
-        limit = parse_minutes(step.value("walltime", None))
-        if limit is None or limit <= LONG_GPU_STEP_MINUTES or ctx.resumable(step) not in (OFF, NOT_VERIFIED):
-            continue
-        if hpc is not None and limit > hpc.lane_max_minutes:
-            continue   # L-E01 reports it as an error
-        yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                  f"Step '{step.name}' has a default time limit of {pretty_minutes(limit)} and is not resumable "
-                  f"({'set not resumable' if ctx.resumable(step) == OFF else 'the platform recorded that its last continuation did not resume'}). "
-                  f"An interruption (a lost machine, the time limit) loses all its work.")
 
 
 @rule("L-W02", "IdleTimeoutOff", WARNING,
@@ -79,39 +61,6 @@ def _is_training(step) -> bool:
     reads = step.value("reads", [])
     name = step.name
     return (isinstance(reads, (list, tuple)) and "train" in reads) or (isinstance(name, str) and "train" in name)
-
-
-@rule("L-W05", "DeclaredResumableDidNotResume", WARNING,
-      "Make the step load its checkpoint and continue from it: save into $KAOS_CHECKPOINT_DIR (or with "
-      "kaos_lib.checkpoint) and load it when the step starts, so a continuation gets past the checkpoint it started "
-      "from.")
-def declared_resumable_did_not_resume(ctx: LintContext) -> Iterable[Hit]:
-    """The platform's evidence says a continuation of a step that declares resumable did not get past its checkpoint."""
-    for step in gpu_steps(ctx):
-        recorded = ctx.evidence(step)
-        if ctx.resumable(step) != DECLARED or recorded is None or recorded.verified:
-            continue
-        when = f" on {recorded.since}" if recorded.since else ""
-        yield Hit(ctx.file, ctx.span(step.node("resumable")),
-                  f"Step '{step.name}' declares resumable, but the platform recorded{when} that a continuation of "
-                  f"it did not resume: {recorded.reason or 'it made no progress past its checkpoint'}. A step that "
-                  f"restarts from zero on every continuation does not get any further.")
-
-
-@rule("L-W06", "TrainTimeLimitNotResumable", WARNING,
-      "Add resumable=True to the training step and save checkpoints with kaos_lib.checkpoint: a step that reaches its "
-      "time limit then continues instead of starting over (see the page 'Long jobs' of the guide).")
-def train_time_limit_not_resumable(ctx: LintContext) -> Iterable[Hit]:
-    for step in ctx.pipeline.steps:
-        if step.opaque or step.value("kind", None) != "train" or step.value("walltime", None) in (None, UNKNOWN):
-            continue
-        if "checkpoint_every" in step.args:     # the step says how often its checkpoints are copied: it has them
-            continue
-        if step.value("resumable", None) is None and ctx.resumable(step) == UNKNOWN_STATE:
-            yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"Step '{step.name}' is a training step with a time limit (the default on the run form) and is "
-                      f"not resumable: a run cut by its time limit starts over. Add resumable=True and save "
-                      f"checkpoints.")
 
 
 @rule("L-W07", "DatasetProducerStaysOnCluster", WARNING,

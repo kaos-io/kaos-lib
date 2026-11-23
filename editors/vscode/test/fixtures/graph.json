@@ -24,8 +24,6 @@
           },
           "dynamic": false,
           "gpu": false,
-          "walltime": null,
-          "resumable": null,
           "disk": "20Gi"
         },
         {
@@ -45,8 +43,6 @@
           },
           "dynamic": false,
           "gpu": true,
-          "walltime": null,
-          "resumable": null,
           "disk": null
         },
         {
@@ -66,8 +62,6 @@
           },
           "dynamic": false,
           "gpu": false,
-          "walltime": null,
-          "resumable": null,
           "disk": null
         }
       ],

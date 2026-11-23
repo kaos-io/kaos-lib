@@ -5,32 +5,17 @@ so adding a rule is one function and one docs page, and the engine, the report a
 """
 from __future__ import annotations
 
-import math
 import pathlib
-import re
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Optional
 
 from .catalogue import Catalogue
 from . import constants
-from .constants import TIME_PATTERN
 from .model import ERROR, INFO, WARNING, Span
 from .pipeline_reader import UNKNOWN, PipelineFacts, Step
 from .project_reader import DatasetDefault, RunForm, StepSource, read_step_source
 
-REQUIRES_CLASSES, REQUIRES_HPC, REQUIRES_CONTINUATIONS = "classes", "hpc", "continuations"
-_TIME = re.compile(TIME_PATTERN)
-
-# Step resumability as the rules see it. Evidence decides, never a guess:
-#   DECLARED      resumable=True or a lead time in pipeline.py
-#   OFF           resumable=False
-#   VERIFIED      unset; the platform recorded that a continuation loaded its checkpoint and got past it
-#   NOT_VERIFIED  unset; the platform recorded that a continuation did not (for example NoProgress)
-#   STATIC        unset, no platform evidence; the step's code uses checkpoints (KAOS_CHECKPOINT_DIR, save_state or
-#                 load_state, kaos_lib.checkpoint, a hooked framework)
-#   UNKNOWN_STATE no evidence of any kind: the not-resumable rules stay silent
-DECLARED, OFF, VERIFIED, NOT_VERIFIED, STATIC, UNKNOWN_STATE = \
-    "declared", "off", "verified", "not-verified", "static", "unknown"
+REQUIRES_CLASSES = "classes"
 
 
 @dataclass
@@ -119,52 +104,6 @@ class LintContext:
         if name not in self._sources:
             self._sources[name] = read_step_source(self.root, name)
         return self._sources[name]
-
-    def evidence(self, step: Step):
-        """The platform's StepEvidence for the step, or None."""
-        return None if step.name is UNKNOWN else self.catalogue.evidence(step.name)
-
-    def resumable(self, step: Step) -> str:
-        """One of DECLARED, OFF, VERIFIED, NOT_VERIFIED, STATIC or UNKNOWN_STATE (see above).
-
-        A declaration in pipeline.py decides first. Then what the platform recorded for the step beats what its code
-        suggests: a step whose continuation made no progress is not resumable whatever it imports.
-        """
-        value = step.value("resumable", None)
-        if value is UNKNOWN or step.opaque:
-            return UNKNOWN_STATE
-        if value is False:
-            return OFF
-        if value is not None:
-            return DECLARED
-        recorded = self.evidence(step)
-        if recorded is not None:
-            return VERIFIED if recorded.verified else NOT_VERIFIED
-        source = self.step_source(step)
-        return STATIC if source is not None and source.found and source.uses_checkpoint else UNKNOWN_STATE
-
-
-def parse_minutes(value) -> Optional[int]:
-    """A time limit such as '90m', '12h' or '720' (minutes) as minutes; None when it is not that shape."""
-    if not isinstance(value, str) or not _TIME.match(value):
-        return None
-    return int(value.rstrip("mh")) * (60 if value.endswith("h") else 1)
-
-
-def pretty_minutes(minutes: int) -> str:
-    """90 -> '90 minutes', 720 -> '12 hours', 2880 -> '2 days'."""
-    if minutes % 1440 == 0:
-        n, unit = minutes // 1440, "day"
-    elif minutes % 60 == 0:
-        n, unit = minutes // 60, "hour"
-    else:
-        n, unit = minutes, "minute"
-    return f"{n} {unit}{'' if n == 1 else 's'}"
-
-
-def runs_needed(limit: int, lane_max: int) -> int:
-    """How many runs of at most lane_max minutes a limit takes."""
-    return math.ceil(limit / lane_max)
 
 
 def step_label(step: Step) -> str:

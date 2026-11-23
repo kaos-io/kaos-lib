@@ -7,7 +7,7 @@ rule-set version bump, never a literal buried in a rule.
 # The rule-set version: every report carries it, the PR gate and `kaosctl lint` must agree on it. Bump the major
 # for a rule removed or a level raised, the minor for a rule added or a message-only change that needs a note,
 # the patch for a fix that changes no finding on valid input.
-RULESET_VERSION = "2.5.0"
+RULESET_VERSION = "3.0.0"
 
 # Where a rule's page lives: no compiled address (one wheel runs on every platform). The platform's CI passes the
 # folder with --doc-base (or $KAOS_LIB_LINT_DOC_BASE); when it is unknown a finding carries no link (`doc` is "").
@@ -18,20 +18,26 @@ DOC_BASE = None
 MAX_FILE_BYTES = 1024 * 1024          # one file read by the linter
 MAX_STEP_FILES = 300                  # Python files read per step folder
 MAX_STEP_BYTES = 4 * 1024 * 1024      # all step source read, together
-MAX_REASON_CHARS = 300                # the platform's reason for a step's evidence, as the platform bounds it
 
 PIPELINE_FILE = "pipeline.py"
 CONFIG_DIR = "config"
 STEPS_DIR = "steps"
 
 # What the library's step() accepts, in order (positional arguments map onto it).
-STEP_PARAMS = ("name", "kind", "reads", "inputs", "needs", "produces", "gpu", "when", "walltime",
-               "resumable", "checkpoint_every", "idle_timeout", "matrix", "matrix_allow_failed")
+STEP_PARAMS = ("name", "kind", "reads", "inputs", "needs", "produces", "gpu", "when", "idle_timeout", "matrix",
+               "matrix_allow_failed")
 # Arguments step() no longer takes, with what to write instead (the sentences the engine's render says).
 REMOVED_STEP_PARAMS = {
     "outputs": "outputs= is gone. Declare what the step writes with produces=[...] and hand it on with "
                "step.result().",
-    "hpc_time_limit": 'hpc_time_limit= is gone. Use walltime=, for example walltime="12h".',
+    "hpc_time_limit": "hpc_time_limit= is gone: the platform sets the time of a step and finds out by itself "
+                      "whether it saves progress. Delete it.",
+    "walltime": "walltime= is gone: the platform sets the time of a step and finds out by itself whether it saves "
+                "progress. Delete it.",
+    "resumable": "resumable= is gone: the platform sets the time of a step and finds out by itself whether it saves "
+                 "progress. Delete it.",
+    "checkpoint_every": "checkpoint_every= is gone: the platform sets the time of a step and the library chooses how "
+                        "often to save. Delete it.",
     "disk": "disk= is gone. The step gets the disk of the machine class it runs on.",
 }
 # The sentence every refusal of an old app ends with: the same one the engine ends its refusals with.
@@ -67,8 +73,6 @@ OLD_ENTRY_VARIABLES = ("KUBECORE_RUN_ID", "KUBECORE_WORKFLOW_NAME", "CHECKPOINT_
 
 # A DNS-label step name, as the library requires.
 STEP_NAME_PATTERN = r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
-# A time such as 90m, 12h or 720 (minutes).
-TIME_PATTERN = r"^[0-9]+[mh]?$"
 
 # Template names only the platform may produce (the HPC (Slurm) follower and its earlier name).
 RESERVED_TEMPLATE_NAMES = ("hpc-follower", "meluxina-run")
@@ -76,22 +80,6 @@ RESERVED_TEMPLATE_NAMES = ("hpc-follower", "meluxina-run")
 IDENTITY_NAMES = ("service_account_name", "serviceAccountName")
 POD_PATCH_NAMES = ("pod_spec_patch", "podSpecPatch")
 COMPUTE_CLASS_KEYS = ("platform.kubecore.io/compute-class",)
-
-# Thresholds (owner review, OQ-13).
-LONGEST_MINUTES = 30 * 24 * 60        # the longest time limit or checkpoint interval the run form accepts: 30 days
-LONG_GPU_STEP_MINUTES = 4 * 60        # L-W01: a step with a time limit above this should be resumable (the same 4 hours as the default limit)
-SHORT_LIMIT_MINUTES = 2 * 60          # L-I02: a limit under this may be shortened by the platform
-
-# The built-in default catalogue: only facts that hold for every project.
-DEFAULT_LANE_MAX_MINUTES = 2 * 24 * 60   # the longest run of the default HPC (Slurm) lane: 2 days
-DEFAULT_MAX_CONTINUATIONS = 5            # a resumable step continues at most this many times
-DEFAULT_LIMIT_MINUTES = 4 * 60           # the time limit of any step that sets none, on any machine
-
-# Frameworks the library hooks for checkpoints when the step imports them.
-CHECKPOINT_FRAMEWORKS = ("ultralytics", "pytorch_lightning", "lightning", "transformers")
-# Static evidence that a step's code keeps checkpoints: the folder the platform restores, or the state functions.
-CHECKPOINT_DIR_ENV = "KAOS_CHECKPOINT_DIR"
-CHECKPOINT_STATE_NAMES = ("save_state", "load_state")
 
 # The Dockerfile doctor (rules L-D01 .. L-D08, PRD-CONSOLE-1682 D-19).
 BUILD_ARCH_DEFAULT = "amd64"           # the platform's step images are built for this unless the project says otherwise

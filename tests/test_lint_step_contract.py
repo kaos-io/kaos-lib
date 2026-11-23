@@ -72,7 +72,7 @@ def test_every_kind_is_accepted(tmp_path, kind):
 
 def test_a_full_declaration_is_clean_and_values_that_are_not_literals_are_not_judged(tmp_path):
     body = ('    a = step("a", kind="transform", inputs=["raw", "labels"], produces=[dataset("clean")])\n'
-            '    b = step("b", kind="train", needs=[a], inputs=["labels"], gpu=True, walltime="12h", resumable=True,\n'
+            '    b = step("b", kind="train", needs=[a], inputs=["labels"], gpu=True,\n'
             '             produces=[model("model"), artifact("report")])\n'
             '    c = step("c", kind=KIND, inputs=INPUTS, produces=PRODUCES)\n')
     assert findings(tmp_path, body, config={**CONFIG, "config/data.yaml": "raw: dataset-raw@latest\nlabels: dataset-l@v1\n"}) == []

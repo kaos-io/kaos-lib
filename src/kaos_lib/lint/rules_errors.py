@@ -9,61 +9,22 @@ import ast
 import re
 from typing import Iterable
 
-from .constants import (LONGEST_MINUTES, COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, MIN_DATASET_NAME, NAME_MAX,
+from .constants import (COMPUTE_CLASS_KEYS, ENGINE_FOLDER, IDENTITY_NAMES, MAX_NEEDS, MAX_READABLE, MIN_DATASET_NAME, NAME_MAX,
                         OLD_APP_NOTICE, OLD_ENTRY_ARGUMENT, PIPELINE_FILE, POD_PATCH_NAMES, PRODUCE_TYPES, REMOVED_STEP_PARAMS,
                         RESERVED_NAME_PREFIX, RESERVED_STEP_NAMES, RESERVED_STEP_SUFFIX, RESERVED_TEMPLATE_NAMES, STEP_KINDS, STEP_NAME_PATTERN, STEP_PARAMS,
-                        STEPS_DIR, TIME_PATTERN)
+                        STEPS_DIR)
 from . import matrix, when_text
 from .model import ERROR, Span
 from .pipeline_reader import UNKNOWN, literal
 from .project_reader import platform_group, step_folder
-from .registry import (DECLARED, NOT_VERIFIED, OFF, REQUIRES_CLASSES, REQUIRES_CONTINUATIONS, REQUIRES_HPC, STATIC,
-                       VERIFIED, Hit, LintContext, gpu_steps, parse_minutes, pretty_minutes,
-                       rule, runs_needed, step_label)
+from .registry import REQUIRES_CLASSES, Hit, LintContext, rule, step_label
 
-_STEP_NAME, _TIME = re.compile(STEP_NAME_PATTERN), re.compile(TIME_PATTERN)
+_STEP_NAME = re.compile(STEP_NAME_PATTERN)
 _EVERY = re.compile(r"^([0-9]+)([mh]?)$")
 _DEPENDS_TOKEN = re.compile(r"([A-Za-z0-9_][A-Za-z0-9_-]*)(?:\.(?:Succeeded|Failed|Skipped|Omitted|Errored|Daemoned))?")
 
 
 _step_label = step_label
-
-
-@rule("L-E01", "TooLongNotResumable", ERROR,
-      "Make the step resumable (resumable=True, saving checkpoints with kaos_lib.checkpoint) or set the "
-      "default walltime= to the longest run or less (the run form's <step>-walltime starts with it).",
-      requires=(REQUIRES_HPC,))
-def too_long_not_resumable(ctx: LintContext) -> Iterable[Hit]:
-    lane = ctx.catalogue.hpc.lane_max_minutes
-    for step in gpu_steps(ctx):
-        limit = parse_minutes(step.value("walltime", None))
-        state = ctx.resumable(step)
-        if limit is None or limit <= lane or state not in (OFF, NOT_VERIFIED):
-            continue
-        how = "is set not resumable" if state == OFF else "is not declared resumable and the platform recorded " \
-            f"that its last continuation did not resume ({ctx.evidence(step).reason or 'no reason given'})"
-        yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                  f"{_step_label(step)} has a default time limit of {pretty_minutes(limit)}, but the longest run on "
-                  f"the HPC (Slurm) site is {pretty_minutes(lane)}, and the step {how}, so it would be cut off. "
-                  f"The platform refuses it at submit.")
-
-
-@rule("L-E02", "TooLongBeyondContinuations", ERROR,
-      "Shorten the default walltime= (the person who starts the run can still set a limit on the run form, and the "
-      "same rule applies), or split the work into steps that each fit within the runs allowed.",
-      requires=(REQUIRES_HPC, REQUIRES_CONTINUATIONS))
-def too_long_beyond_continuations(ctx: LintContext) -> Iterable[Hit]:
-    lane, cap = ctx.catalogue.hpc.lane_max_minutes, ctx.catalogue.max_continuations
-    for step in gpu_steps(ctx):
-        limit = parse_minutes(step.value("walltime", None))
-        if limit is None or ctx.resumable(step) not in (DECLARED, VERIFIED, STATIC):
-            continue
-        runs = runs_needed(limit, lane)
-        if runs > cap + 1:
-            yield Hit(ctx.file, ctx.span(step.node("walltime")),
-                      f"{_step_label(step)} is resumable, but its default time limit of {pretty_minutes(limit)} needs {runs} "
-                      f"runs of at most {pretty_minutes(lane)}, and a step continues at most {cap} times "
-                      f"({cap + 1} runs in all, {pretty_minutes(lane * (cap + 1))}). The platform refuses it.")
 
 
 @rule("L-E03", "UnknownClass", ERROR,
@@ -218,7 +179,6 @@ def refused_argument(ctx: LintContext) -> Iterable[Hit]:
         yield from _unknown_arguments(ctx, step)
         if step.opaque:
             continue
-        yield from _time_arguments(ctx, step)
         yield from _when_argument(ctx, step)
         yield from _every_arguments(ctx, step)
         yield from _matrix_argument(ctx, step)
@@ -360,46 +320,14 @@ def _when_argument(ctx, step) -> Iterable[Hit]:
         return
 
 
-def _time_sentence(step, field, value) -> str:
-    """What compose says about a walltime or a checkpoint interval the run form would refuse (kubecore/run_settings.py
-    time_problem), for the field of this step."""
-    name = step.name if isinstance(step.name, str) else "<step>"
-    return (f"{name}-{field} is {str(value)!r}. Write minutes or hours, for example 90, 90m or 12h: at least one "
-            f"minute, at most 30 days, no other unit.")
-
-
-def _time_arguments(ctx, step) -> Iterable[Hit]:
-    limit, resumable = step.value("walltime", None), step.value("resumable", None)
-    if limit is not UNKNOWN and limit is not None:
-        if not (isinstance(limit, str) and _TIME.match(limit)):
-            yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: "
-                      f"walltime={limit!r} must be minutes or hours as text, like '90m', '12h' or '720'. It is the default of "
-                      f"the run form's time limit for the step.")
-        elif not 0 < parse_minutes(limit) <= LONGEST_MINUTES:    # the run form would refuse its default: compose's sentence
-            yield Hit(ctx.file, ctx.span(step.node("walltime")), f"{_step_label(step)}: {_time_sentence(step, 'walltime', limit)}")
-    if resumable is UNKNOWN or resumable is None or resumable is False:
-        return
-    ok = resumable is True or (isinstance(resumable, str) and _TIME.match(resumable)
-                               and int(resumable.rstrip("mh")) != 0)
-    if not ok:
-        yield Hit(ctx.file, ctx.span(step.node("resumable")), f"{_step_label(step)}: resumable={resumable!r} must "
-                  f"be True or a lead time like '20m' or '1h': how long before the time limit the step is told "
-                  f"to save its checkpoint.")
-
-
 def _every_arguments(ctx, step) -> Iterable[Hit]:
-    for key, zero_ok, what in (("checkpoint_every", False, "False (no copies) or minutes like '20m', '1h' or 20"),
-                               ("idle_timeout", True, "0 (never end the step as idle) or minutes like '40m', "
-                                                      "'1h' or 40")):
-        v = step.value(key, None)
-        if v is UNKNOWN or v is None or v is False:
-            continue
-        m = _EVERY.match(str(v).strip()) if v is not True else None
-        valid = (m and int(m.group(1)) != 0) or (zero_ok and not isinstance(v, bool) and str(v).strip() == "0")
-        if not valid:
-            yield Hit(ctx.file, ctx.span(step.node(key)), f"{_step_label(step)}: {key}={v!r} must be {what}.")
-        elif key == "checkpoint_every" and m and not 0 < int(m.group(1)) * (60 if m.group(2) == "h" else 1) <= LONGEST_MINUTES:
-            yield Hit(ctx.file, ctx.span(step.node(key)), f"{_step_label(step)}: {_time_sentence(step, 'checkpoint-every', v)}")
+    v = step.value("idle_timeout", None)
+    if v is UNKNOWN or v is None or v is False:
+        return
+    m = _EVERY.match(str(v).strip()) if v is not True else None
+    if not ((m and int(m.group(1)) != 0) or (not isinstance(v, bool) and str(v).strip() == "0")):
+        yield Hit(ctx.file, ctx.span(step.node("idle_timeout")), f"{_step_label(step)}: idle_timeout={v!r} must be "
+                  f"0 (never end the step as idle) or minutes like '40m', '1h' or 40.")
 
 
 @rule("L-E07", "StepDeclaration", ERROR,

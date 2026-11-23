@@ -25,8 +25,7 @@ You add a `train` step that makes several passes over `clean`, and keeps its pla
 - `checkpoint.save(state)` writes it into the checkpoint folder, atomically. Save at a point where a restart is safe.
 - `checkpoint.stop_requested()` is true when the platform wants the machine back. `checkpoint.exit_for_restart()` ends
   the step with exit code 85: "saved, run me again". The platform starts it again, with the folder as you left it.
-- The platform copies the folder at the interval of the run form's field `<step>-checkpoint-every`. `checkpoint_every="10m"`
-  in `pipeline.py` is only its default ([Reference](reference.md#pipelinepy)).
+- The platform copies the folder at an interval the library chooses ([Nothing to set](#nothing-to-set)).
 
 ## Test the stop on your machine
 
@@ -58,52 +57,52 @@ into the folder, and a continued step resumes from it, with no code from you. A 
 (`resume=`, `ckpt_path=`, `resume_from_checkpoint=`) is left alone. [Reference](reference.md#run-tools) says how to turn
 the hooks off.
 
-## The time limit
+## Nothing to set
 
-Every step has a time limit, the longest it may run, on the platform's own machines and on HPC (Slurm) alike. The run
-form shows it as the field `<step>-walltime` of every step ("The longest the step may run, as minutes or hours: 90m,
-12h. Default from pipeline.py."). Its default is `walltime=` in `pipeline.py`. The person who
-starts the run chooses the limit. Time spent waiting for a machine does not count.
+You set no time limit and no checkpoint interval, in `pipeline.py` or anywhere else. The platform chooses the time
+of a step, and finds out by itself whether the step saves progress: a step that does is continued after it was
+cut, a step that does not is run again from the start. `kaosctl lint` refuses `walltime=`, `resumable=` and
+`checkpoint_every=` on a step ([L-E06](lint/L-E06.md)).
 
-Write the limit as minutes or hours ([the limits](contract.md#the-limits)). Every step can be stopped and started again ([the principle](contract.md#a-step-can-be-stopped-and-started-again)). A step that reaches its limit is ended, unless it can continue. What happens next depends on whether the step declares `resumable=` or leaves checkpoints:
+How often progress is saved is chosen by the library: about every 15 minutes, adapting to the time a save takes,
+never more often than every 5 minutes or less often than every hour. A step whose own code wants another interval
+passes it where it registers its state: `checkpoint.register(save=..., load=..., every=...)`.
 
-| the step | it reaches its limit, loses its machine, or exits with 85 |
+## Four ways to save progress
+
+```python
+from kaos_lib import checkpoint
+
+# 1. Point any framework at the folder; the platform keeps it and gives it back when the step continues.
+YOLO("yolo11n.pt").train(project=str(checkpoint.dir()), name="run", exist_ok=True)
+
+# 2. Save and load your own state.
+state = checkpoint.load("state", default={"epoch": 0})
+for epoch in range(state["epoch"], epochs):
+    train_one_epoch(); checkpoint.save({"epoch": epoch + 1})
+
+# 3. Stop cleanly when the platform asks.
+if checkpoint.stop_requested():
+    checkpoint.save({"epoch": epoch + 1}); checkpoint.exit_for_restart()
+
+# 4. Ultralytics, PyTorch Lightning and Hugging Face are attached automatically: no code.
+```
+
+## How a step can end
+
+| ending | what you read |
 |---|---|
-| declares `resumable=` | it is run again and continues from its checkpoint, up to 5 times by default, on the platform's own machines and on HPC (Slurm) alike. Each run has the whole limit again |
-| declares none, on the platform's own machines | when its machine is lost it is run again from the start, at most twice; a step that reaches its limit ends, and the run fails |
-| declares none, on HPC (Slurm) | a step that left a verified checkpoint copy continues from it, also when it never declared `resumable=`, up to the same cap. A step that left none is run again from the start at most twice when its node is lost, and ends at its limit. A step that declares `resumable=` is told to save shortly before its limit; another step is told once a continuation of it has got past its checkpoint |
+| done | the step finished |
+| one job, no saved progress | "Ended: it ran <limit> on HPC (Slurm) without saving progress. A step that saves progress through the library is continued instead." |
+| a continuation saved nothing new | "Ended: the last job saved nothing new, so it did not get past <its checkpoint>." |
+| the cap reached | "Ended: it reached the platform's cap of 7 days." |
+| the budget used up | "Ended: the project's HPC budget is used up." |
 
-The cap of 5 continuations is the platform's delivered setting (a project and a site can set another). A continuation that
-does not get past the checkpoint it started from ends as `NoProgress`.
+The step's own error is shown as it is. A machine lost under a step is replaced and the step is run again from its
+last saved state; with nothing saved it starts again from the start, at most twice.
 
-So a training that needs 30 hours and has a limit of 12 hours is resumable, saves checkpoints, and runs three times. A
-`train` step that has a default time limit set in `pipeline.py` and is not resumable gets a warning from `kaosctl lint`
-([L-W06](lint/L-W06.md)). `resumable=True` also makes the step save 10 minutes before its limit; the field
-`<step>-walltime` must then be longer than that lead.
-
-The checkpoint interval is how often the platform copies the checkpoint your step saved to safe storage. It is the field
-`<step>-checkpoint-every` of the run form, which the person who starts the run sets (minutes or hours). `checkpoint_every=`
-in `pipeline.py` is only its default, and the field exists for a step that declares `checkpoint_every=` or `resumable=`.
-`kaos_lib.checkpoint` uses the field's value as the interval of `checkpoint.tick()`. A step with neither copies every 10
-minutes on a GPU, and has no field to change it. On HPC (Slurm) copies are at least five minutes apart, and none starts in the
-last minutes before the limit that the final copy needs.
-
-The run form decides both times. The step keeps defaults in code, and the form value wins:
-
-| | who sets it | order, first wins | default |
-|---|---|---|---|
-| time limit | the field `<step>-walltime` of the run form | the form value, then `walltime=` in `step(...)` | `walltime=`, else [the default](contract.md#the-limits) |
-| checkpoint interval | the field `<step>-checkpoint-every` of the run form. A step has it when it declares `checkpoint_every=` or `resumable=` (not `checkpoint_every=False`) | the form value, then `checkpoint_every=` in `step(...)`, then the value passed to `checkpoint.register(...)` in code, then the library's own (it adapts to the time a save takes) | `checkpoint_every=`, else 10 minutes for a `resumable=True` step |
-
-The platform's copy of the checkpoint folder and `checkpoint.tick()` read the same value, on the platform's own machines and
-on HPC (Slurm). A step with `checkpoint_every=False` has no field and keeps no copies. Both values are minutes or hours, at least one
-minute and within [the limits](contract.md#the-limits): a `walltime=` or `checkpoint_every=` the form would refuse is refused when the pipeline is built.
-
-## When a step ends
-
-What the platform does when a step ends early, with and without a checkpoint, is a table in the
-[Reference](reference.md#when-a-step-ends). A continued step waits in the queue again, and its time counts against your
-budget. `checkpoint.progress(epoch)` tells the platform how far the step is: a continuation that gets no further than the
-copy it started from ends with `NoProgress` instead of repeating the same hours.
+`checkpoint.progress(epoch)` tells the platform how far the step is: a continuation that gets no further than the
+copy it started from ends instead of repeating the same hours. A continued step waits in the queue again, and its
+time counts against your budget.
 
 Next: [HPC (Slurm)](hpc.md).

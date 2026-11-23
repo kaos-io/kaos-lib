@@ -34,7 +34,7 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Optional
 
-from . import lock, record, runtime, writer
+from . import lock, record, runtime, trackertoken, writer
 from .errors import AuthError, EmptyDataset, KaosLibError, LockError, NotFoundError, PermissionDenied, StepError
 from .layouts import local
 
@@ -360,6 +360,7 @@ def start(environ=None) -> Step:
     for read in step.ledger.reads:  # every declared input is part of what the step read, opened or not
         lock.current().record(read.repo, read.ref, read.commit, read.owner, read.name)
     _running = _Running(step)
+    trackertoken.watch()
     _watch_exit(_running)
     return step
 
@@ -367,6 +368,7 @@ def start(environ=None) -> Step:
 def stop() -> None:
     """Forget the running step (tests; a long-lived process between steps)."""
     global _running
+    trackertoken.unwatch()
     if _running is not None and _running.undo:
         sys.exit, sys.excepthook, atexit.register = _running.undo
         atexit.unregister(_at_exit)
