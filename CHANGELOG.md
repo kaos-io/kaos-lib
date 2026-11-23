@@ -15,6 +15,12 @@ template.** Nothing in kaos-lib converts an old app.
   `MLFLOW_TRACKING_TOKEN` equal to it (for code that uses the `mlflow` client directly; a thread checks the file every
   minute while a step runs). A file that is missing, unreadable or empty leaves the last good value in place. Without
   the variable nothing changes.
+- `pip install kaos-lib` brings everything: the MLflow client (`mlflow-skinny`, version 3), PyJWT and cryptography are
+  plain dependencies now. The extras `kaos-lib[zitadel]` and `kaos-lib[mlflow]` still install and add nothing, so no
+  Dockerfile and no platform spec changes. A step that pins another `mlflow-skinny` of its own no longer installs:
+  remove the pin.
+- A run on your machine finds the project's MLflow: `kaos_lib.mlflow.mlflow()` takes the address from `mlflowUrl` of the
+  app folder's `.kubecore/dataset-config.yaml` when `MLFLOW_TRACKING_URI` is not set. The platform writes the key.
 - A step can sign in to MLflow as its own app: when the platform sets `KAOS_APP_TOKEN_FILE`, `kaos_lib.mlflow` sends the
   token in that file, read again for every request, instead of the project's machine key (PRD novelcore/kaos#1911 AC-43).
   A file that is missing or empty is an error; the step never goes on with another credential. As its own app a step

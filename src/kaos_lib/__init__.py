@@ -6,7 +6,7 @@ Public API:
     kaos_lib.outputs   outputs_repo, write_run
     kaos_lib.layouts   load, available, Layout (validate, skeleton, materialize, publish): dataset layouts
     kaos_lib.peers     the projects whose shared datasets this one reads (peers, shared)
-    kaos_lib.mlflow    mlflow(), token(); the MLflow request-auth provider ``zitadel`` (extra kaos-lib[mlflow])
+    kaos_lib.mlflow    mlflow(), token(); the MLflow request-auth provider ``zitadel``
     kaos_lib.runtime   context(), run_id(), usable_cpus(): where the step runs
     kaos_lib.lock      DataLock, record, load, replay: the ledger, the commits a run read and wrote
     kaos_lib.checkpoint  dir, save, load, progress, stop_requested, exit_for_restart: checkpoints that survive interruptions

@@ -190,14 +190,14 @@ def test_mint_from_env_names_what_is_missing(zitadel_env, monkeypatch, unset):
 
 def test_missing_extra_is_a_clear_error(zitadel_env, monkeypatch):
     monkeypatch.setitem(sys.modules, "jwt", None)          # `import jwt` now raises ImportError
-    with pytest.raises(AuthError, match=r"pip install 'kaos-lib\[zitadel\]'"):
+    with pytest.raises(AuthError, match="install kaos-lib again without --no-deps"):
         zitadel.mint_from_env()
     assert zitadel_env.requests == []
 
 
 def test_missing_extra_is_reported_before_a_bad_key_file(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "jwt", None)
-    with pytest.raises(AuthError, match=r"kaos-lib\[zitadel\]"):
+    with pytest.raises(AuthError, match="install kaos-lib again without --no-deps"):
         zitadel.mint(tmp_path / "absent.json", "zitadel.test", "321")
 
 

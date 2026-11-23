@@ -34,8 +34,8 @@ the `/kaos/v1` answers stay scripted, and a test that rewrites the fake's state 
 | `config.py` | per-app config discovery, lakeFS URL, OIDC settings |
 | `credentials.py` | the credential chain, session cache, browser login |
 | `oidc.py` | PKCE browser login to Zitadel (ported from `dataset_tools`) |
-| `zitadel.py` | machine-key token (JWT-profile grant), extra `kaos-lib[zitadel]` |
-| `mlflow.py` | `mlflow()`, `token()`, the MLflow auth provider `zitadel`, extra `kaos-lib[mlflow]` |
+| `zitadel.py` | machine-key token (JWT-profile grant) |
+| `mlflow.py` | `mlflow()`, `token()`, the MLflow auth provider `zitadel` |
 | `step.py` | a pipeline step: `start`, `input`, `output`, `upstream`, `check`, `result`; reads the step context, writes the result |
 | `runtime.py` | `context()`, `run_id()`: where the step runs |
 | `lock.py` | the ledger (the data lock at version 2): reads and writes, the wire form and its cost, load, replay, `$KAOS_LIB_LOCK` |

@@ -33,8 +33,12 @@ you call `mlflow` as you always do. It fails at once, before the step has done a
 
 The run is in the MLflow experiment `<app>.<experiment>`, with the name of the run, `ctx.run`. The project's MLflow takes
 only names that start with your app's name, so the step puts `ctx.app` in front of the experiment setting. The loss is logged once for
-each epoch, so MLflow draws it as a curve. The step's image needs the MLflow client: [Add packages](add-packages.md) shows
-the line. Without it the step fails with `kaos_lib.mlflow needs the mlflow extra`
+each epoch, so MLflow draws it as a curve. The MLflow client is installed with kaos-lib, in the step's image and on your
+machine: add no line for it, and pin no `mlflow` of your own.
+
+A run on your machine (`kaosctl step run`) logs to the same MLflow. It takes the address from your app folder
+(`.kubecore/dataset-config.yaml`, which the platform keeps up to date) and signs in with your `kaosctl login`. Without
+the address the step fails with `cannot determine the MLflow tracking URI`
 ([When something goes wrong](when-something-goes-wrong.md#datasets-and-commands)).
 
 A step that uses MLflow also leaves the list of the dataset versions it read on its MLflow run:

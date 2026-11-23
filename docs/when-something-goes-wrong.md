@@ -87,6 +87,7 @@ The status of a step says why. These are the reasons you can meet:
 | `'x' is not a dataset reference: write <repository>@<ref>` | a reference without its version | write `dataset-name@v1` |
 | `dataset failed validation (N problem(s))` (exit code 2) | the files do not fit the layout | fix the files the lines above name, and run `kaosctl dataset validate <dir>` |
 | `unknown layout 'x'. Known: raw, yolo.` | a layout name that does not exist | `kaosctl layout list` |
-| `kaos_lib.mlflow needs the mlflow extra` | the step's image has no MLflow client | install `kaos-lib[mlflow]` in the image |
+| `kaos_lib.mlflow needs the MLflow client, which kaos-lib installs` | kaos-lib was installed with `--no-deps`, or the client was removed | install kaos-lib again without `--no-deps`, and remove any line of your own that installs or pins `mlflow` or `mlflow-skinny` |
+| `cannot determine the MLflow tracking URI ...` | a run on your machine does not know your project's MLflow | run it inside your app folder, after `git pull` (the platform keeps the address in `.kubecore/dataset-config.yaml`) |
 
 Exit codes of `kaosctl`: `0` ok, `1` a mistake of yours (one `ERROR:` line), `2` an invalid dataset or a lint error.
